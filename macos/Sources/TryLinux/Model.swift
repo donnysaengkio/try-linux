@@ -226,8 +226,9 @@ final class AppModel: ObservableObject {
         screen = .progress
         progress = ProgressState(status: status, detail: "This can take a moment for large disks")
         Task.detached(priority: .userInitiated) {
-            var message: String?, failure: String?
-            do { message = try work() } catch { failure = error.localizedDescription }
+            let result: (message: String?, failure: String?)
+            do { result = (try work(), nil) } catch { result = (nil, error.localizedDescription) }
+            let message = result.message, failure = result.failure
             await MainActor.run {
                 self.busy = false
                 self.reload()

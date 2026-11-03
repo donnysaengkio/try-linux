@@ -124,6 +124,7 @@ struct OptionRow: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, minHeight: twoLine ? 64 : 54, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)   // keep to its content; don't stretch into free space
         .background(selected ? Theme.cardSelected : (hover ? Theme.cardHover : Theme.card))
         .overlay(Rectangle().stroke(selected ? Theme.accent : Theme.border, lineWidth: 1))
         .contentShape(Rectangle())
