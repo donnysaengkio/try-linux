@@ -160,11 +160,13 @@ This produces `TryLinux.exe` from `TryLinux.cs` and `Settings.cs`.
 `try-linux-vm.ps1` is a standalone PowerShell script that does the same VM setup
 from the command line.
 
-## Credits and licence
+## Credits
 
 - [WINQ-EMU](https://github.com/cmspam/winq-emu) by cmspam: QEMU (GPL-2.0),
   virglrenderer (MIT), launcher (MIT). Downloaded by Try Linux, not redistributed.
 - Inspired by [Try Omarchy for Windows](https://github.com/omacom/try-omarchy-windows).
-- Linux distributions are downloaded from their official mirrors and carry their own licences.
+- Linux distributions are downloaded from their official mirrors and carry their own licenses.
+
+## License
 
 Try Linux is released under the [MIT License](LICENSE).
