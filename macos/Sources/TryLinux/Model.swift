@@ -80,10 +80,6 @@ final class AppModel: ObservableObject {
         screen = .progress
         progress = ProgressState(status: "Getting ready", cancellable: true)
         do {
-            if let d = plan.distro, d.isImage {
-                try await installImage(d, config, diskGB: diskGB)
-                return
-            }
             var iso = plan.localISO
             if iso == nil {
                 progress.status = "Finding the latest \(plan.label)"
@@ -137,82 +133,6 @@ final class AppModel: ObservableObject {
             goHome()
             show(error.localizedDescription)
         }
-    }
-
-    // A ready-made image needs no installer: unpack it as the system's disk and start it.
-    @MainActor
-    private func installImage(_ d: Distro, _ config: VMConfig, diskGB: Int) async throws {
-        let parts = try await downloadImage(d)
-        var c = config
-        try FileManager.default.createDirectory(at: c.dir, withIntermediateDirectories: true)
-        progress = ProgressState(status: "Unpacking \(d.name)", value: 0, detail: "Writing the ready-made disk", cancellable: true)
-        do {
-            try await unpack(parts, to: c.diskURL)
-            try Disk.grow(c.diskURL, gb: diskGB)
-            c.factoryImage = parts[0].deletingLastPathComponent().path
-            c.pendingInstall = false
-            try c.save()
-        } catch {
-            try? FileManager.default.removeItem(at: c.dir)   // don't leave a half-written system behind
-            throw error
-        }
-        busy = false
-        reload()
-        boot(c)
-    }
-
-    // Downloads (or reuses) every part of a distro's image and verifies each against its published SHA-256.
-    @MainActor
-    func downloadImage(_ d: Distro) async throws -> [URL] {
-        progress.status = "Finding the latest \(d.name) image"
-        progress.detail = "github.com/\(d.image?.repo ?? "")"
-        let r = try await Resolver.resolveImage(d)
-        try checkCancel()
-        let folder = Paths.isos.appendingPathComponent("\(d.id)-\(r.tag)", isDirectory: true)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        var urls: [URL] = []
-        for (i, p) in r.parts.enumerated() {
-            let dest = folder.appendingPathComponent(p.name)
-            let n = "part \(i + 1) of \(r.parts.count)"
-            if !FileManager.default.fileExists(atPath: dest.path) {
-                let part = dest.appendingPathExtension("part")
-                let what = "Downloading \(d.name) \(r.tag), \(n)"
-                progress = ProgressState(status: what, value: 0, detail: "Connecting…", cancellable: true)
-                try await Downloader.download(p.url, to: part, expected: p.size, cancelled: { [weak self] in self?.cancelRequested ?? true }) { got, total, rate in
-                    DispatchQueue.main.async {
-                        self.progress.value = total > 0 ? Double(got) / Double(total) : nil
-                        self.progress.detail = Self.transfer(got, total, rate)
-                    }
-                }
-                if let expected = p.sha256 {
-                    progress = ProgressState(status: "Verifying \(n)", value: 0, detail: "Comparing with GitHub's SHA-256 for \(p.name)", cancellable: true)
-                    let hash = try await Task.detached(priority: .userInitiated) { [weak self] in
-                        try Hashing.sha256(part, cancelled: { self?.cancelRequested ?? true }) { f in
-                            DispatchQueue.main.async { self?.progress.value = f }
-                        }
-                    }.value
-                    if hash != expected {
-                        try? FileManager.default.removeItem(at: part)
-                        throw AppError("\(p.name) didn't match its published checksum, so it was deleted. Try again.")
-                    }
-                }
-                try FileManager.default.moveItem(at: part, to: dest)
-            }
-            urls.append(dest)
-        }
-        return urls
-    }
-
-    @MainActor
-    func unpack(_ parts: [URL], to disk: URL) async throws {
-        try await Task.detached(priority: .userInitiated) { [weak self] in
-            try Unpack.zstd(parts: parts, to: disk, cancelled: { self?.cancelRequested ?? true }) { f, written in
-                DispatchQueue.main.async {
-                    self?.progress.value = f
-                    self?.progress.detail = "\(formatBytes(written)) written"
-                }
-            }
-        }.value
     }
 
     private func checkCancel() throws { if cancelRequested { throw CancellationError() } }

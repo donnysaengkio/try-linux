@@ -12,10 +12,6 @@ struct Distro: Equatable {
     let steps: [String]
     let checksum: String?
     var diskGB = 64
-    // Set for ready-made disk images published as GitHub release assets instead of installer ISOs.
-    var image: GitHubImage? = nil
-
-    var isImage: Bool { image != nil }
 
     static let catalog: [Distro] = [
         Distro(id: "fedora", name: "Fedora Workstation",
@@ -38,31 +34,9 @@ struct Distro: Equatable {
                base: "https://download.opensuse.org/ports/aarch64/tumbleweed/iso/",
                steps: ["openSUSE-Tumbleweed-KDE-Live-aarch64-Current.iso"],
                checksum: "{iso}.sha256"),
-        Distro(id: "omarchy", name: "Omarchy",
-               about: "Arch Linux with DHH's keyboard-driven Hyprland desktop, from the official ARM64 image. Ready to use with no installer; graphics are software-rendered here",
-               base: "", steps: [], checksum: nil,
-               image: GitHubImage(repo: "omacom/try-omarchy", assetPrefix: "omarchy-aarch64-edge.img.zst.")),
     ]
 
     static func find(_ id: String) -> Distro? { catalog.first { $0.id == id } }
-}
-
-// A zstd-compressed raw disk image split into numbered parts on a repository's latest GitHub release.
-struct GitHubImage: Equatable {
-    let repo: String
-    let assetPrefix: String
-}
-
-struct ResolvedImage {
-    struct Part {
-        let name: String
-        let url: URL
-        let size: Int64
-        let sha256: String?
-    }
-    let tag: String
-    let parts: [Part]
-    var totalSize: Int64 { parts.reduce(0) { $0 + $1.size } }
 }
 
 struct AppError: LocalizedError {
@@ -112,68 +86,6 @@ enum Resolver {
         r.size = await Net.headSize(url)
         if let spec = d.checksum { r.sha256 = try? await findHash(url, spec, r.fileName) }
         return r
-    }
-
-    static func resolveImage(_ d: Distro) async throws -> ResolvedImage {
-        guard let img = d.image, let api = URL(string: "https://api.github.com/repos/\(img.repo)/releases/latest") else {
-            throw AppError("\(d.name) has no image source.")
-        }
-        struct Release: Decodable {
-            struct Asset: Decodable {
-                let name: String
-                let size: Int64
-                let browser_download_url: String
-                let digest: String?
-            }
-            let tag_name: String
-            let assets: [Asset]
-        }
-        var req = Net.request(api)
-        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await URLSession.shared.data(for: req)
-        // GitHub limits anonymous API calls to 60 an hour per address; the release web page has no such limit.
-        guard (response as? HTTPURLResponse)?.statusCode == 200,
-              let release = try? JSONDecoder().decode(Release.self, from: data) else {
-            return try await resolveImageFromWeb(d, img)
-        }
-        let parts = release.assets
-            .filter { $0.name.hasPrefix(img.assetPrefix) && $0.name.dropFirst(img.assetPrefix.count).allSatisfy(\.isNumber) }
-            .sorted { $0.name < $1.name }
-            .compactMap { a -> ResolvedImage.Part? in
-                guard let url = URL(string: a.browser_download_url) else { return nil }
-                let sha = a.digest.flatMap { $0.hasPrefix("sha256:") ? String($0.dropFirst(7)).lowercased() : nil }
-                return ResolvedImage.Part(name: a.name, url: url, size: a.size, sha256: sha)
-            }
-        guard !parts.isEmpty else {
-            throw AppError("\(img.repo)'s latest release (\(release.tag_name)) has no \(d.name) image. It may be updating; try again later.")
-        }
-        return ResolvedImage(tag: release.tag_name, parts: parts)
-    }
-
-    // Reads the same information from the release's web page: the latest tag, part links and SHA-256 digests.
-    static func resolveImageFromWeb(_ d: Distro, _ img: GitHubImage) async throws -> ResolvedImage {
-        let base = "https://github.com/\(img.repo)/releases"
-        let (_, response) = try await URLSession.shared.data(for: Net.request(URL(string: base + "/latest")!))
-        guard let final = response.url?.absoluteString, let range = final.range(of: "/releases/tag/") else {
-            throw AppError("Couldn't find \(img.repo)'s latest release. Try again later.")
-        }
-        let tag = String(final[range.upperBound...])
-        let html = try await Net.string(URL(string: "\(base)/expanded_assets/\(tag)")!)
-        let ns = html as NSString
-        let all = NSRange(location: 0, length: ns.length)
-        let prefix = NSRegularExpression.escapedPattern(for: img.assetPrefix)
-        let links = try NSRegularExpression(pattern: "/releases/download/[^/\"]+/(\(prefix)\\d+)\"")
-        let digests = try NSRegularExpression(pattern: "digest for ([^\"]+)\"[^>]*?value=\"sha256:([0-9a-f]{64})\"")
-        var sha: [String: String] = [:]
-        for m in digests.matches(in: html, range: all) { sha[ns.substring(with: m.range(at: 1))] = ns.substring(with: m.range(at: 2)) }
-        let names = Set(links.matches(in: html, range: all).map { ns.substring(with: $0.range(at: 1)) }).sorted()
-        guard !names.isEmpty else { throw AppError("\(img.repo)'s latest release (\(tag)) has no \(d.name) image. Try again later.") }
-        var parts: [ResolvedImage.Part] = []
-        for name in names {
-            let url = URL(string: "\(base)/download/\(tag)/\(name)")!
-            parts.append(ResolvedImage.Part(name: name, url: url, size: await Net.headSize(url), sha256: sha[name]))
-        }
-        return ResolvedImage(tag: tag, parts: parts)
     }
 
     static func fromURL(_ url: URL) async -> ResolvedISO {

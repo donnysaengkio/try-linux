@@ -1,13 +1,12 @@
 # Try Linux for Mac
 
-Try a Linux desktop on your Mac without repartitioning your drive. Pick a
-distribution, and Try Linux downloads the official ARM64 installer, checks it
-against the distribution's published SHA-256 checksum, creates a virtual disk and
-boots it in a window.
+Try a Linux desktop on your Mac without repartitioning your drive. Pick a distribution,
+and Try Linux downloads the official ARM64 installer, checks it against the
+distribution's published SHA-256 checksum, creates a virtual disk and boots it in a
+window. It uses Apple's built-in Virtualization framework, so there's nothing else to
+install.
 
-Try Linux for Mac uses Apple's built-in Virtualization framework, so there's
-nothing else to install. It's the Mac edition of
-[Try Linux for Windows](https://github.com/donnysaengkio/try-linux).
+This is the Mac edition of [Try Linux for Windows](https://github.com/donnysaengkio/try-linux).
 
 > **Preview:** this first version is being tested. Please report problems in
 > [Issues](../../issues).
@@ -20,18 +19,10 @@ nothing else to install. It's the Mac edition of
 | [Ubuntu&nbsp;Desktop](https://ubuntu.com/desktop) | The most widely used desktop Linux, made by Canonical, with long-term support releases and a large software catalog |
 | [Debian](https://www.debian.org/) | One of the oldest community distributions, known for stability and the base of Ubuntu, Mint and many others |
 | [openSUSE&nbsp;Tumbleweed](https://www.opensuse.org/#Tumbleweed) | A rolling-release distribution from the openSUSE community that always has the newest KDE Plasma and kernel |
-| [Omarchy](https://omarchy.org/) | Arch Linux with DHH's keyboard-driven Hyprland desktop, from the official ARM64 image. Ready to use with no installer; graphics are software-rendered here |
 
-**Omarchy** comes as a ready-made disk image rather than an installer: Try Linux
-downloads the official ARM64 image that [Try Omarchy for Mac](https://github.com/omacom/try-omarchy)
-publishes (about 3 GB, in parts checked against GitHub's SHA-256 digests), unpacks it
-and starts it. Omarchy's Hyprland desktop normally uses GPU acceleration; Apple
-Virtualization has none for Linux, so it's drawn by the CPU and animations are slower.
-For a GPU-accelerated Omarchy on a Mac, use Try Omarchy for Mac.
-
-Macs with Apple silicon need ARM64 (aarch64) Linux. Linux Mint and Zorin OS don't
-publish ARM64 installers, so they aren't offered here. You can also install from any
-ARM64 `.iso` file or download link.
+Macs with Apple silicon run ARM64 (aarch64) Linux, so only distributions that publish
+ARM64 installers are listed. You can also install from any ARM64 `.iso` file or
+download link.
 
 ## Requirements
 
@@ -47,7 +38,7 @@ ARM64 `.iso` file or download link.
    **System Settings > Privacy & Security**, scroll down, click **Open Anyway** next
    to "Try Linux", and confirm.
 
-You can check the download against the SHA-256 hash published with each release:
+To check the download against the SHA-256 hash published with each release:
 
 ```sh
 shasum -a 256 TryLinux-*-macOS.zip
@@ -55,30 +46,35 @@ shasum -a 256 TryLinux-*-macOS.zip
 
 ## Using it
 
-- **Choose a Linux**, then **Next** and **Install**. Try Linux downloads and verifies
-  the installer, creates a virtual disk and opens the system in its own window.
-  Install Linux onto the virtual disk; your Mac's drive is never touched.
+- **Choose a Linux**, then **Next** and **Install**. Try Linux downloads and verifies the
+  installer, creates a virtual disk and opens the system in its own window. Install
+  Linux onto the virtual disk; your Mac's drive is never touched.
 - Running systems are in the **Try Linux menu bar icon**: show the window, open the
   shared folder, shut down cleanly or force stop.
 - Quitting Try Linux shuts running systems down, so save your work in Linux first.
-- **Settings** (per system):
-  - **General:** fullscreen, resolution, open at login, resource profile
-    (Balanced / Maximum / Manual), disk capacity, shared Mac folder (read-only unless
-    allowed).
-  - **Devices:** sound, microphone and clipboard sharing.
-  - **Advanced:** Rosetta for x86_64 Linux apps, graphics and network details.
-  - **Recovery:** back up, restore as a copy, snapshots, reset, boot an ISO, clean
-    up downloads, delete.
 
-To use the shared folder in Linux:
+**Settings** (for each system):
+
+- **General:** fullscreen, resolution, open at login, resource profile (Balanced /
+  Maximum / Manual), disk capacity and a shared Mac folder.
+- **Devices:** sound, microphone and clipboard sharing.
+- **Advanced:** Rosetta for x86_64 Linux apps, and graphics and network details.
+- **Recovery:** back up, restore as a copy, snapshots, reset, boot an ISO, clean up
+  downloads and delete.
+
+### Shared folder
+
+The folder is read-only unless you allow changes in Settings. To use it in Linux:
 
 ```sh
 sudo mkdir -p /mnt/host
 sudo mount -t virtiofs host /mnt/host
 ```
 
-Clipboard sharing needs `spice-vdagent` in Linux. Fedora and Ubuntu include it; on
-Debian and openSUSE, install the `spice-vdagent` package.
+### Clipboard
+
+Copy and paste between macOS and Linux needs `spice-vdagent` in Linux. Fedora and Ubuntu
+include it; on Debian and openSUSE, install the `spice-vdagent` package.
 
 ### Rosetta
 
@@ -96,15 +92,15 @@ sudo /usr/sbin/update-binfmts --install rosetta /media/rosetta/rosetta \
 
 ## Limitations
 
-- Graphics are 2D (virtio-gpu). 3D / Vulkan acceleration isn't available for Linux
-  guests in Apple Virtualization.
+- Graphics are 2D (virtio-gpu); Apple Virtualization has no 3D / Vulkan acceleration
+  for Linux.
 - No port forwarding. To reach Linux from the Mac (for example over SSH), use its IP
   address; run `ip addr` in Linux to see it.
 - No camera or USB passthrough.
 
 ## Building from source
 
-Needs Xcode or the Swift toolchain on a Mac with Apple silicon:
+On a Mac with Apple silicon and Xcode or the Swift toolchain:
 
 ```sh
 bash scripts/build-app.sh
@@ -115,12 +111,9 @@ and runs `--self-test`, which checks the download catalog and renders every scre
 
 ## Credits
 
-- Omarchy by [Basecamp / DHH](https://omarchy.org/); the ARM64 image is published by
-  [Try Omarchy for Mac](https://github.com/omacom/try-omarchy) and downloaded from its
-  releases, not redistributed.
-- Bundles the decompressor from [Zstandard](https://github.com/facebook/zstd) 1.5.7
-  (BSD license, see `Sources/CZstd/LICENSE`).
-- Linux distributions are downloaded from their official mirrors and carry their own licenses.
+- Inspired by [Try Omarchy](https://github.com/omacom/try-omarchy).
+- Linux distributions are downloaded from their official mirrors and carry their own
+  licenses.
 
 ## License
 
