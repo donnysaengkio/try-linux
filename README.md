@@ -97,6 +97,32 @@ sudo mount -t 9p -o trans=virtio,version=9p2000.L host /mnt/host
 Systems, downloads and settings live in `%LOCALAPPDATA%\TryLinux` (movable from
 Settings > Recovery).
 
+## Troubleshooting
+
+**"Hardware virtualization is turned off in your PC's BIOS/UEFI settings"**
+Linux needs the processor's virtualization feature, which some PCs ship with turned off.
+
+1. Open **Settings > System > Recovery**, and next to **Advanced startup** click **Restart now**.
+2. Choose **Troubleshoot > Advanced options > UEFI Firmware Settings > Restart**
+   (or press Del, F2, F10 or Esc while the PC starts).
+3. Turn on **Intel Virtualization Technology (VT-x)** or **AMD SVM Mode**. It's often
+   under Advanced, CPU Configuration or Security.
+4. Save, exit, and open Try Linux again.
+
+Setup can still download and prepare a system before you change the setting; click
+**Install** on the home page afterwards.
+
+**"Windows Hypervisor Platform is turned off"**
+Let Try Linux turn it on (Windows asks for permission), or turn on **Windows Hypervisor
+Platform** in *Turn Windows features on or off*, then restart.
+
+**"Windows Hypervisor Platform is turned on but isn't running yet"**
+Restart Windows. If the message comes back after restarting, virtualization is
+probably off in the BIOS/UEFI; follow the steps above.
+
+**"This PC's processor doesn't support hardware virtualization"**
+Try Linux can't run on this PC.
+
 ## Limitations
 
 - No camera or USB passthrough, and no choice of sound device (Windows defaults

@@ -29,6 +29,7 @@ static class Program
         try { Native.SetProcessDPIAware(); } catch { }
         ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
         if (args.Length == 2 && args[0] == "--resolve-test") { Resolver.Test(args[1]); return; }
+        if (args.Length == 2 && args[0] == "--virt-test") { Virt.Test(args[1]); return; }
 
         using (var g = Graphics.FromHwnd(IntPtr.Zero)) Theme.Scale = g.DpiX / 96f;
         Application.EnableVisualStyles();
@@ -626,8 +627,11 @@ static class Native
         keybd_event(ctrl, 0, 2, UIntPtr.Zero);
     }
 
-    // True when Windows Hypervisor Platform is enabled and the hypervisor is running.
-    public static bool HypervisorReady()
+    [DllImport("WinHvPlatform.dll")] static extern int WHvCreatePartition(out IntPtr partition);
+    [DllImport("WinHvPlatform.dll")] static extern int WHvDeletePartition(IntPtr partition);
+
+    // True when a hypervisor is running at all (Hyper-V counts, even without the WHPX API).
+    public static bool HypervisorPresent()
     {
         try
         {
@@ -636,6 +640,101 @@ static class Native
         }
         catch (DllNotFoundException) { return false; }
         catch (EntryPointNotFoundException) { return false; }
+    }
+
+    // True when QEMU can use the Windows Hypervisor Platform: an empty VM partition can be created.
+    public static bool HypervisorReady()
+    {
+        if (!HypervisorPresent()) return false;
+        try
+        {
+            IntPtr part;
+            if (WHvCreatePartition(out part) < 0) return false;
+            WHvDeletePartition(part);
+            return true;
+        }
+        catch (DllNotFoundException) { return false; }
+        catch (EntryPointNotFoundException) { return false; }
+    }
+}
+
+enum VirtState { Ready, NoCpuSupport, FirmwareOff, FeatureOff, NotRunning }
+
+// Works out why the hypervisor isn't running, without needing admin rights.
+static class Virt
+{
+    public static VirtState Check()
+    {
+        if (Native.HypervisorReady()) return VirtState.Ready;
+        bool? feature = FeatureEnabled();
+        // A hypervisor (e.g. Hyper-V) is running, so the CPU and BIOS are fine; only the API is missing.
+        if (Native.HypervisorPresent()) return feature == true ? VirtState.NotRunning : VirtState.FeatureOff;
+        // With no hypervisor running, Win32_Processor reports the CPU's own virtualization state.
+        bool? cpu = ProcessorFlag("VMMonitorModeExtensions"), firmware = ProcessorFlag("VirtualizationFirmwareEnabled");
+        if (cpu == false) return VirtState.NoCpuSupport;
+        if (firmware == false) return VirtState.FirmwareOff;
+        return feature == true ? VirtState.NotRunning : VirtState.FeatureOff;
+    }
+
+    static bool? ProcessorFlag(string name)
+    {
+        try
+        {
+            using (var s = new System.Management.ManagementObjectSearcher("SELECT " + name + " FROM Win32_Processor"))
+                foreach (System.Management.ManagementObject o in s.Get())
+                {
+                    var v = o[name];
+                    if (v is bool) return (bool)v;
+                }
+        }
+        catch (Exception) { }
+        return null;
+    }
+
+    // Windows Hypervisor Platform: true when on (or on after a pending restart), false when off.
+    static bool? FeatureEnabled()
+    {
+        try
+        {
+            using (var s = new System.Management.ManagementObjectSearcher("SELECT InstallState FROM Win32_OptionalFeature WHERE Name='HypervisorPlatform'"))
+                foreach (System.Management.ManagementObject o in s.Get())
+                    return Convert.ToInt32(o["InstallState"]) == 1;
+        }
+        catch (Exception) { }
+        return null;
+    }
+
+    public const string BiosSteps =
+        "To turn it on:\n" +
+        "1. Open Settings > System > Recovery, and next to Advanced startup click Restart now.\n" +
+        "2. Choose Troubleshoot > Advanced options > UEFI Firmware Settings > Restart.\n" +
+        "   (Or press Del, F2, F10 or Esc while the PC starts.)\n" +
+        "3. Turn on Intel Virtualization Technology (VT-x) or AMD SVM Mode. It's often under Advanced, CPU Configuration or Security.\n" +
+        "4. Save, exit, and open Try Linux again.";
+
+    public static string Message(VirtState s)
+    {
+        switch (s)
+        {
+            case VirtState.NoCpuSupport:
+                return "This PC's processor doesn't support hardware virtualization, which Try Linux needs to run Linux.";
+            case VirtState.FirmwareOff:
+                return "Hardware virtualization is turned off in your PC's BIOS/UEFI settings, so Linux can't run yet.\n\n" + BiosSteps;
+            case VirtState.FeatureOff:
+                return "Windows Hypervisor Platform is turned off. Turn it on in 'Turn Windows features on or off', restart, then try again.";
+            case VirtState.NotRunning:
+                return "Windows Hypervisor Platform is turned on but isn't running yet. Restart Windows, then try again.\n\n" +
+                    "If this message comes back after restarting, hardware virtualization is probably turned off in your PC's BIOS/UEFI settings.\n\n" + BiosSteps;
+        }
+        return "";
+    }
+
+    // Diagnostic: --virt-test <file> writes what Try Linux detects on this PC.
+    public static void Test(string outFile)
+    {
+        File.WriteAllText(outFile, "present=" + Native.HypervisorPresent() + "\nwhpx=" + Native.HypervisorReady() +
+            "\ncpu=" + ProcessorFlag("VMMonitorModeExtensions") + "\nfirmware=" + ProcessorFlag("VirtualizationFirmwareEnabled") +
+            "\nfeature=" + FeatureEnabled() + "\nstate=" + Check() + "\n");
     }
 }
 
@@ -1398,7 +1497,16 @@ partial class MainForm : Form
 
     async void Install(InstallPlan plan, VmConfig cfg, int diskGB)
     {
-        if (!Native.HypervisorReady() && !restartPending && !await EnableHypervisor()) return;
+        var virt = Virt.Check();
+        if (virt == VirtState.NoCpuSupport) { Error(Virt.Message(virt)); return; }
+        if (virt == VirtState.FirmwareOff)
+        {
+            // Setup can still download now, so it's ready once the BIOS setting is changed.
+            if (MessageBox.Show(this, Virt.Message(virt) + "\n\nDownload and prepare " + cfg.DisplayName + " now anyway, so it's ready after you change the setting?",
+                    "Try Linux", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        }
+        else if (virt == VirtState.FeatureOff && !restartPending && !await EnableHypervisor()) return;
+        else if (virt == VirtState.NotRunning) restartPending = true;
 
         busy = true;
         cancelRequested = false;
@@ -1447,10 +1555,15 @@ partial class MainForm : Form
             cfg.Save();
             busy = false;
 
-            if (restartPending || !Native.HypervisorReady())
+            var state = Virt.Check();
+            if (state != VirtState.Ready)
             {
                 ShowHome();
-                Info(cfg.DisplayName + " is ready to install.\n\nRestart Windows to finish turning on Windows Hypervisor Platform, then open Try Linux and click Install.");
+                Info(cfg.DisplayName + " is ready to install. When Linux can run, open Try Linux and click Install.\n\n" +
+                    (state == VirtState.FeatureOff || state == VirtState.NotRunning
+                        ? "Restart Windows to finish turning on Windows Hypervisor Platform."
+                          + (state == VirtState.NotRunning ? "\n\nIf Try Linux still can't start it after restarting, hardware virtualization is probably turned off in your PC's BIOS/UEFI settings.\n\n" + Virt.BiosSteps : "")
+                        : Virt.Message(state)));
                 return;
             }
             Boot(cfg);
@@ -1474,7 +1587,7 @@ partial class MainForm : Form
         }
         catch (Win32Exception) { return false; }   // the permission prompt was declined
         if (code == 0 || code == 3010) { restartPending = true; return true; }
-        Error("Windows couldn't turn on Windows Hypervisor Platform (code " + code + ").\n\nIf virtualization is turned off in your PC's BIOS/UEFI settings, turn it on there first.");
+        Error("Windows couldn't turn on Windows Hypervisor Platform (code " + code + ").\n\nIf hardware virtualization is turned off in your PC's BIOS/UEFI settings, turn it on there first.\n\n" + Virt.BiosSteps);
         return false;
     }
 
@@ -1541,13 +1654,8 @@ partial class MainForm : Form
             Error("WINQ-EMU isn't installed. Add a system to install it, or get it from github.com/cmspam/winq-emu/releases.");
             return;
         }
-        if (!Native.HypervisorReady())
-        {
-            Error(restartPending
-                ? "Restart Windows to finish turning on Windows Hypervisor Platform, then try again."
-                : "Windows Hypervisor Platform is off. Turn it on in 'Turn Windows features on or off', restart, then try again.");
-            return;
-        }
+        var virt = Virt.Check();
+        if (virt != VirtState.Ready) { Error(cfg.DisplayName + " can't start yet.\n\n" + Virt.Message(virt)); return; }
         bool installer = cfg.PendingInstall && File.Exists(cfg.Iso);
         ShowProgress("Starting " + cfg.DisplayName, false);
         SetProgress("Starting " + cfg.DisplayName, -1,
