@@ -9,7 +9,7 @@ Try Linux is a small launcher around [WINQ-EMU](https://github.com/cmspam/winq-e
 a QEMU build for Windows that uses the Windows Hypervisor Platform and forwards
 OpenGL / Vulkan graphics (VirGL and Venus) to the guest.
 
-![Choose a Linux to try](docs/images/choose-a-linux.png)
+![Choose a Linux to try](docs/images/choose-screen.png)
 
 ## Screenshots
 

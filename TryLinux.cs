@@ -878,8 +878,9 @@ class PixelLogo : Control
         e.Graphics.Clear(BackColor);
         int px = Theme.D(Px);
         int cols = Word.Length * 6 - 1;
-        int x0 = (Width - cols * px) / 2, y0 = (Height - 7 * px) / 2;
         int shadow = Math.Max(1, px / 3);
+        // Center the letters plus their drop shadow, so the logo looks centered, not just measures it.
+        int x0 = (Width - cols * px - shadow) / 2, y0 = (Height - 7 * px - shadow) / 2;
         using (var sb = new SolidBrush(Color.FromArgb(34, 52, 62)))
             DrawWord(e.Graphics, x0 + shadow, y0 + shadow, px, r => sb);
         var rows = Enumerable.Range(0, 7).Select(r => new SolidBrush(Lerp(Theme.Accent, Theme.Accent2, r / 6f))).ToArray();
@@ -1000,8 +1001,8 @@ class OptionRow : Control
             return;
         }
         // Tall rows: title on top, description wrapped onto the lines below.
-        TextRenderer.DrawText(g, Title, Theme.Bold, new Rectangle(pad, Theme.D(8), Width - pad * 2, Theme.D(20)), Theme.Text, flags);
-        TextRenderer.DrawText(g, Sub, Theme.Small, new Rectangle(pad, Theme.D(31), Width - pad * 2, Height - Theme.D(37)), Theme.Muted,
+        TextRenderer.DrawText(g, Title, Theme.Bold, new Rectangle(pad, Theme.D(6), Width - pad * 2, Theme.D(20)), Theme.Text, flags);
+        TextRenderer.DrawText(g, Sub, Theme.Small, new Rectangle(pad, Theme.D(27), Width - pad * 2, Height - Theme.D(30)), Theme.Muted,
             TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
     }
 }
@@ -1035,7 +1036,7 @@ class OptionList : Panel
     void LayoutRows()
     {
         int h = Theme.D(RowHeight), gap = Theme.D(6);
-        bool scroll = rows.Count * (h + gap) > ClientSize.Height;
+        bool scroll = rows.Count * (h + gap) - gap > ClientSize.Height;
         int w = ClientSize.Width - (scroll ? SystemInformation.VerticalScrollBarWidth + Theme.D(4) : 0);
         for (int i = 0; i < rows.Count; i++) rows[i].SetBounds(0, AutoScrollPosition.Y + i * (h + gap), w, h);
     }
@@ -1342,23 +1343,24 @@ partial class MainForm : Form
     void ShowChoose()
     {
         bool hasVms = VmConfig.All().Count > 0;
-        var p = new Page(604);
-        p.Caption("Choose a Linux to try", 0, 98, 640, 30, Theme.Title);
-        p.Caption("Try Linux downloads the official installer and checks it before use.", 0, 128, 640, 22, Theme.Small, Theme.Muted);
-        int listH = Distro.Catalog.Length * 78 - 6;
-        var list = p.Add(new OptionList { RowHeight = 72 }, 0, 158, 640, listH);
+        var p = new Page(606);
+        p.Caption("Choose a Linux to try", 0, 94, 640, 30, Theme.Title, null, ContentAlignment.MiddleCenter);
+        p.Caption("Try Linux downloads the official installer and checks it before use.", 0, 124, 640, 22, Theme.Small, Theme.Muted, ContentAlignment.MiddleCenter);
+        int listH = Distro.Catalog.Length * 70 - 6;
+        var list = p.Add(new OptionList { RowHeight = 64 }, 0, 154, 640, listH);
         foreach (var d in Distro.Catalog) list.AddItem(d.Name, d.Blurb, d);
         list.SelectedIndex = 0;
 
-        // Bottom row: Back, the two other install sources, Next.
-        int y = 158 + listH + 14;
+        int y = 154 + listH + 12;
+        p.Caption("Or install from", 0, y, 160, 36, Theme.Small, Theme.Muted);
+        var fromFile = p.Add(new FlatBtn("An ISO file..."), 160, y, 160, 36);
+        var fromUrl = p.Add(new FlatBtn("A link..."), 330, y, 130, 36);
+        y += 36 + 16;
         if (hasVms)
         {
-            var back = p.Add(new FlatBtn("Back"), 0, y, 110, 42);
+            var back = p.Add(new FlatBtn("Back"), 0, y, 120, 42);
             back.Click += delegate { ShowHome(); };
         }
-        var fromFile = p.Add(new FlatBtn("From an ISO file..."), 122, y, 190, 42);
-        var fromUrl = p.Add(new FlatBtn("From a link..."), 322, y, 150, 42);
         var next = p.Add(new FlatBtn("Next", true), 500, y, 140, 42);
         Action<object> choose = tag =>
         {
