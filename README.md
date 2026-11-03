@@ -9,6 +9,21 @@ Try Linux is a small launcher around [WINQ-EMU](https://github.com/cmspam/winq-e
 a QEMU build for Windows that uses the Windows Hypervisor Platform and forwards
 OpenGL / Vulkan graphics (VirGL and Venus) to the guest.
 
+![Choose a Linux to try](docs/images/choose.png)
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Set up a system: name, resources, disk size](docs/images/setup.png) | ![Downloading and verifying the installer](docs/images/progress.png) |
+| **Set up:** name, resource profile and disk size | **Download:** the official ISO, checked against its SHA-256 |
+| ![Your systems](docs/images/home.png) | ![Settings, General tab](docs/images/settings-general.png) |
+| **Your systems:** start, open settings or add another | **Settings, General:** display, startup, resources, storage |
+| ![Settings, Devices tab](docs/images/settings-devices.png) | ![Settings, Advanced tab](docs/images/settings-advanced.png) |
+| **Settings, Devices:** sound and microphone | **Settings, Advanced:** displays, rendering, port forwards |
+| ![Settings, Recovery tab](docs/images/settings-recovery.png) | |
+| **Settings, Recovery:** backups, snapshots, reset, storage | |
+
 ## Distributions
 
 | Distribution | Notes |
