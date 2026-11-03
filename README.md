@@ -99,10 +99,21 @@ Settings > Recovery).
 
 ## Troubleshooting
 
+**Check first:** open Task Manager (Ctrl+Shift+Esc), go to **Performance > CPU**, and
+look for **Virtualization**. It should say **Enabled**.
+
+<img src="docs/images/troubleshoot-task-manager.png" alt="Task Manager, Performance, CPU: Virtualization: Enabled" width="560">
+
 **"Hardware virtualization is turned off in your PC's BIOS/UEFI settings"**
 Linux needs the processor's virtualization feature, which some PCs ship with turned off.
+Try Linux shows this message:
+
+<img src="docs/images/troubleshoot-bios-message.png" alt="Try Linux message: Hardware virtualization is turned off in your PC's BIOS/UEFI settings, with steps to turn it on" width="413">
 
 1. Open **Settings > System > Recovery**, and next to **Advanced startup** click **Restart now**.
+
+   <img src="docs/images/troubleshoot-advanced-startup.png" alt="Settings, System, Recovery, with Advanced startup and its Restart now button outlined" width="560">
+
 2. Choose **Troubleshoot > Advanced options > UEFI Firmware Settings > Restart**
    (or press Del, F2, F10 or Esc while the PC starts).
 3. Turn on **Intel Virtualization Technology (VT-x)** or **AMD SVM Mode**. It's often
@@ -113,8 +124,13 @@ Setup can still download and prepare a system before you change the setting; cli
 **Install** on the home page afterwards.
 
 **"Windows Hypervisor Platform is turned off"**
-Let Try Linux turn it on (Windows asks for permission), or turn on **Windows Hypervisor
-Platform** in *Turn Windows features on or off*, then restart.
+Let Try Linux turn it on (Windows asks for permission), or do it yourself: press Win+R,
+type `optionalfeatures`, tick **Windows Hypervisor Platform**, click **OK**, then restart.
+
+<img src="docs/images/troubleshoot-windows-features.png" alt="Turn Windows features on or off, with Windows Hypervisor Platform outlined" width="415">
+
+If **Hyper-V** is already on, Try Linux may work without this box ticked; it only asks
+when it can't start a VM.
 
 **"Windows Hypervisor Platform is turned on but isn't running yet"**
 Restart Windows. If the message comes back after restarting, virtualization is
