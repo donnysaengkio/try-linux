@@ -26,13 +26,13 @@ OpenGL / Vulkan graphics (VirGL and Venus) to the guest.
 
 ## Distributions
 
-| Distribution | About | Notes |
-|---|---|---|
-| [Fedora Workstation](https://fedoraproject.org/workstation/) | A community distribution sponsored by Red Hat that ships new GNOME, kernel and Mesa releases soon after they come out | GNOME on Wayland with current Mesa; the best fit for GPU acceleration |
-| [Ubuntu Desktop](https://ubuntu.com/desktop) | The most widely used desktop Linux, made by Canonical, with long-term support releases and a large software catalog | About 6 GB download |
-| [Debian](https://www.debian.org/) | One of the oldest community distributions, known for stability and the base of Ubuntu, Mint and many others | GNOME live image with a graphical installer |
-| [Linux Mint](https://linuxmint.com/) | A beginner-friendly distribution based on Ubuntu, with the Windows-like Cinnamon desktop and media codecs available at install | Cinnamon edition, X11 |
-| [Zorin OS](https://zorin.com/os/) | A polished distribution based on Ubuntu, designed to feel familiar to people moving from Windows | Core edition (free), Windows-like desktop |
+| Distribution | About |
+|---|---|
+| [Fedora Workstation](https://fedoraproject.org/workstation/) | A community distribution sponsored by Red Hat that ships new GNOME, kernel and Mesa releases soon after they come out |
+| [Ubuntu Desktop](https://ubuntu.com/desktop) | The most widely used desktop Linux, made by Canonical, with long-term support releases and a large software catalog |
+| [Debian](https://www.debian.org/) | One of the oldest community distributions, known for stability and the base of Ubuntu, Mint and many others |
+| [Linux Mint](https://linuxmint.com/) | A beginner-friendly distribution based on Ubuntu, with the Windows-like Cinnamon desktop and media codecs available at install |
+| [Zorin OS](https://zorin.com/os/) | A polished distribution based on Ubuntu, designed to feel familiar to people moving from Windows |
 
 Try Linux finds the newest release on each distribution's official mirror when
 you install, so it doesn't need updating for new versions. You can also install
