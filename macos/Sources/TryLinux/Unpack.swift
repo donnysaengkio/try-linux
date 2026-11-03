@@ -43,8 +43,9 @@ enum Unpack {
                 if tick % 16 == 0 { report(Double(consumed) / Double(max(1, totalIn)), written) }
             }
         }
-        // Flush anything still buffered in the decoder.
-        while true {
+        // 0 means the last frame was fully decoded. Otherwise flush what the decoder still holds; if it
+        // produces nothing and still isn't done, the input really ended mid-frame.
+        while lastResult != 0 {
             var empty = ZSTD_inBuffer(src: nil, size: 0, pos: 0)
             var o = ZSTD_outBuffer(dst: outBuf, size: outSize, pos: 0)
             let r = ZSTD_decompressStream(stream, &o, &empty)
