@@ -131,10 +131,11 @@ enum Resolver {
         var req = Net.request(api)
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         let (data, response) = try await URLSession.shared.data(for: req)
-        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
-            throw AppError("GitHub returned HTTP \(http.statusCode) for \(img.repo)'s latest release. Try again later.")
+        // GitHub limits anonymous API calls to 60 an hour per address; the release web page has no such limit.
+        guard (response as? HTTPURLResponse)?.statusCode == 200,
+              let release = try? JSONDecoder().decode(Release.self, from: data) else {
+            return try await resolveImageFromWeb(d, img)
         }
-        let release = try JSONDecoder().decode(Release.self, from: data)
         let parts = release.assets
             .filter { $0.name.hasPrefix(img.assetPrefix) && $0.name.dropFirst(img.assetPrefix.count).allSatisfy(\.isNumber) }
             .sorted { $0.name < $1.name }
@@ -147,6 +148,32 @@ enum Resolver {
             throw AppError("\(img.repo)'s latest release (\(release.tag_name)) has no \(d.name) image. It may be updating; try again later.")
         }
         return ResolvedImage(tag: release.tag_name, parts: parts)
+    }
+
+    // Reads the same information from the release's web page: the latest tag, part links and SHA-256 digests.
+    static func resolveImageFromWeb(_ d: Distro, _ img: GitHubImage) async throws -> ResolvedImage {
+        let base = "https://github.com/\(img.repo)/releases"
+        let (_, response) = try await URLSession.shared.data(for: Net.request(URL(string: base + "/latest")!))
+        guard let final = response.url?.absoluteString, let range = final.range(of: "/releases/tag/") else {
+            throw AppError("Couldn't find \(img.repo)'s latest release. Try again later.")
+        }
+        let tag = String(final[range.upperBound...])
+        let html = try await Net.string(URL(string: "\(base)/expanded_assets/\(tag)")!)
+        let ns = html as NSString
+        let all = NSRange(location: 0, length: ns.length)
+        let prefix = NSRegularExpression.escapedPattern(for: img.assetPrefix)
+        let links = try NSRegularExpression(pattern: "/releases/download/[^/\"]+/(\(prefix)\\d+)\"")
+        let digests = try NSRegularExpression(pattern: "digest for ([^\"]+)\"[^>]*?value=\"sha256:([0-9a-f]{64})\"")
+        var sha: [String: String] = [:]
+        for m in digests.matches(in: html, range: all) { sha[ns.substring(with: m.range(at: 1))] = ns.substring(with: m.range(at: 2)) }
+        let names = Set(links.matches(in: html, range: all).map { ns.substring(with: $0.range(at: 1)) }).sorted()
+        guard !names.isEmpty else { throw AppError("\(img.repo)'s latest release (\(tag)) has no \(d.name) image. Try again later.") }
+        var parts: [ResolvedImage.Part] = []
+        for name in names {
+            let url = URL(string: "\(base)/download/\(tag)/\(name)")!
+            parts.append(ResolvedImage.Part(name: name, url: url, size: await Net.headSize(url), sha256: sha[name]))
+        }
+        return ResolvedImage(tag: tag, parts: parts)
     }
 
     static func fromURL(_ url: URL) async -> ResolvedISO {
