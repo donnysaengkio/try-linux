@@ -56,8 +56,11 @@ On first setup Try Linux offers to:
 2. Run `TryLinux.exe`.
 
 The app isn't code-signed, so Windows may show **"Windows protected your PC"**.
-Click **More info**, then **Run anyway**. You can check the download against the
-SHA-256 hash published with each release:
+Click **More info**, then **Run anyway**:
+
+<img src="docs/images/smartscreen.png" alt="Windows SmartScreen: Windows protected your PC, with Run anyway and Don't run buttons" width="420">
+
+You can check the download against the SHA-256 hash published with each release:
 
 ```powershell
 Get-FileHash .\TryLinux.exe -Algorithm SHA256
