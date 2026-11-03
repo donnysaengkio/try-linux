@@ -56,31 +56,31 @@ class Distro
     public static readonly Distro[] Catalog = {
         new Distro {
             Id = "fedora", Name = "Fedora Workstation",
-            Blurb = "GNOME on Wayland with current Mesa. The best fit for GPU acceleration.",
+            Blurb = "A community distribution sponsored by Red Hat that ships new GNOME, kernel and Mesa releases soon after they come out",
             Base = "https://mirrors.kernel.org/fedora/releases/",
             Steps = new[] { @"~^\d+/$", "Workstation/x86_64/iso/", @"~^Fedora-Workstation-Live-.*\.iso$" },
             Checksum = "~CHECKSUM$" },
         new Distro {
             Id = "ubuntu", Name = "Ubuntu Desktop",
-            Blurb = "The most widely used desktop Linux. Large download (about 6 GB).",
+            Blurb = "The most widely used desktop Linux, made by Canonical, with long-term support releases and a large software catalog",
             Base = "https://releases.ubuntu.com/",
             Steps = new[] { @"~^\d\d\.\d\d(\.\d+)?/$", @"~^ubuntu-.*-desktop-amd64\.iso$" },
             Checksum = "SHA256SUMS" },
         new Distro {
             Id = "debian", Name = "Debian (GNOME)",
-            Blurb = "Stable and conservative. Live image with a graphical installer.",
+            Blurb = "One of the oldest community distributions, known for stability and the base of Ubuntu, Mint and many others",
             Base = "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/",
             Steps = new[] { @"~^debian-live-.*-amd64-gnome\.iso$" },
             Checksum = "SHA256SUMS" },
         new Distro {
             Id = "mint", Name = "Linux Mint (Cinnamon)",
-            Blurb = "A familiar, Windows-like desktop. Runs on X11.",
+            Blurb = "A beginner-friendly distribution based on Ubuntu, with the Windows-like Cinnamon desktop and media codecs available at install",
             Base = "https://mirrors.edge.kernel.org/linuxmint/stable/",
             Steps = new[] { @"~^\d+(\.\d+)?/$", @"~^linuxmint-.*-cinnamon-64bit\.iso$" },
             Checksum = "sha256sum.txt" },
         new Distro {
             Id = "zorin", Name = "Zorin OS Core",
-            Blurb = "A polished desktop designed to feel familiar to Windows users. Based on Ubuntu.",
+            Blurb = "A polished distribution based on Ubuntu, designed to feel familiar to people moving from Windows",
             Base = "https://mirrors.edge.kernel.org/zorinos-isos/",
             Steps = new[] { @"~^\d+/$", @"~^Zorin-OS-(?<v>\d+(\.\d+)*)-Core-64-bit(-r\d+)?\.iso$" },
             Checksum = "SHA256SUMS.txt" },
@@ -993,8 +993,16 @@ class OptionRow : Control
         if (selected) using (var b = new SolidBrush(Theme.Accent)) g.FillRectangle(b, 0, 0, Theme.D(4), Height);
         int pad = Theme.D(18), half = Height / 2;
         var flags = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
-        TextRenderer.DrawText(g, Title, Theme.Bold, new Rectangle(pad, Theme.D(4), Width - pad * 2, half - Theme.D(2)), Theme.Text, flags);
-        TextRenderer.DrawText(g, Sub, Theme.Small, new Rectangle(pad, half, Width - pad * 2, half - Theme.D(6)), Theme.Muted, flags);
+        if (Height < Theme.D(64))
+        {
+            TextRenderer.DrawText(g, Title, Theme.Bold, new Rectangle(pad, Theme.D(4), Width - pad * 2, half - Theme.D(2)), Theme.Text, flags);
+            TextRenderer.DrawText(g, Sub, Theme.Small, new Rectangle(pad, half, Width - pad * 2, half - Theme.D(6)), Theme.Muted, flags);
+            return;
+        }
+        // Tall rows: title on top, description wrapped onto the lines below.
+        TextRenderer.DrawText(g, Title, Theme.Bold, new Rectangle(pad, Theme.D(8), Width - pad * 2, Theme.D(20)), Theme.Text, flags);
+        TextRenderer.DrawText(g, Sub, Theme.Small, new Rectangle(pad, Theme.D(31), Width - pad * 2, Height - Theme.D(37)), Theme.Muted,
+            TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
     }
 }
 
@@ -1003,6 +1011,7 @@ class OptionList : Panel
     readonly List<OptionRow> rows = new List<OptionRow>();
     int selectedIndex = -1;
     public event EventHandler SelectionChanged, Activated;
+    public int RowHeight = 54;          // design units; 72 fits a two-line description
 
     public OptionList()
     {
@@ -1025,7 +1034,7 @@ class OptionList : Panel
 
     void LayoutRows()
     {
-        int h = Theme.D(54), gap = Theme.D(6);
+        int h = Theme.D(RowHeight), gap = Theme.D(6);
         bool scroll = rows.Count * (h + gap) > ClientSize.Height;
         int w = ClientSize.Width - (scroll ? SystemInformation.VerticalScrollBarWidth + Theme.D(4) : 0);
         for (int i = 0; i < rows.Count; i++) rows[i].SetBounds(0, AutoScrollPosition.Y + i * (h + gap), w, h);
@@ -1333,23 +1342,24 @@ partial class MainForm : Form
     void ShowChoose()
     {
         bool hasVms = VmConfig.All().Count > 0;
-        var p = new Page(590);
-        p.Caption("Choose a Linux to try", 0, 100, 640, 30, Theme.Title);
-        p.Caption("Try Linux downloads the official installer and checks it before use.", 0, 130, 640, 22, Theme.Small, Theme.Muted);
-        var list = p.Add(new OptionList(), 0, 162, 640, Distro.Catalog.Length * 60);
+        var p = new Page(604);
+        p.Caption("Choose a Linux to try", 0, 98, 640, 30, Theme.Title);
+        p.Caption("Try Linux downloads the official installer and checks it before use.", 0, 128, 640, 22, Theme.Small, Theme.Muted);
+        int listH = Distro.Catalog.Length * 78 - 6;
+        var list = p.Add(new OptionList { RowHeight = 72 }, 0, 158, 640, listH);
         foreach (var d in Distro.Catalog) list.AddItem(d.Name, d.Blurb, d);
         list.SelectedIndex = 0;
 
-        int y = 162 + Distro.Catalog.Length * 60 + 12;
-        p.Caption("Or install from", 0, y, 160, 36, Theme.Small, Theme.Muted);
-        var fromFile = p.Add(new FlatBtn("An ISO file..."), 160, y, 160, 36);
-        var fromUrl = p.Add(new FlatBtn("A link..."), 330, y, 130, 36);
+        // Bottom row: Back, the two other install sources, Next.
+        int y = 158 + listH + 14;
         if (hasVms)
         {
-            var back = p.Add(new FlatBtn("Back"), 0, 540, 120, 42);
+            var back = p.Add(new FlatBtn("Back"), 0, y, 110, 42);
             back.Click += delegate { ShowHome(); };
         }
-        var next = p.Add(new FlatBtn("Next", true), 500, 540, 140, 42);
+        var fromFile = p.Add(new FlatBtn("From an ISO file..."), 122, y, 190, 42);
+        var fromUrl = p.Add(new FlatBtn("From a link..."), 322, y, 150, 42);
+        var next = p.Add(new FlatBtn("Next", true), 500, y, 140, 42);
         Action<object> choose = tag =>
         {
             var plan = new InstallPlan();
