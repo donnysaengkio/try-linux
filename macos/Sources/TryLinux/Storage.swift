@@ -159,12 +159,15 @@ enum Disk {
         }
     }
 
+    // Read sizes fresh each time: URL caches resource values, and a stale (smaller) size here
+    // would make grow() truncate a disk that has already been grown.
     static func capacity(_ url: URL) -> UInt64 {
-        UInt64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.uint64Value ?? 0
     }
 
     static func used(_ url: URL) -> UInt64 {
-        UInt64((try? url.resourceValues(forKeys: [.totalFileAllocatedSizeKey]).totalFileAllocatedSize) ?? 0)
+        let fresh = URL(fileURLWithPath: url.path)
+        return UInt64((try? fresh.resourceValues(forKeys: [.totalFileAllocatedSizeKey]).totalFileAllocatedSize) ?? 0)
     }
 
     static func freeSpace(_ url: URL) -> Int64 {
