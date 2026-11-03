@@ -20,6 +20,14 @@ nothing else to install. It's the Mac edition of
 | [Ubuntu&nbsp;Desktop](https://ubuntu.com/desktop) | The most widely used desktop Linux, made by Canonical, with long-term support releases and a large software catalog |
 | [Debian](https://www.debian.org/) | One of the oldest community distributions, known for stability and the base of Ubuntu, Mint and many others |
 | [openSUSE&nbsp;Tumbleweed](https://www.opensuse.org/#Tumbleweed) | A rolling-release distribution from the openSUSE community that always has the newest KDE Plasma and kernel |
+| [Omarchy](https://omarchy.org/) | Arch Linux with DHH's keyboard-driven Hyprland desktop, from the official ARM64 image. Ready to use with no installer; graphics are software-rendered here |
+
+**Omarchy** comes as a ready-made disk image rather than an installer: Try Linux
+downloads the official ARM64 image that [Try Omarchy for Mac](https://github.com/omacom/try-omarchy)
+publishes (about 3 GB, in parts checked against GitHub's SHA-256 digests), unpacks it
+and starts it. Omarchy's Hyprland desktop normally uses GPU acceleration; Apple
+Virtualization has none for Linux, so it's drawn by the CPU and animations are slower.
+For a GPU-accelerated Omarchy on a Mac, use Try Omarchy for Mac.
 
 Macs with Apple silicon need ARM64 (aarch64) Linux. Linux Mint and Zorin OS don't
 publish ARM64 installers, so they aren't offered here. You can also install from any
@@ -104,6 +112,15 @@ bash scripts/build-app.sh
 
 This produces `build/Try Linux.app` and a zip of it. GitHub Actions builds every push
 and runs `--self-test`, which checks the download catalog and renders every screen.
+
+## Credits
+
+- Omarchy by [Basecamp / DHH](https://omarchy.org/); the ARM64 image is published by
+  [Try Omarchy for Mac](https://github.com/omacom/try-omarchy) and downloaded from its
+  releases, not redistributed.
+- Bundles the decompressor from [Zstandard](https://github.com/facebook/zstd) 1.5.7
+  (BSD license, see `Sources/CZstd/LICENSE`).
+- Linux distributions are downloaded from their official mirrors and carry their own licenses.
 
 ## License
 

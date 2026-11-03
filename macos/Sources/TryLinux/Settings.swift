@@ -187,7 +187,7 @@ struct SettingsView: View {
             toolButton("Clean up…") { cleanUp() }
             toolButton("Delete…", danger: true) { delete() }
         }
-        Note(text: "Clean up removes downloaded installers that no system still needs.")
+        Note(text: "Clean up removes downloaded installers and images that no system still needs. Ready-made systems such as Omarchy keep their image so Reset can restore it.")
     }
 
     private func toolButton(_ title: String, danger: Bool = false, _ action: @escaping () -> Void) -> some View {
@@ -220,6 +220,7 @@ struct SettingsView: View {
 
     private func reset() {
         guard stopped() else { return }
+        if !c.factoryImage.isEmpty { resetFromImage(); return }
         var iso = URL(fileURLWithPath: c.iso)
         if !FileManager.default.fileExists(atPath: iso.path) {
             guard let picked = Ask.file("Choose the installer to start over with") else { return }
@@ -241,6 +242,26 @@ struct SettingsView: View {
         }
     }
 
+    // Ready-made systems (like Omarchy) start over by unpacking their downloaded image again.
+    private func resetFromImage() {
+        let parts = c.factoryParts
+        guard !parts.isEmpty else {
+            model.show("\(c.displayName)'s image isn't on this Mac anymore. Delete this system and add it again to download a fresh copy.")
+            return
+        }
+        guard Ask.confirm("Reset \(c.displayName)?", "This erases everything in it, including its snapshots, and restores the fresh image. Back it up first if you might need anything.", "Reset", destructive: true) else { return }
+        let cfg = c
+        model.runTool("Resetting \(cfg.displayName)", for: cfg.id) {
+            let size = max(Int(Disk.capacity(cfg.diskURL) >> 30), cfg.diskGB)
+            try FileManager.default.removeItem(at: cfg.diskURL)
+            try? FileManager.default.removeItem(at: cfg.efiURL)
+            try? FileManager.default.removeItem(at: cfg.snapshotsDir)
+            try Unpack.zstd(parts: parts, to: cfg.diskURL, cancelled: { false }) { _, _ in }
+            try Disk.grow(cfg.diskURL, gb: size)
+            return "\(cfg.displayName) was reset to its fresh image."
+        }
+    }
+
     private func bootISO() {
         guard stopped(), let iso = Ask.file("Boot \(c.displayName) from an ISO") else { return }
         c.iso = iso.path
@@ -249,7 +270,8 @@ struct SettingsView: View {
     }
 
     private func cleanUp() {
-        let needed = Set(model.systems.filter(\.pendingInstall).map(\.iso))
+        // Keep installers a system hasn't finished with, and images a ready-made system can reset from.
+        let needed = Set(model.systems.filter(\.pendingInstall).map(\.iso) + model.systems.map(\.factoryImage).filter { !$0.isEmpty })
         let files = ((try? FileManager.default.contentsOfDirectory(at: Paths.isos, includingPropertiesForKeys: [.fileSizeKey])) ?? [])
             .filter { !needed.contains($0.path) }
         guard !files.isEmpty else { model.show("Nothing to clean up. Installers that a system still needs are kept."); return }

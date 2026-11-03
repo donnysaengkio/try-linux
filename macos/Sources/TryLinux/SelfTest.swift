@@ -24,8 +24,13 @@ enum SelfTest {
 
         for d in Distro.catalog {
             do {
-                let r = try await Resolver.resolve(d)
-                lines.append("resolve \(d.id)\t\(r.url.absoluteString)\t\(r.size)\t\(r.sha256 ?? "no-checksum")")
+                if d.isImage {
+                    let r = try await Resolver.resolveImage(d)
+                    for p in r.parts { lines.append("resolve \(d.id) \(r.tag)\t\(p.url.absoluteString)\t\(p.size)\t\(p.sha256 ?? "no-checksum")") }
+                } else {
+                    let r = try await Resolver.resolve(d)
+                    lines.append("resolve \(d.id)\t\(r.url.absoluteString)\t\(r.size)\t\(r.sha256 ?? "no-checksum")")
+                }
             } catch {
                 lines.append("resolve \(d.id)\tERROR\t\(error.localizedDescription)")
             }
@@ -54,10 +59,34 @@ enum SelfTest {
             lines.append("vm configuration\tERROR\t\(error.localizedDescription)")
         }
 
-        var zorinish = VMConfig(id: "ubuntu", displayName: "Ubuntu Desktop")
-        zorinish.distroId = "ubuntu"
-        zorinish.profile = 1
-        let model = AppModel(preview: [c, zorinish])
+        var ubuntu = VMConfig(id: "ubuntu", displayName: "Ubuntu Desktop")
+        ubuntu.distroId = "ubuntu"
+        ubuntu.profile = 1
+        var omarchy = VMConfig(id: "omarchy", displayName: "Omarchy")
+        omarchy.distroId = "omarchy"
+        let model = AppModel(preview: [c, omarchy, ubuntu])
+
+        // --with-image: download, verify and unpack the real Omarchy image, then check the disk it produces.
+        if CommandLine.arguments.contains("--with-image"), let d = Distro.find("omarchy") {
+            let started = Date()
+            do {
+                let parts = try await model.downloadImage(d)
+                lines.append("image download\t\(parts.count) parts verified in \(Int(Date().timeIntervalSince(started)))s")
+                let disk = storage.appendingPathComponent("omarchy-disk.img")
+                let t = Date()
+                try await model.unpack(parts, to: disk)
+                let h = try FileHandle(forReadingFrom: disk)
+                try h.seek(toOffset: 512)
+                let sig = String(decoding: try h.read(upToCount: 8) ?? Data(), as: UTF8.self)
+                try h.close()
+                lines.append("image unpack\t\(Int(Date().timeIntervalSince(t)))s capacity \(Disk.capacity(disk) >> 20) MB used \(Disk.used(disk) >> 20) MB gpt=\(sig == "EFI PART")")
+                try Disk.grow(disk, gb: 64)
+                lines.append("image grow\tcapacity \(Disk.capacity(disk) >> 30) GB used \(Disk.used(disk) >> 20) MB")
+                try? FileManager.default.removeItem(at: disk)
+            } catch {
+                lines.append("image\tERROR\t\(error.localizedDescription)")
+            }
+        }
         func snap<V: View>(_ name: String, _ view: V) {
             let root = view.environmentObject(model).frame(width: 980, height: 700).background(Theme.bg).preferredColorScheme(.dark)
             let renderer = ImageRenderer(content: root)

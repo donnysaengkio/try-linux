@@ -68,7 +68,7 @@ struct ChooseView: View {
     var body: some View {
         Page {
             Heading(text: "Choose a Linux to try", centered: true).padding(.top, 10)
-            Text("Try Linux downloads the official ARM64 installer and checks it before use.")
+            Text("Try Linux downloads the official ARM64 installer or image and checks it before use.")
                 .font(Theme.mono(11.5)).foregroundColor(Theme.muted)
                 .frame(maxWidth: .infinity).padding(.top, 6)
             VStack(spacing: 6) {
@@ -165,7 +165,7 @@ struct SetupView: View {
                 FormRow(label: "Name") { TextInput(text: $name).frame(width: 250) }
                 ResourcePicker(profile: $profile, ramGB: $ramGB, cores: $cores)
                 FormRow(label: "Disk size") {
-                    NumberField(value: $diskGB, range: 16...2048, step: 8)
+                    NumberField(value: $diskGB, range: (plan.distro?.isImage == true ? 24 : 16)...2048, step: 8)
                     Text("GB, grows only as you use it").font(Theme.mono(11.5)).foregroundColor(Theme.muted)
                 }
                 FormRow(label: "Storage") {
@@ -174,7 +174,9 @@ struct SetupView: View {
                         Button("Change") { changeStorage() }.buttonStyle(FlatButton()).frame(width: 100, height: 28)
                     }
                 }
-                Note(text: "The installer only sees a virtual disk, a file on your Mac. Your Mac's drive is never touched.")
+                Note(text: plan.distro?.isImage == true
+                     ? "\(plan.label) is ready to use straight away: there's no installer. It runs on a virtual disk, a file on your Mac; your Mac's drive is never touched."
+                     : "The installer only sees a virtual disk, a file on your Mac. Your Mac's drive is never touched.")
                     .padding(.top, 8)
             }
             .padding(.top, 18)

@@ -36,6 +36,7 @@ struct VMConfig: Codable, Identifiable, Equatable {
     var rosetta = false
     var lastBoot = ""
     var macAddress = ""
+    var factoryImage = ""           // folder of the image parts a ready-made system was unpacked from
 
     static let profileNames = ["Balanced", "Maximum", "Manual"]
 
@@ -68,6 +69,14 @@ struct VMConfig: Codable, Identifiable, Equatable {
         rosetta = get(.rosetta, false)
         lastBoot = get(.lastBoot, "")
         macAddress = get(.macAddress, "")
+        factoryImage = get(.factoryImage, "")
+    }
+
+    // The downloaded image parts for a ready-made system, in order; empty if they've been cleaned up.
+    var factoryParts: [URL] {
+        guard !factoryImage.isEmpty else { return [] }
+        let items = (try? FileManager.default.contentsOfDirectory(at: URL(fileURLWithPath: factoryImage), includingPropertiesForKeys: nil)) ?? []
+        return items.filter { $0.pathExtension != "part" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
     var dir: URL { Paths.vms.appendingPathComponent(id, isDirectory: true) }
