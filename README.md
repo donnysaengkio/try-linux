@@ -1,6 +1,6 @@
 # Try Linux
 
-Try a Linux desktop on Windows in a window, without repartitioning your drive.
+Try a Linux desktop on Windows without repartitioning your drive.
 Pick a distribution, and Try Linux downloads the official installer, checks it
 against the distribution's published SHA-256 checksum, creates a virtual disk
 and boots it with GPU acceleration.
