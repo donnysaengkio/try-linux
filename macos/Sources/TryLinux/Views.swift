@@ -31,7 +31,16 @@ struct HomeView: View {
 
     var body: some View {
         Page {
-            Heading(text: "Your systems").padding(.top, 16)
+            HStack {
+                Heading(text: "Your systems")
+                if model.stagedUpdate != nil {
+                    Button("Updates when you quit") {}.buttonStyle(FlatButton()).frame(width: 220, height: 34).disabled(true)
+                } else if let v = model.updateAvailable {
+                    Button("Update to \(v)") { Task { await model.startUpdate() } }
+                        .buttonStyle(FlatButton(accent: true)).frame(width: 200, height: 34)
+                }
+            }
+            .padding(.top, 16)
             VStack(spacing: 6) {
                 ForEach(model.systems) { vm in
                     OptionRow(title: vm.displayName, subtitle: model.describe(vm), selected: vm.id == current?.id)
@@ -67,7 +76,7 @@ struct ChooseView: View {
 
     var body: some View {
         Page {
-            Heading(text: "Choose a Linux to try", centered: true).padding(.top, 10)
+            Heading(text: "Choose a Linux OS to try", centered: true).padding(.top, 10)
             Text("Try Linux downloads the official ARM64 installer and checks it before use.")
                 .font(Theme.mono(11.5)).foregroundColor(Theme.muted)
                 .frame(maxWidth: .infinity).padding(.top, 6)

@@ -39,6 +39,8 @@ final class AppModel: ObservableObject {
     @Published var running: [String: VMSession] = [:]
     @Published var progress = ProgressState()
     @Published var alert: AlertItem?
+    @Published var updateAvailable: String?     // a newer release found by the update check
+    @Published var stagedUpdate: URL?           // a checked update waiting to be installed at quit
     var cancelRequested = false
     var busy = false
     var onAllStopped: (() -> Void)?
@@ -216,6 +218,55 @@ final class AppModel: ObservableObject {
         set {
             do { if newValue { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() } }
             catch { AppModel.shared.show("Couldn't change Open at Login: \(error.localizedDescription)") }
+        }
+    }
+
+    // MARK: updates
+
+    @MainActor
+    func checkForUpdatesInBackground() {
+        Task { @MainActor in
+            if let v = try? await Updater.check(force: false) { self.updateAvailable = v }
+        }
+    }
+
+    // Asks, downloads and checks the update, then replaces the app and restarts it. Linux runs inside
+    // Try Linux, so with systems running the update waits until Try Linux quits.
+    @MainActor
+    func startUpdate() async {
+        guard let version = updateAvailable, !busy, stagedUpdate == nil else { return }
+        let choice = ThemedDialog.show("Update to Try Linux \(version)?",
+            "You have version \(AppInfo.version). Try Linux downloads the update from GitHub, checks it against its published checksum and restarts.",
+            after: "Your Linux systems aren't affected.", primary: "Update", secondary: "What's new")
+        if choice == .secondary {
+            NSWorkspace.shared.open(Updater.releasesPage.appendingPathComponent("tag").appendingPathComponent("v" + version))
+            return
+        }
+        guard choice == .primary else { return }
+        if !running.isEmpty, ThemedDialog.show("Update when you quit?",
+            "Linux runs inside Try Linux, so restarting now would stop your running systems. Try Linux can download the update now and install it the next time it quits.",
+            primary: "Update when I quit", secondary: "Cancel") != .primary { return }
+        busy = true
+        screen = .progress
+        progress = ProgressState(status: "Downloading Try Linux \(version)", detail: "Connecting…")
+        do {
+            let release = try await Updater.fetch()
+            let app = try await Updater.download(release) { got, total, rate in
+                DispatchQueue.main.async {
+                    self.progress.value = total > 0 ? Double(got) / Double(total) : nil
+                    self.progress.detail = Self.transfer(got, total, rate)
+                }
+            }
+            busy = false
+            if !running.isEmpty { stagedUpdate = app; goHome(); return }
+            try Updater.apply(app)
+            Installer.relaunch(Installer.bundleURL)
+        } catch {
+            busy = false
+            goHome()
+            if ThemedDialog.show("Couldn't update Try Linux", error.localizedDescription, primary: "Release page", secondary: "Close") == .primary {
+                NSWorkspace.shared.open(Updater.releasesPage)
+            }
         }
     }
 

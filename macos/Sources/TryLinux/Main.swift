@@ -45,6 +45,18 @@ struct TryLinuxApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        DispatchQueue.main.async {
+            Installer.offerAtLaunch()
+            AppModel.shared.checkForUpdatesInBackground()
+        }
+    }
+
+    // An update downloaded while systems were running is put in place as Try Linux quits.
+    func applicationWillTerminate(_ notification: Notification) {
+        if let app = AppModel.shared.stagedUpdate { try? Updater.apply(app) }
+    }
+
     // Closing the launcher window keeps running systems (and the menu bar icon) alive.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 

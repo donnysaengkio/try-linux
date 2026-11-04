@@ -73,9 +73,10 @@ struct PixelLogo: View {
 struct FlatButton: ButtonStyle {
     var primary = false
     var danger = false
+    var accent = false      // accent-colored text and outline, for offers like "Update to x.y.z"
 
     func makeBody(configuration: Configuration) -> some View {
-        FlatButtonBody(configuration: configuration, primary: primary, danger: danger)
+        FlatButtonBody(configuration: configuration, primary: primary, danger: danger, accent: accent)
     }
 }
 
@@ -83,6 +84,7 @@ private struct FlatButtonBody: View {
     let configuration: ButtonStyle.Configuration
     let primary: Bool
     let danger: Bool
+    let accent: Bool
     @Environment(\.isEnabled) private var enabled
     @State private var hover = false
 
@@ -92,10 +94,10 @@ private struct FlatButtonBody: View {
             : (configuration.isPressed || hover ? Theme.cardHover : Theme.card)
         configuration.label
             .font(Theme.mono(13, .bold))
-            .foregroundColor(primary ? Theme.bg : (danger ? Theme.danger : Theme.text))
+            .foregroundColor(primary ? Theme.bg : (danger ? Theme.danger : (accent ? Theme.accent : Theme.text)))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(fill)
-            .overlay(Rectangle().stroke(primary ? Theme.accent : (danger ? Theme.danger : Theme.border), lineWidth: 1))
+            .overlay(Rectangle().stroke(primary || accent ? Theme.accent : (danger ? Theme.danger : Theme.border), lineWidth: 1))
             .contentShape(Rectangle())
             .opacity(enabled ? 1 : 0.45)
             .onHover { hover = $0 }

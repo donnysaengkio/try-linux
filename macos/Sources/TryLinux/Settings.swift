@@ -9,6 +9,8 @@ struct SettingsView: View {
     @State private var openAtLogin = AppModel.openAtLogin
     @State private var rosettaState = VZLinuxRosettaDirectoryShare.availability
     @State private var showSnapshots = false
+    @State private var checkUpdates = Updater.enabled
+    @State private var checking = false
 
     static let resolutions = [(1280, 800), (1920, 1200), (2560, 1600)]
 
@@ -147,11 +149,55 @@ struct SettingsView: View {
 
         SectionTitle(text: "About")
         Note(text: "Try Linux for Mac \(AppInfo.version)\nApple Virtualization on macOS \(ProcessInfo.processInfo.operatingSystemVersionString)\nStorage: \(Paths.display(Paths.root))")
-        Button("Open storage folder") {
-            try? FileManager.default.createDirectory(at: Paths.root, withIntermediateDirectories: true)
-            NSWorkspace.shared.open(Paths.root)
+        HStack(spacing: 10) {
+            Button("Open storage folder") {
+                try? FileManager.default.createDirectory(at: Paths.root, withIntermediateDirectories: true)
+                NSWorkspace.shared.open(Paths.root)
+            }
+            .buttonStyle(FlatButton()).frame(width: 200, height: 30)
+            if !Installer.isInApplications {
+                Button("Install…") { installFromSettings() }.buttonStyle(FlatButton()).frame(width: 120, height: 30)
+            }
         }
-        .buttonStyle(FlatButton()).frame(width: 200, height: 30)
+        CheckRow(title: "Check for updates automatically (once a day)", on: $checkUpdates)
+            .onChange(of: checkUpdates) { Updater.enabled = $0 }
+        Button(checking ? "Checking…" : model.updateAvailable.map { "Update to \($0)" } ?? "Check for updates") { checkNow() }
+            .buttonStyle(FlatButton()).frame(width: 200, height: 30).disabled(checking || model.stagedUpdate != nil)
+    }
+
+    private func checkNow() {
+        if model.updateAvailable != nil { Task { await model.startUpdate() }; return }
+        checking = true
+        Task { @MainActor in
+            do {
+                let found = try await Updater.check(force: true)
+                checking = false
+                if let found {
+                    model.updateAvailable = found
+                    await model.startUpdate()
+                } else {
+                    ThemedDialog.show("Try Linux is up to date", "You have the latest version, \(AppInfo.version).", primary: "OK")
+                }
+            } catch {
+                checking = false
+                ThemedDialog.show("Couldn't check for updates", error.localizedDescription, primary: "OK")
+            }
+        }
+    }
+
+    private func installFromSettings() {
+        guard ThemedDialog.show("Install Try Linux?", Installer.installText, path: Paths.display(Installer.destinationFolder),
+                                after: "To uninstall, quit Try Linux and drag it from Applications to the Trash.",
+                                primary: "Install", secondary: "Cancel") == .primary else { return }
+        do {
+            let app = try Installer.install()
+            try? FileManager.default.trashItem(at: Installer.originalURL, resultingItemURL: nil)
+            if ThemedDialog.show("Try Linux is installed", "Try Linux is now available in your Applications folder.", primary: "Open") == .primary {
+                Installer.relaunch(app)
+            }
+        } catch {
+            ThemedDialog.show("Couldn't install Try Linux", error.localizedDescription, primary: "OK")
+        }
     }
 
     private var rosettaText: String {

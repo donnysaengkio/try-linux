@@ -54,6 +54,47 @@ enum SelfTest {
             lines.append("vm configuration\tERROR\t\(error.localizedDescription)")
         }
 
+        // Updates: version comparison, the real release list, and installing / updating a copy of this app.
+        for (a, b) in [("1.0.1-preview", "1.0.0"), ("1.0.0", "1.0.0"), ("1.0.0-preview", "1.0.0"), ("0.9.9", "1.0.0"), ("1.1", "1.0.9")] {
+            lines.append("newer(\(a), \(b)) = \(Updater.isNewer(a, than: b))")
+        }
+        do {
+            let r = try await Updater.fetch()
+            lines.append("latest release\t\(r.version)\tzip=\(r.zip?.lastPathComponent ?? "none")\tsums=\(r.sums?.lastPathComponent ?? "none")")
+        } catch {
+            lines.append("latest release\tERROR\t\(error.localizedDescription)")
+        }
+        let work = dir.appendingPathComponent("install-test", isDirectory: true)
+        try? FileManager.default.removeItem(at: work)
+        do {
+            let installed = try Installer.install(from: Bundle.main.bundleURL, to: work.appendingPathComponent("Applications", isDirectory: true))
+            let signed = Installer.run("/usr/bin/codesign", ["--verify", "--deep", installed.path]) == 0
+            lines.append("install\t\(installed.lastPathComponent) version=\(Installer.version(of: installed) ?? "?") signed=\(signed)")
+            let build = Bundle.main.bundleURL.deletingLastPathComponent()
+            if let zip = (try? FileManager.default.contentsOfDirectory(at: build, includingPropertiesForKeys: nil))?.first(where: { $0.lastPathComponent.hasSuffix("-macOS.zip") }) {
+                let hash = try Hashing.sha256(zip, cancelled: { false }, report: { _ in })
+                let copy = work.appendingPathComponent(zip.lastPathComponent)
+                try FileManager.default.copyItem(at: zip, to: copy)
+                do {
+                    _ = try Updater.unpack(copy, sums: String(repeating: "0", count: 64) + "  " + zip.lastPathComponent + "\n", into: work)
+                    lines.append("update wrong checksum\tACCEPTED (bad)")
+                } catch {
+                    lines.append("update wrong checksum\trefused: \(error.localizedDescription)")
+                }
+                try? FileManager.default.removeItem(at: copy)
+                try FileManager.default.copyItem(at: zip, to: copy)
+                let app = try Updater.unpack(copy, sums: hash + "  " + zip.lastPathComponent + "\n", into: work)
+                try Updater.apply(app, to: installed)
+                let ok = Installer.run("/usr/bin/codesign", ["--verify", "--deep", installed.path]) == 0
+                lines.append("update\tapplied version=\(Installer.version(of: installed) ?? "?") signed=\(ok)")
+            } else {
+                lines.append("update\tskipped (no zip next to the app)")
+            }
+        } catch {
+            lines.append("install/update\tERROR\t\(error.localizedDescription)")
+        }
+        try? FileManager.default.removeItem(at: work)
+
         // Render the screens as a typical Mac would show them, not the small CI machine and its scratch folder.
         VMConfig.previewHost = (cores: 10, ramGB: 16)
         Paths.displayRoot = "~/Library/Application Support/TryLinux"
@@ -86,6 +127,9 @@ enum SelfTest {
             win.orderOut(nil)
         }
         snap("home", HomeView())
+        model.updateAvailable = "1.0.1"
+        snap("home-update", HomeView())
+        model.updateAvailable = nil
         snap("choose", ChooseView())
         snap("setup", SetupView(plan: InstallPlan(distro: Distro.catalog[0], label: "Fedora Workstation")))
         model.progress = ProgressState(status: "Downloading Fedora-Workstation-Live-45-1.4.aarch64.iso", value: 0.42,
@@ -96,6 +140,39 @@ enum SelfTest {
             // General is captured taller so it shows everything without scrolling.
             snap(name, SettingsView(config: c, tab: i), height: i == 0 ? 860 : 700)
         }
+        // The About section at the bottom of Advanced, with the install and update controls.
+        snap("settings-about", SettingsView(config: c, tab: 2), height: 1080)
+
+        func dialog(_ name: String, _ view: DialogView) {
+            let root = view.preferredColorScheme(.dark)
+            let host = NSHostingView(rootView: root)
+            let size = host.fittingSize
+            let win = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled], backing: .buffered, defer: false)
+            win.appearance = NSAppearance(named: .darkAqua)
+            win.contentView = host
+            win.orderFrontRegardless()
+            host.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+            if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+                host.cacheDisplay(in: host.bounds, to: rep)
+                try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent(name + ".png"))
+            }
+            win.orderOut(nil)
+        }
+        let apps = "/Applications"
+        dialog("install-prompt", DialogView(title: "Install Try Linux?", text: Installer.installText, path: apps,
+            after: "Run opens it from here without installing; you can install it later from Settings > Advanced > About.\n\nTo uninstall, quit Try Linux and drag it from Applications to the Trash.",
+            primary: "Install", secondary: "Run", danger: false, pick: { _ in }))
+        dialog("installed", DialogView(title: "Try Linux is installed", text: "Try Linux is now available in your Applications folder.", path: nil, after: nil,
+            primary: "Open", secondary: nil, danger: false, pick: { _ in }))
+        dialog("quit-prompt", DialogView(title: "Quit Try Linux?", text: "Try Linux will close without installing. You'll be asked again the next time you open it.",
+            path: nil, after: nil, primary: "Quit", secondary: "Back", danger: false, pick: { _ in }))
+        dialog("update-prompt", DialogView(title: "Update to Try Linux 1.0.1?",
+            text: "You have version \(AppInfo.version). Try Linux downloads the update from GitHub, checks it against its published checksum and restarts.",
+            path: nil, after: "Your Linux systems aren't affected.", primary: "Update", secondary: "What's new", danger: false, pick: { _ in }))
+        dialog("update-when-quit", DialogView(title: "Update when you quit?",
+            text: "Linux runs inside Try Linux, so restarting now would stop your running systems. Try Linux can download the update now and install it the next time it quits.",
+            path: nil, after: nil, primary: "Update when I quit", secondary: "Cancel", danger: false, pick: { _ in }))
         Icons.writeIconset(to: dir.appendingPathComponent("AppIcon.iconset"))
 
         try? (lines.joined(separator: "\n") + "\n").write(to: dir.appendingPathComponent("results.txt"), atomically: true, encoding: .utf8)

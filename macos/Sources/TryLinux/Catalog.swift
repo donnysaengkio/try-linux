@@ -64,11 +64,15 @@ enum Net {
     }
 
     static func string(_ url: URL) async throws -> String {
+        String(decoding: try await data(url), as: UTF8.self)
+    }
+
+    static func data(_ url: URL) async throws -> Data {
         let (data, response) = try await URLSession.shared.data(for: request(url))
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             throw AppError("\(url.host ?? "The server") returned HTTP \(http.statusCode).")
         }
-        return String(decoding: data, as: UTF8.self)
+        return data
     }
 
     static func headSize(_ url: URL) async -> Int64 {
