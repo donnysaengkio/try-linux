@@ -13,6 +13,16 @@ enum Paths {
     }
     static var vms: URL { root.appendingPathComponent("vms", isDirectory: true) }
     static var isos: URL { root.appendingPathComponent("isos", isDirectory: true) }
+
+    // The self-test renders screens from a scratch folder; this shows the usual folder in its place.
+    static var displayRoot: String?
+
+    // A path as the app shows it, with the home folder written as ~.
+    static func display(_ url: URL) -> String {
+        let p = url.path, r = root.path
+        if let d = displayRoot, p.hasPrefix(r) { return d + p.dropFirst(r.count) }
+        return (p as NSString).abbreviatingWithTildeInPath
+    }
 }
 
 struct VMConfig: Codable, Identifiable, Equatable {
@@ -100,8 +110,10 @@ struct VMConfig: Codable, Identifiable, Equatable {
         }.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
     }
 
-    static var hostCores: Int { ProcessInfo.processInfo.processorCount }
-    static var hostRamGB: Int { max(2, Int(ProcessInfo.processInfo.physicalMemory >> 30)) }
+    // The self-test renders screens as a typical Mac rather than the small CI machine.
+    static var previewHost: (cores: Int, ramGB: Int)?
+    static var hostCores: Int { previewHost?.cores ?? ProcessInfo.processInfo.processorCount }
+    static var hostRamGB: Int { previewHost?.ramGB ?? max(2, Int(ProcessInfo.processInfo.physicalMemory >> 30)) }
 
     func resources() -> (cores: Int, ramGB: Int) {
         let n = Self.hostCores, total = Self.hostRamGB
@@ -111,8 +123,8 @@ struct VMConfig: Codable, Identifiable, Equatable {
         case 2: c = cores; r = ramGB
         default: c = max(2, n / 2); r = max(2, min(16, total / 2))
         }
-        let maxCPU = VZVirtualMachineConfiguration.maximumAllowedCPUCount
-        let maxRam = Int(VZVirtualMachineConfiguration.maximumAllowedMemorySize >> 30)
+        let maxCPU = Self.previewHost == nil ? VZVirtualMachineConfiguration.maximumAllowedCPUCount : n
+        let maxRam = Self.previewHost == nil ? Int(VZVirtualMachineConfiguration.maximumAllowedMemorySize >> 30) : total
         c = min(max(1, c), min(n, maxCPU))
         r = min(max(2, r), min(total, maxRam))
         return (c, r)

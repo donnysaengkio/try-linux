@@ -54,12 +54,15 @@ enum SelfTest {
             lines.append("vm configuration\tERROR\t\(error.localizedDescription)")
         }
 
-        var zorinish = VMConfig(id: "ubuntu", displayName: "Ubuntu Desktop")
-        zorinish.distroId = "ubuntu"
-        zorinish.profile = 1
-        let model = AppModel(preview: [c, zorinish])
-        func snap<V: View>(_ name: String, _ view: V) {
-            let root = view.environmentObject(model).frame(width: 980, height: 700).background(Theme.bg).preferredColorScheme(.dark)
+        // Render the screens as a typical Mac would show them, not the small CI machine and its scratch folder.
+        VMConfig.previewHost = (cores: 10, ramGB: 16)
+        Paths.displayRoot = "~/Library/Application Support/TryLinux"
+        var ubuntu = VMConfig(id: "ubuntu", displayName: "Ubuntu Desktop")
+        ubuntu.distroId = "ubuntu"
+        ubuntu.profile = 1
+        let model = AppModel(preview: [c, ubuntu])
+        func snap<V: View>(_ name: String, _ view: V, height: CGFloat = 700) {
+            let root = view.environmentObject(model).frame(width: 980, height: height).background(Theme.bg).preferredColorScheme(.dark)
             let renderer = ImageRenderer(content: root)
             renderer.scale = 2
             if let img = renderer.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
@@ -68,7 +71,7 @@ enum SelfTest {
             }
             // AppKit-backed controls (text fields, scroll views) only draw in a real window, so capture that too.
             let host = NSHostingView(rootView: root)
-            let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 980, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
+            let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 980, height: height), styleMask: [.titled], backing: .buffered, defer: false)
             win.appearance = NSAppearance(named: .darkAqua)
             win.contentView = host
             win.orderFrontRegardless()
@@ -87,7 +90,8 @@ enum SelfTest {
                                        detail: "1.12 GB of 2.66 GB  ·  24.8 MB/s  ·  2 min left", cancellable: true)
         snap("progress", ProgressScreen())
         for (i, name) in ["settings-general", "settings-devices", "settings-advanced", "settings-recovery"].enumerated() {
-            snap(name, SettingsView(config: c, tab: i))
+            // Tall enough that each tab shows everything without scrolling.
+            snap(name, SettingsView(config: c, tab: i), height: 960)
         }
         Icons.writeIconset(to: dir.appendingPathComponent("AppIcon.iconset"))
 

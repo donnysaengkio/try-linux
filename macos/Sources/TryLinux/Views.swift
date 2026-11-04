@@ -156,7 +156,7 @@ struct SetupView: View {
     @State private var ramGB = 8
     @State private var cores = max(2, VMConfig.hostCores / 2)
     @State private var diskGB = 64
-    @State private var storage = Paths.root.path
+    @State private var storage = Paths.display(Paths.root)
 
     var body: some View {
         Page {
@@ -196,7 +196,7 @@ struct SetupView: View {
         guard let url = Ask.folder("Where should Try Linux keep its systems and downloads?") else { return }
         let path = url.appendingPathComponent("TryLinux", isDirectory: true).path
         UserDefaults.standard.set(path, forKey: "storage")
-        storage = path
+        storage = Paths.display(Paths.root)
     }
 
     private func install() {

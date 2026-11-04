@@ -83,7 +83,7 @@ struct SettingsView: View {
         Note(text: "Increasing grows the disk next launch; lowering never shrinks it. Linux may need to expand its partition to use the new space.")
         Note(text: "Current capacity: \(gb(Disk.capacity(c.diskURL))) (\(gb(Disk.used(c.diskURL))) used). Free on this Mac: \(gb(UInt64(max(0, Disk.freeSpace(c.dir))))).")
         FormRow(label: "Location") {
-            Text(c.dir.path).font(Theme.mono(11.5)).foregroundColor(Theme.muted).lineLimit(1).truncationMode(.middle)
+            Text(Paths.display(c.dir)).font(Theme.mono(11.5)).foregroundColor(Theme.muted).lineLimit(1).truncationMode(.middle)
         }
         FormRow(label: "Shared folder") {
             TextInput(text: $c.sharedFolder).frame(width: 300)
@@ -146,7 +146,7 @@ struct SettingsView: View {
         Note(text: "Linux shares your Mac's connection through NAT. Apple Virtualization has no port forwarding; to reach Linux from the Mac (for example over SSH), use its IP address. Run ip addr in Linux to see it.")
 
         SectionTitle(text: "About")
-        Note(text: "Try Linux for Mac \(AppInfo.version)\nApple Virtualization on macOS \(ProcessInfo.processInfo.operatingSystemVersionString)\nStorage: \(Paths.root.path)")
+        Note(text: "Try Linux for Mac \(AppInfo.version)\nApple Virtualization on macOS \(ProcessInfo.processInfo.operatingSystemVersionString)\nStorage: \(Paths.display(Paths.root))")
         Button("Open storage folder") {
             try? FileManager.default.createDirectory(at: Paths.root, withIntermediateDirectories: true)
             NSWorkspace.shared.open(Paths.root)
