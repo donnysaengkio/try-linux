@@ -84,9 +84,9 @@ them too. If you turned on **Open at login**, turn it off first in Settings > Ge
 Once a day, Try Linux checks GitHub for a new release. When there is one, an
 **Update to x.y.z** button appears on the home screen.
 
-<img src="docs/images/update-button.png" alt="Your systems screen with an Update to 1.0.1 button above the list" width="560">
+<img src="docs/images/update-button.png" alt="Your systems screen with an Update to 1.0.2 button above the list" width="560">
 
-<img src="docs/images/update-prompt.png" alt="Update to Try Linux 1.0.1? prompt, with What's new and Update buttons" width="420">
+<img src="docs/images/update-prompt.png" alt="Update to Try Linux 1.0.2? prompt, with What's new and Update buttons" width="420">
 
 1. **What's new** opens the release notes; **Update** downloads the new version.
 2. Try Linux checks the download against the release's published SHA-256 checksum

@@ -127,7 +127,7 @@ enum SelfTest {
             win.orderOut(nil)
         }
         snap("home", HomeView())
-        model.updateAvailable = "1.0.1"
+        model.updateAvailable = "1.0.2"
         snap("home-update", HomeView())
         model.updateAvailable = nil
         snap("choose", ChooseView())
@@ -167,7 +167,7 @@ enum SelfTest {
             primary: "Open", secondary: nil, danger: false, pick: { _ in }))
         dialog("quit-prompt", DialogView(title: "Quit Try Linux?", text: "Try Linux will close without installing. You'll be asked again the next time you open it.",
             path: nil, after: nil, primary: "Quit", secondary: "Back", danger: false, pick: { _ in }))
-        dialog("update-prompt", DialogView(title: "Update to Try Linux 1.0.1?",
+        dialog("update-prompt", DialogView(title: "Update to Try Linux 1.0.2?",
             text: "You have version \(AppInfo.version). Try Linux downloads the update from GitHub, checks it against its published checksum and restarts.",
             path: nil, after: "Your Linux systems aren't affected.", primary: "Update", secondary: "What's new", danger: false, pick: { _ in }))
         dialog("update-when-quit", DialogView(title: "Update when you quit?",
