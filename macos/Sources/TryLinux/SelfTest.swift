@@ -141,7 +141,7 @@ enum SelfTest {
             snap(name, SettingsView(config: c, tab: i), height: i == 0 ? 860 : 700)
         }
         // The About section at the bottom of Advanced, with the install and update controls.
-        snap("settings-about", SettingsView(config: c, tab: 2), height: 1080)
+        snap("settings-about", SettingsView(config: c, tab: 2), height: 760)
 
         func dialog(_ name: String, _ view: DialogView) {
             let root = view.preferredColorScheme(.dark)
