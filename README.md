@@ -60,7 +60,7 @@ On first setup Try Linux offers to:
 
 3. Try Linux asks whether to install itself:
 
-   <img src="docs/images/install-prompt.png" alt="Install Try Linux? prompt, with the install folder and Run and Install buttons" width="420">
+   <img src="docs/images/install-prompt-window.png" alt="Install Try Linux? prompt, with the install folder and Run and Install buttons" width="420">
 
    - **Install** copies Try Linux to `%LOCALAPPDATA%\Programs\TryLinux` and adds it to
      the Start menu, so you can delete the download. **Try Linux is installed**
@@ -97,11 +97,11 @@ Once a day, Try Linux checks GitHub for a new release of Try Linux and of
 When one is available, a button appears on the home screen: **Update to x.y.z**,
 **Update WINQ-EMU**, or **Updates available** when there are both.
 
-<img src="docs/images/update-button.png" alt="Your systems screen with an Update to 1.1.5 button above the list" width="560">
+<img src="docs/images/update-button-home.png" alt="Your systems screen with an Update to 1.1.6 button above the list" width="560">
 
 **Try Linux updates**
 
-<img src="docs/images/update-prompt.png" alt="Update to Try Linux 1.1.5? prompt, with What's new and Update buttons" width="420">
+<img src="docs/images/update-prompt-window.png" alt="Update to Try Linux 1.1.6? prompt, with What's new and Update buttons" width="420">
 
 1. **What's new** opens the release notes; **Update** downloads the new `TryLinux.exe`.
 2. Try Linux checks the download against the release's published SHA-256 checksum.
