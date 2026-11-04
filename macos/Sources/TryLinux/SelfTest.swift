@@ -57,6 +57,8 @@ enum SelfTest {
         // Render the screens as a typical Mac would show them, not the small CI machine and its scratch folder.
         VMConfig.previewHost = (cores: 10, ramGB: 16)
         Paths.displayRoot = "~/Library/Application Support/TryLinux"
+        c.sharedFolder = "~/Documents"
+        c.cores = 5
         var ubuntu = VMConfig(id: "ubuntu", displayName: "Ubuntu Desktop")
         ubuntu.distroId = "ubuntu"
         ubuntu.profile = 1
@@ -86,12 +88,12 @@ enum SelfTest {
         snap("home", HomeView())
         snap("choose", ChooseView())
         snap("setup", SetupView(plan: InstallPlan(distro: Distro.catalog[0], label: "Fedora Workstation")))
-        model.progress = ProgressState(status: "Downloading Fedora-Workstation-Live-44-1.7.aarch64.iso", value: 0.42,
-                                       detail: "1.12 GB of 2.66 GB  ·  24.8 MB/s  ·  2 min left", cancellable: true)
+        model.progress = ProgressState(status: "Downloading Fedora-Workstation-Live-45-1.4.aarch64.iso", value: 0.42,
+                                       detail: "1.17 GB of 2.78 GB  ·  24.8 MB/s  ·  2 min left", cancellable: true)
         snap("progress", ProgressScreen())
         for (i, name) in ["settings-general", "settings-devices", "settings-advanced", "settings-recovery"].enumerated() {
-            // Tall enough that each tab shows everything without scrolling.
-            snap(name, SettingsView(config: c, tab: i), height: 960)
+            // General is captured taller so it shows everything without scrolling.
+            snap(name, SettingsView(config: c, tab: i), height: i == 0 ? 860 : 700)
         }
         Icons.writeIconset(to: dir.appendingPathComponent("AppIcon.iconset"))
 
