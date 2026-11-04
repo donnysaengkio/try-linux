@@ -216,7 +216,7 @@ class TabStrip : Control
 
 partial class MainForm
 {
-    public const string Version = "1.1.3";
+    public const string Version = "1.1.4";
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
     void ShowSettings(VmConfig cfg)
@@ -229,7 +229,7 @@ partial class MainForm
         var icon = root.Add(new PictureBox { Image = Icons.Draw(Theme.D(44)), SizeMode = PictureBoxSizeMode.CenterImage, BackColor = Theme.Bg }, 0, 14, 48, 48);
         root.Caption(who, 62, 12, 578, 28, Theme.Title);
         var d = Distro.Find(cfg.DistroId);
-        root.Caption((d != null ? d.Name.ToUpperInvariant() : "CUSTOM ISO") + "  ·  TRY LINUX v" + Version + (isRunning ? "  ·  RUNNING" : ""),
+        root.Caption((d != null ? d.Name.ToUpperInvariant() : "CUSTOM ISO") + "  Â·  TRY LINUX v" + Version + (isRunning ? "  Â·  RUNNING" : ""),
             62, 40, 578, 22, Theme.Small, Theme.Muted);
 
         var tabs = root.Add(new TabStrip { Tabs = new[] { "General", "Devices", "Advanced", "Recovery" } }, 0, 76, 640, 34);
@@ -355,10 +355,60 @@ partial class MainForm
         advanced.Note("One per line. tcp:HOST:GUEST is reachable from this PC only;\nlan tcp:HOST:GUEST also accepts other devices on your network\n(Windows Firewall asks the first time). SSH uses the rule for guest port 22.", 3);
 
         advanced.Section("About");
-        advanced.Note("Try Linux " + Version + "\nWINQ-EMU: " + (Winq.Ready ? Winq.Bin : "not installed") + "\nStorage: " + AppSettings.Storage, 3);
-        var aboutBtns = advanced.Buttons("WINQ-EMU releases...", "Open storage folder");
+        advanced.Note("Try Linux " + Version + "\nWINQ-EMU: " + (Winq.Ready ? (Winq.Version != null ? Winq.Version + ", " : "") + Winq.Bin : "not installed") +
+            (Updater.WinqAvailable != null ? "  ·  " + Updater.WinqAvailable + " available" : "") + "\nStorage: " + AppSettings.Storage, 3);
+        var aboutBtns = SelfInstall.IsInstalledCopy
+            ? advanced.Buttons("WINQ-EMU releases...", "Open storage folder")
+            : advanced.Buttons("WINQ-EMU releases...", "Open storage folder", "Install...");
         aboutBtns[0].Click += delegate { OpenUri("https://github.com/cmspam/winq-emu/releases"); };
         aboutBtns[1].Click += delegate { Directory.CreateDirectory(AppSettings.Storage); Process.Start("explorer.exe", Q(AppSettings.Storage)); };
+        if (aboutBtns.Count > 2) aboutBtns[2].Click += delegate
+        {
+            if (!ThemedDialog.Show(this, "Install Try Linux?",
+                    "Try Linux copies itself to this folder and adds itself to the Start menu, so you can delete the downloaded file:", SelfInstall.Dir,
+                    "Uninstall it any time from Windows Settings > Apps > Installed apps.", "Install", "Cancel")) return;
+            try { SelfInstall.Install(); }
+            catch (Exception ex) { ThemedDialog.Show(this, "Couldn't install Try Linux", ex.Message, null, null, "OK"); return; }
+            // Open switches to the installed copy; closing the window keeps using this one for now.
+            if (!ThemedDialog.Show(this, "Try Linux is installed",
+                    "Try Linux is now available in the Windows Start menu.", null, null, "Open")) return;
+            if (running.Count > 0 && !ThemedDialog.Show(this, "Open the installed copy?",
+                    "Running systems keep running, but this copy's tray menu closes, so shut them down from inside Linux.",
+                    null, null, "Open", "Back")) return;
+            Process.Start(SelfInstall.Exe);
+            quitting = true;
+            Close();
+        };
+
+        var autoUpdate = advanced.Check("Check for updates automatically (once a day)", AppSettings.CheckUpdates);
+        var updateRow = advanced.Buttons(Updater.Available != null ? "Update to " + Updater.Available : "Check for updates", "Update WINQ-EMU");
+        var updateBtn = updateRow[0];
+        var winqBtn = updateRow[1];
+        winqBtn.Visible = Updater.WinqAvailable != null;
+        winqBtn.Click += delegate { StartWinqUpdate(); };
+        updateBtn.Click += async (s, e) =>
+        {
+            if (Updater.Available != null) { StartUpdate(); return; }
+            updateBtn.Enabled = false;
+            updateBtn.Text = "Checking...";
+            string found = null, failed = null;
+            try { found = await Task.Run(() => Updater.Check(true)); }
+            catch (Exception ex) { failed = ex.Message; }
+            if (updateBtn.IsDisposed) return;
+            updateBtn.Enabled = true;
+            updateBtn.Text = "Check for updates";
+            if (failed != null) { ThemedDialog.Show(this, "Couldn't check for updates", failed, null, null, "OK"); return; }
+            winqBtn.Visible = Updater.WinqAvailable != null;
+            if (found == null && Updater.WinqAvailable == null)
+            {
+                ThemedDialog.Show(this, "Try Linux is up to date", "You have the latest Try Linux (" + Version + ")" +
+                    (Winq.Version != null ? " and WINQ-EMU (" + Winq.Version + ")." : "."), null, null, "OK");
+                return;
+            }
+            Updater.Available = found;
+            if (found != null) updateBtn.Text = "Update to " + found;
+            UpdateClicked();
+        };
 
         // ---- Recovery
         recovery.Section("Backup and recovery");
@@ -412,6 +462,11 @@ partial class MainForm
             cfg.GpuMemGB = (int)gpuMem.Value;
             cfg.Forwards = string.Join(";", fwd);
             cfg.Save();
+            if (AppSettings.CheckUpdates != autoUpdate.Checked)
+            {
+                AppSettings.CheckUpdates = autoUpdate.Checked;
+                try { AppSettings.Save(); } catch { }
+            }
             try
             {
                 SetRunAtLogin(cfg, login.Checked);
@@ -670,7 +725,7 @@ class SnapshotDialog : Form
     public SnapshotDialog(VmConfig cfg)
     {
         this.cfg = cfg;
-        Text = "Snapshots  ·  " + cfg.DisplayName;
+        Text = "Snapshots  Â·  " + cfg.DisplayName;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false;
         ShowInTaskbar = false;

@@ -37,8 +37,14 @@ static class Program
         Application.ThreadException += (s, e) =>
             MessageBox.Show(e.Exception.Message, "Try Linux", MessageBoxButtons.OK, MessageBoxIcon.Error);
 
+        if (args.Length == 1 && args[0] == "--uninstall") { SelfInstall.Uninstall(); return; }
         string start = null;
         for (int i = 0; i < args.Length - 1; i++) if (args[i] == "--start") start = args[i + 1];
+        if (start == null)
+        {
+            AppSettings.Load();
+            if (SelfInstall.OfferAtStartup()) return;
+        }
         Application.Run(new MainForm(start));
     }
 }
@@ -104,17 +110,377 @@ static class AppSettings
     public static string IsoDir { get { return Path.Combine(Storage, "isos"); } }
     public static string DownloadsDir { get { return Path.Combine(Storage, "downloads"); } }
 
+    public static string DeclinedInstall = "";   // the version whose install offer was turned down
+    public static bool CheckUpdates = true;       // look for a newer release once a day
+    public static string LastUpdateCheck = "", LatestVersion = "", LatestWinq = "";
+
     public static void Load()
     {
         if (!File.Exists(Ini)) return;
         foreach (var line in File.ReadAllLines(Ini))
+        {
             if (line.StartsWith("storage=") && line.Length > 8) Storage = line.Substring(8).Trim();
+            if (line.StartsWith("declinedinstall=")) DeclinedInstall = line.Substring(16).Trim();
+            if (line.StartsWith("checkupdates=")) CheckUpdates = line.Substring(13).Trim() != "0";
+            if (line.StartsWith("lastupdatecheck=")) LastUpdateCheck = line.Substring(16).Trim();
+            if (line.StartsWith("latestversion=")) LatestVersion = line.Substring(14).Trim();
+            if (line.StartsWith("latestwinq=")) LatestWinq = line.Substring(11).Trim();
+        }
     }
 
     public static void Save()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Ini));
-        File.WriteAllLines(Ini, new[] { "storage=" + Storage });
+        File.WriteAllLines(Ini, new[] { "storage=" + Storage, "declinedinstall=" + DeclinedInstall,
+            "checkupdates=" + (CheckUpdates ? "1" : "0"), "lastupdatecheck=" + LastUpdateCheck, "latestversion=" + LatestVersion,
+            "latestwinq=" + LatestWinq });
+    }
+}
+
+// ---------------------------------------------------------------- updates
+
+class UpdateInfo
+{
+    public string Version, Page, ExeUrl, SumsUrl;
+}
+
+// Looks for a newer release on GitHub (at most once a day) and swaps the exe for it.
+// A release carries TryLinux.exe and SHA256SUMS.txt as separate files, so the download can be checked.
+static class Updater
+{
+    public static string Api = "https://api.github.com/repos/donnysaengkio/try-linux/releases/latest";   // tests point this at a local server
+    public const string ReleasesPage = "https://github.com/donnysaengkio/try-linux/releases";
+
+    // WINQ-EMU, which runs the systems, is checked at the same time. Its releases have no checksum file;
+    // its installer comes over HTTPS from the WINQ-EMU GitHub page, as on first install.
+    public static string WinqApi = "https://api.github.com/repos/cmspam/winq-emu/releases/latest";
+    public const string WinqReleases = "https://github.com/cmspam/winq-emu/releases";
+
+    // The newer versions found by the last check, or null.
+    public static string Available, WinqAvailable;
+
+    // Returns the newer version, or null. `force` ignores the setting and the once-a-day limit,
+    // and only then are errors thrown; otherwise a failed check is skipped quietly.
+    public static string Check(bool force)
+    {
+        if (!force && !AppSettings.CheckUpdates) return null;
+        DateTime last;
+        bool recent = DateTime.TryParse(AppSettings.LastUpdateCheck, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.RoundtripKind, out last) && (DateTime.UtcNow - last).TotalHours < 24;
+        if (force || !recent)
+        {
+            Exception failed = null;
+            try { AppSettings.LatestVersion = Fetch().Version; }
+            catch (Exception ex) { failed = ex; }
+            try { AppSettings.LatestWinq = FetchWinq().Version; } catch { }
+            if (failed == null) AppSettings.LastUpdateCheck = DateTime.UtcNow.ToString("o");
+            try { AppSettings.Save(); } catch { }
+            if (failed != null && force) throw failed;
+        }
+        string winq = Winq.Version;
+        WinqAvailable = winq != null && IsNewerWinq(AppSettings.LatestWinq, winq) ? AppSettings.LatestWinq : null;
+        return IsNewer(AppSettings.LatestVersion, MainForm.Version) ? AppSettings.LatestVersion : null;
+    }
+
+    public static UpdateInfo FetchWinq()
+    {
+        var json = (Dictionary<string, object>)new System.Web.Script.Serialization.JavaScriptSerializer()
+            .DeserializeObject(Net.GetString(WinqApi));
+        string name = json.ContainsKey("name") ? json["name"] as string : null;
+        var info = new UpdateInfo
+        {
+            Version = string.IsNullOrEmpty(name) ? (string)json["tag_name"] : name,
+            Page = json.ContainsKey("html_url") ? (string)json["html_url"] : WinqReleases
+        };
+        foreach (Dictionary<string, object> a in (json.ContainsKey("assets") ? json["assets"] as object[] : null) ?? new object[0])
+            if (((string)a["name"]).EndsWith("-Setup.exe", StringComparison.OrdinalIgnoreCase)) info.ExeUrl = (string)a["browser_download_url"];
+        return info;
+    }
+
+    // WINQ-EMU versions read like "Alpha 10": compare the stage (alpha < beta < rc < release), then the numbers.
+    public static bool IsNewerWinq(string candidate, string installed)
+    {
+        if (string.IsNullOrEmpty(candidate)) return false;
+        Func<string, int> stage = v =>
+        {
+            v = v.ToLowerInvariant();
+            return v.Contains("alpha") ? 0 : v.Contains("beta") ? 1 : Regex.IsMatch(v, @"\brc") ? 2 : 3;
+        };
+        int a = stage(candidate), b = stage(installed);
+        if (a != b) return a > b;
+        return IsNewer(candidate, installed);
+    }
+
+    public static UpdateInfo Fetch()
+    {
+        var json = (Dictionary<string, object>)new System.Web.Script.Serialization.JavaScriptSerializer()
+            .DeserializeObject(Net.GetString(Api));
+        var info = new UpdateInfo
+        {
+            Version = ((string)json["tag_name"]).TrimStart('v', 'V'),
+            Page = json.ContainsKey("html_url") ? (string)json["html_url"] : ReleasesPage
+        };
+        var assets = json.ContainsKey("assets") ? json["assets"] as object[] : null;
+        foreach (Dictionary<string, object> a in assets ?? new object[0])
+        {
+            string name = (string)a["name"], url = (string)a["browser_download_url"];
+            if (name.Equals("TryLinux.exe", StringComparison.OrdinalIgnoreCase)) info.ExeUrl = url;
+            if (name.Equals("SHA256SUMS.txt", StringComparison.OrdinalIgnoreCase)) info.SumsUrl = url;
+        }
+        return info;
+    }
+
+    public static bool IsNewer(string candidate, string current)
+    {
+        if (string.IsNullOrEmpty(candidate)) return false;
+        var a = Regex.Matches(candidate, @"\d+").Cast<Match>().Select(m => int.Parse(m.Value)).ToList();
+        var b = Regex.Matches(current, @"\d+").Cast<Match>().Select(m => int.Parse(m.Value)).ToList();
+        for (int i = 0; i < Math.Max(a.Count, b.Count); i++)
+        {
+            int x = i < a.Count ? a[i] : 0, y = i < b.Count ? b[i] : 0;
+            if (x != y) return x > y;
+        }
+        return false;
+    }
+
+    // Downloads the new exe and checks it against the release's SHA256SUMS.txt. Returns its path.
+    public static string Download(UpdateInfo info, Action<long, long, double> report)
+    {
+        if (info.ExeUrl == null || info.SumsUrl == null)
+            throw new Exception("This release can't be installed automatically. Download it from the release page instead.");
+        string dir = Path.Combine(Path.GetTempPath(), "TryLinux-update");
+        Directory.CreateDirectory(dir);
+        string exe = Path.Combine(dir, "TryLinux-" + info.Version + ".exe");
+        if (File.Exists(exe)) File.Delete(exe);
+        Net.Download(info.ExeUrl, exe, -1, () => false, report);
+
+        string expected = null;
+        foreach (var line in Net.GetString(info.SumsUrl).Split('\n'))
+        {
+            var m = Regex.Match(line, @"^\s*([0-9a-fA-F]{64})\s+\*?TryLinux\.exe\s*$");
+            if (m.Success) expected = m.Groups[1].Value.ToLowerInvariant();
+        }
+        if (expected == null) throw new Exception("The release's SHA256SUMS.txt has no checksum for TryLinux.exe.");
+        if (Net.Sha256(exe, () => false, x => { }) != expected)
+        {
+            File.Delete(exe);
+            throw new Exception("The downloaded update doesn't match its published checksum, so it wasn't used. Try again later.");
+        }
+        return exe;
+    }
+
+    // Replaces the running exe with the verified download.
+    public static void Apply(string downloaded, string version)
+    {
+        SelfInstall.Replace(Path.GetFullPath(Application.ExecutablePath), downloaded);
+        if (SelfInstall.IsInstalledCopy) try { SelfInstall.Register(version); } catch { }
+        try { File.Delete(downloaded); } catch { }
+    }
+}
+
+// ---------------------------------------------------------------- install
+
+// Try Linux is a single exe. Run from anywhere else, it offers to copy itself to
+// %LOCALAPPDATA%\Programs\TryLinux with a Start menu entry, so the download can be deleted.
+static class SelfInstall
+{
+    public static readonly string Dir = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "TryLinux");
+    public static string Exe { get { return Path.Combine(Dir, "TryLinux.exe"); } }
+    static string StartMenuLink
+    {
+        get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Try Linux.lnk"); }
+    }
+    const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\TryLinux";
+    const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+
+    static string Current { get { return Path.GetFullPath(Application.ExecutablePath); } }
+    static bool SamePath(string a, string b) { return string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase); }
+    static string Q(string s) { return "\"" + s + "\""; }
+    public static bool IsInstalledCopy { get { return SamePath(Current, Exe); } }
+
+    static bool SameFile(string a, string b)
+    {
+        try
+        {
+            var fa = new FileInfo(a);
+            var fb = new FileInfo(b);
+            if (!fa.Exists || !fb.Exists || fa.Length != fb.Length) return false;
+            using (var sha = SHA256.Create())
+            {
+                byte[] ha, hb;
+                using (var s = File.OpenRead(a)) ha = sha.ComputeHash(s);
+                using (var s = File.OpenRead(b)) hb = sha.ComputeHash(s);
+                return ha.SequenceEqual(hb);
+            }
+        }
+        catch { return false; }
+    }
+
+    // Returns true when this process should exit: the installed copy was started, or the user quit.
+    public static bool OfferAtStartup()
+    {
+        RemoveOldCopies();
+        if (IsInstalledCopy) return false;
+        bool installed = File.Exists(Exe);
+        if (installed && SameFile(Current, Exe)) return false;
+        if (AppSettings.DeclinedInstall == MainForm.Version) return false;
+
+        DialogResult choice;
+        while (true)
+        {
+            choice = installed
+                ? ThemedDialog.Choose(null, "Update Try Linux?",
+                    "A different version of Try Linux is installed in this folder:", Dir,
+                    "Update replaces it with version " + MainForm.Version + " and opens it. Your Linux systems aren't affected.\nRun opens this copy without changing the installed one.",
+                    "Update", "Run")
+                : ThemedDialog.Choose(null, "Install Try Linux?",
+                    "Try Linux copies itself to this folder and adds itself to the Start menu, so you can delete the downloaded file:", Dir,
+                    "Run opens it from here without installing; you can install it later from Settings > Advanced > About.\n\nUninstall it any time from Windows Settings > Apps > Installed apps.",
+                    "Install", "Run");
+            if (choice != DialogResult.Cancel) break;
+            // Closing the window quits without remembering a choice, so the offer comes back next time.
+            if (ThemedDialog.Show(null, "Quit Try Linux?", "Try Linux will close without " + (installed ? "updating" : "installing") +
+                    ". You'll be asked again the next time you open it.", null, null, "Quit", "Back"))
+                return true;
+        }
+        if (choice == DialogResult.No)
+        {
+            AppSettings.DeclinedInstall = MainForm.Version;
+            try { AppSettings.Save(); } catch { }
+            return false;
+        }
+        try { Install(); }
+        catch (Exception ex)
+        {
+            ThemedDialog.Show(null, "Couldn't install Try Linux", ex.Message, null, "It will run from here instead.", "OK");
+            return false;
+        }
+        // Open starts the installed copy; closing the window quits, and Try Linux is in the Start menu.
+        bool open = installed
+            ? ThemedDialog.Show(null, "Try Linux is updated", "You now have version " + MainForm.Version + " in the Windows Start menu.", null, null, "Open")
+            : ThemedDialog.Show(null, "Try Linux is installed", "Try Linux is now available in the Windows Start menu.", null, null, "Open");
+        if (open) Process.Start(Exe);
+        return true;
+    }
+
+    // Updating renames the running exe to TryLinux.exe.<ticks>.old; the next start deletes it.
+    public static void RemoveOldCopies()
+    {
+        try
+        {
+            foreach (var f in Directory.GetFiles(Path.GetDirectoryName(Current), Path.GetFileName(Current) + ".*.old"))
+                try { File.Delete(f); } catch { }
+        }
+        catch { }
+    }
+
+    // Puts `source` in place of `target`, even while `target` is running.
+    public static void Replace(string target, string source)
+    {
+        string old = target + "." + DateTime.Now.Ticks + ".old";
+        if (File.Exists(target)) File.Move(target, old);
+        try { File.Copy(source, target); }
+        catch { if (File.Exists(old) && !File.Exists(target)) File.Move(old, target); throw; }
+    }
+
+    public static void Install()
+    {
+        Directory.CreateDirectory(Dir);
+        // A running copy can't be overwritten, but it can be renamed; the new copy deletes it on its next start.
+        Replace(Exe, Current);
+
+        dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));
+        dynamic sc = shell.CreateShortcut(StartMenuLink);
+        sc.TargetPath = Exe;
+        sc.WorkingDirectory = Dir;
+        sc.IconLocation = Exe + ",0";
+        sc.Description = "Run Linux distributions in a virtual machine";
+        sc.Save();
+
+        // Desktop shortcuts and Start with Windows entries made by another copy now point here.
+        foreach (var lnk in Directory.GetFiles(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "*.lnk"))
+        {
+            try
+            {
+                dynamic d = shell.CreateShortcut(lnk);
+                string target = d.TargetPath;
+                if (string.Equals(Path.GetFileName(target), "TryLinux.exe", StringComparison.OrdinalIgnoreCase) && !SamePath(target, Exe))
+                {
+                    d.TargetPath = Exe;
+                    d.WorkingDirectory = Dir;
+                    d.IconLocation = Exe + ",0";
+                    d.Save();
+                }
+            }
+            catch { }
+        }
+        using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunKey, true))
+            if (k != null)
+                foreach (var n in k.GetValueNames().Where(n => n.StartsWith("TryLinux-")))
+                {
+                    var m = Regex.Match(k.GetValue(n) as string ?? "", "^\"([^\"]*)\"(.*)$");
+                    if (m.Success && !SamePath(m.Groups[1].Value, Exe)) k.SetValue(n, Q(Exe) + m.Groups[2].Value);
+                }
+
+        Register();
+    }
+
+    // Lists Try Linux in Windows Settings > Apps, which runs "TryLinux.exe --uninstall".
+    public static void Register(string version = null)
+    {
+        using (var k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(UninstallKey))
+        {
+            k.SetValue("DisplayName", "Try Linux");
+            k.SetValue("DisplayVersion", version ?? MainForm.Version);
+            k.SetValue("DisplayIcon", Exe + ",0");
+            k.SetValue("InstallLocation", Dir);
+            k.SetValue("UninstallString", Q(Exe) + " --uninstall");
+            k.SetValue("URLInfoAbout", "https://github.com/donnysaengkio/try-linux");
+            k.SetValue("EstimatedSize", (int)(new FileInfo(Exe).Length / 1024), Microsoft.Win32.RegistryValueKind.DWord);
+            k.SetValue("NoModify", 1, Microsoft.Win32.RegistryValueKind.DWord);
+            k.SetValue("NoRepair", 1, Microsoft.Win32.RegistryValueKind.DWord);
+        }
+    }
+
+    public static void Uninstall()
+    {
+        AppSettings.Load();
+        int me = Process.GetCurrentProcess().Id;
+        if (Process.GetProcessesByName("TryLinux").Any(p => p.Id != me))
+        {
+            ThemedDialog.Show(null, "Try Linux is still open", "Quit it from its tray icon first, then uninstall again.", null, null, "OK");
+            return;
+        }
+        if (!ThemedDialog.Show(null, "Uninstall Try Linux?",
+                "This removes the app, its Start menu entry, desktop shortcuts and Start with Windows entries. Your Linux systems and downloads are kept in this folder:",
+                AppSettings.Storage, "Delete that folder afterwards to remove them too.", "Uninstall", "Cancel", true)) return;
+
+        try { File.Delete(StartMenuLink); } catch { }
+        try
+        {
+            dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));
+            foreach (var lnk in Directory.GetFiles(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "*.lnk"))
+            {
+                try
+                {
+                    string target = shell.CreateShortcut(lnk).TargetPath;
+                    if (SamePath(target, Exe)) File.Delete(lnk);
+                }
+                catch { }
+            }
+        }
+        catch { }
+        using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunKey, true))
+            if (k != null)
+                foreach (var n in k.GetValueNames().Where(n => n.StartsWith("TryLinux-"))) k.DeleteValue(n);
+        try { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(UninstallKey); } catch { }
+
+        // This exe can't delete itself while it runs, so a hidden cmd removes the folder once it exits.
+        if (IsInstalledCopy)
+            Process.Start(new ProcessStartInfo("cmd.exe", "/c ping 127.0.0.1 -n 3 > nul & rmdir /s /q " + Q(Dir))
+                { CreateNoWindow = true, UseShellExecute = false, WindowStyle = ProcessWindowStyle.Hidden });
+        ThemedDialog.Show(null, "Try Linux is uninstalled", null, null, null, "OK");
     }
 }
 
@@ -260,6 +626,27 @@ static class Winq
     public static bool Ready { get { return Bin != null; } }
     public static string Qemu { get { return Path.Combine(Bin, "qemu-system-x86_64w.exe"); } }
     public static string Img { get { return Path.Combine(Bin, "qemu-img.exe"); } }
+
+    // The installed release, e.g. "Alpha 10", from the first line of WINQ-EMU's README.txt.
+    public static string Version
+    {
+        get
+        {
+            if (Bin == null) return null;
+            foreach (var dir in new[] { Bin, Path.GetDirectoryName(Bin) })
+            {
+                try
+                {
+                    string f = Path.Combine(dir, "README.txt");
+                    if (!File.Exists(f)) continue;
+                    var m = Regex.Match(File.ReadLines(f).FirstOrDefault() ?? "", @"^\s*WINQ-EMU\s+(.+?)\s*$", RegexOptions.IgnoreCase);
+                    if (m.Success) return m.Groups[1].Value;
+                }
+                catch { }
+            }
+            return null;
+        }
+    }
 
     public static void Detect()
     {
@@ -944,6 +1331,72 @@ class Bar : Control
     }
 }
 
+// A message box in the app's own style: icon, title, text, an optional highlighted path, and named buttons.
+static class ThemedDialog
+{
+    // Returns true when the primary button is chosen. With no secondary button it is a notice.
+    public static bool Show(IWin32Window owner, string title, string before, string path, string after,
+        string primary, string secondary = null, bool danger = false)
+    {
+        return Choose(owner, title, before, path, after, primary, secondary, danger) == DialogResult.OK;
+    }
+
+    // OK for the primary button, No for the secondary one, Cancel when the window is closed (X or Esc).
+    public static DialogResult Choose(IWin32Window owner, string title, string before, string path, string after,
+        string primary, string secondary = null, bool danger = false)
+    {
+        Func<int, int> D = Theme.D;
+        int w = D(560), pad = D(24), textX = D(80), textW = w - textX - pad;
+        using (var f = new Form { Text = "Try Linux", FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false,
+            StartPosition = owner == null ? FormStartPosition.CenterScreen : FormStartPosition.CenterParent,
+            BackColor = Theme.Bg, ForeColor = Theme.Text, Font = Theme.Body, ShowInTaskbar = owner == null, Icon = Icons.App() })
+        {
+            f.HandleCreated += delegate { Native.DarkTitleBar(f.Handle); };
+            var icon = new PictureBox { Image = Icons.Draw(D(40)), SizeMode = PictureBoxSizeMode.AutoSize, BackColor = Theme.Bg };
+            icon.Location = new Point(pad, pad);
+            f.Controls.Add(icon);
+
+            int y = pad;
+            Func<string, Font, Color, Color, int, Control> add = (text, font, fore, back, inset) =>
+            {
+                var size = TextRenderer.MeasureText(text, font, new Size(textW - inset * 2, 0), TextFormatFlags.WordBreak);
+                var l = new Label { Text = text, Font = font, ForeColor = fore, BackColor = back, Padding = new Padding(inset) };
+                l.SetBounds(textX, y, textW, size.Height + inset * 2);
+                f.Controls.Add(l);
+                y = l.Bottom;
+                return l;
+            };
+            add(title, Theme.Title, Theme.Text, Theme.Bg, 0);
+            y += D(10);
+            if (!string.IsNullOrEmpty(before)) { add(before, Theme.Body, Theme.Muted, Theme.Bg, 0); y += D(10); }
+            if (!string.IsNullOrEmpty(path)) { add(path, Theme.Small, Theme.Accent, Theme.Card, D(8)); y += D(10); }
+            if (!string.IsNullOrEmpty(after)) { add(after, Theme.Body, Theme.Muted, Theme.Bg, 0); y += D(10); }
+            y = Math.Max(y, icon.Bottom) + D(14);
+
+            int bw = D(150), bh = D(38), x = w - pad - bw;
+            var ok = new FlatBtn(primary, !danger, danger) { DialogResult = DialogResult.OK };
+            ok.SetBounds(x, y, bw, bh);
+            f.Controls.Add(ok);
+            FlatBtn cancel = null;
+            if (secondary != null)
+            {
+                cancel = new FlatBtn(secondary) { DialogResult = DialogResult.No };
+                cancel.SetBounds(x - bw - D(10), y, bw, bh);
+                f.Controls.Add(cancel);
+            }
+            f.ClientSize = new Size(w, y + bh + pad);
+            // Enter picks the primary button, except for destructive actions.
+            f.AcceptButton = danger && cancel != null ? cancel : ok;
+            // Esc closes the window like its X button.
+            f.KeyPreview = true;
+            f.KeyDown += (s, e) => { if (e.KeyCode == Keys.Escape) { f.DialogResult = DialogResult.Cancel; f.Close(); } };
+            f.Shown += delegate { f.Activate(); ((Control)f.AcceptButton).Focus(); };
+            var result = owner == null ? f.ShowDialog() : f.ShowDialog(owner);
+            return result == DialogResult.OK || result == DialogResult.No ? result : DialogResult.Cancel;
+        }
+    }
+}
+
 class FlatBtn : Button
 {
     public FlatBtn(string text, bool primary = false, bool danger = false)
@@ -1223,6 +1676,8 @@ partial class MainForm : Form
     readonly NotifyIcon tray;
     readonly string startArg;
     bool busy, cancelRequested, quitting, trayHintShown, restartPending;
+    FlatBtn homeUpdate;     // the home screen's "Update to x.y.z" button, shown once a check finds one
+    string stagedUpdate;    // a verified update waiting to be applied when Try Linux quits
     Page page;
     Label pStatus, pDetail, pTip;
     Bar pBar;
@@ -1260,6 +1715,12 @@ partial class MainForm : Form
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
+        SelfInstall.RemoveOldCopies();
+        Task.Run(() => Updater.Check(false)).ContinueWith(t =>
+        {
+            if (t.IsFaulted || IsDisposed || (t.Result == null && Updater.WinqAvailable == null)) return;
+            try { BeginInvoke((Action)(() => { Updater.Available = t.Result; ShowUpdateButton(); })); } catch { }
+        });
         if (startArg != null)
         {
             var cfg = VmConfig.All().FirstOrDefault(c => c.Name.Equals(startArg, StringComparison.OrdinalIgnoreCase));
@@ -1283,6 +1744,7 @@ partial class MainForm : Form
         cancelRequested = true;
         tray.Visible = false;
         tray.Dispose();
+        if (stagedUpdate != null) try { Updater.Apply(stagedUpdate, Updater.Available); } catch { }
         base.OnFormClosing(e);
     }
 
@@ -1313,6 +1775,12 @@ partial class MainForm : Form
         var settings = p.Add(new FlatBtn("Settings"), 182, 428, 140, 42);
         var start = p.Add(new FlatBtn("Start", true), 470, 428, 170, 42);
         p.Caption("Double-click a system to start it.", 0, 482, 640, 24, Theme.Small, Theme.Muted);
+        homeUpdate = p.Add(new FlatBtn("Update") { Visible = false }, 440, 96, 200, 36);
+        homeUpdate.ForeColor = Theme.Accent;
+        homeUpdate.FlatAppearance.BorderColor = Theme.Accent;
+        homeUpdate.BringToFront();   // the title label spans the row
+        homeUpdate.Click += delegate { UpdateClicked(); };
+        ShowUpdateButton();
 
         list.SelectionChanged += delegate
         {
@@ -1330,6 +1798,128 @@ partial class MainForm : Form
         SetPage(p);
     }
 
+    void ShowUpdateButton()
+    {
+        if (homeUpdate == null || homeUpdate.IsDisposed) return;
+        bool app = Updater.Available != null && stagedUpdate == null, winq = Updater.WinqAvailable != null;
+        if (!app && !winq && stagedUpdate == null) { homeUpdate.Visible = false; return; }
+        homeUpdate.Text = app && winq ? "Updates available" : app ? "Update to " + Updater.Available
+            : winq ? "Update WINQ-EMU" : "Updates when you quit";
+        homeUpdate.Enabled = app || winq;
+        homeUpdate.Visible = true;
+    }
+
+    // One button covers both updates; with both available, it asks which one.
+    void UpdateClicked()
+    {
+        bool app = Updater.Available != null && stagedUpdate == null, winq = Updater.WinqAvailable != null;
+        if (app && winq)
+        {
+            var c = ThemedDialog.Choose(this, "Updates available",
+                "Try Linux " + Updater.Available + " and WINQ-EMU " + Updater.WinqAvailable + " are available. Which would you like to update first?",
+                null, null, "Try Linux", "WINQ-EMU");
+            if (c == DialogResult.OK) StartUpdate();
+            else if (c == DialogResult.No) StartWinqUpdate();
+        }
+        else if (app) StartUpdate();
+        else if (winq) StartWinqUpdate();
+    }
+
+    // Downloads the newer WINQ-EMU installer and runs it. Systems must be shut down: their files are in use.
+    async void StartWinqUpdate()
+    {
+        if (busy) return;
+        string version = Updater.WinqAvailable, had = Winq.Version;
+        var choice = ThemedDialog.Choose(this, "Update WINQ-EMU to " + version + "?",
+            "You have WINQ-EMU " + had + ". Try Linux downloads the new installer from the WINQ-EMU GitHub page and runs it; Windows asks for permission.",
+            null, "WINQ-EMU is an alpha, so check what's new first. Your Linux systems aren't affected.", "Update", "What's new");
+        if (choice == DialogResult.No) { OpenUri(Updater.WinqReleases); return; }
+        if (choice != DialogResult.OK) return;
+        if (running.Count > 0)
+        {
+            ThemedDialog.Show(this, "Shut down your systems first",
+                "WINQ-EMU's files are in use while a system runs. Shut down running systems from inside Linux, then update again.", null, null, "OK");
+            return;
+        }
+        busy = true;
+        cancelRequested = false;
+        ShowProgress("Downloading WINQ-EMU " + version, false);
+        string failed = null;
+        try { await InstallWinq(() => cancelRequested, true); }
+        catch (Exception ex) { failed = ex.Message; }
+        busy = false;
+        string now = Winq.Version;
+        if (now != null && !Updater.IsNewerWinq(AppSettings.LatestWinq, now)) Updater.WinqAvailable = null;
+        ShowHome();
+        if (failed != null)
+        {
+            if (ThemedDialog.Show(this, "Couldn't update WINQ-EMU", failed, null, null, "Release page", "Close")) OpenUri(Updater.WinqReleases);
+        }
+        else if (Updater.WinqAvailable == null)
+            ThemedDialog.Show(this, "WINQ-EMU is updated", "You now have WINQ-EMU " + now + ".", null, null, "OK");
+        else
+            ThemedDialog.Show(this, "WINQ-EMU wasn't updated", "It's still " + (now ?? had) + ". If the installer was closed early, try again.", null, null, "OK");
+    }
+
+    // Asks, downloads and verifies the update, then restarts into it (or waits until quit).
+    async void StartUpdate()
+    {
+        if (busy || stagedUpdate != null) return;
+        string version = Updater.Available;
+        var choice = ThemedDialog.Choose(this, "Update to Try Linux " + version + "?",
+            "You have version " + Version + ". Try Linux downloads the update from GitHub, checks it against its published checksum and restarts.",
+            null, "Your Linux systems aren't affected.", "Update", "What's new");
+        if (choice == DialogResult.No) { OpenUri(Updater.ReleasesPage + "/tag/v" + version); return; }
+        if (choice != DialogResult.OK) return;
+
+        var back = page;
+        busy = true;
+        ShowProgress("Downloading Try Linux " + version, false);
+        SetProgress("Downloading Try Linux " + version, -1, "");
+        string file = null, failed = null;
+        UpdateInfo info = null;
+        try
+        {
+            file = await Task.Run(() =>
+            {
+                info = Updater.Fetch();
+                return Updater.Download(info, (have, total, rate) => BeginInvoke((Action)(() =>
+                    SetProgress("Downloading Try Linux " + version, total > 0 ? (double)have / total : -1, FormatBytes(have)))));
+            });
+        }
+        catch (Exception ex) { failed = ex.Message; }
+        busy = false;
+        if (failed != null)
+        {
+            ShowHome();
+            if (ThemedDialog.Show(this, "Couldn't update Try Linux", failed, null, null, "Release page", "Close"))
+                OpenUri(info != null ? info.Page : Updater.ReleasesPage);
+            return;
+        }
+
+        if (running.Count > 0 && !ThemedDialog.Show(this, "Restart Try Linux now?",
+                "The update is ready. Running systems keep running, but this copy's tray menu closes, so shut them down from inside Linux.",
+                null, "Update when I quit installs it the next time Try Linux closes.", "Restart now", "Update when I quit"))
+        {
+            stagedUpdate = file;
+            ShowHome();
+            return;
+        }
+        try { Updater.Apply(file, version); }
+        catch (Exception ex)
+        {
+            ShowHome();
+            if (ThemedDialog.Show(this, "Couldn't update Try Linux",
+                    "Try Linux can't replace itself in this folder (" + ex.Message + "). Download the new version from the release page instead.",
+                    null, null, "Release page", "Close"))
+                OpenUri(info.Page);
+            return;
+        }
+        Process.Start(Application.ExecutablePath);
+        quitting = true;
+        Close();
+    }
+
     string Describe(VmConfig vm)
     {
         int cores, ram;
@@ -1344,7 +1934,7 @@ partial class MainForm : Form
     {
         bool hasVms = VmConfig.All().Count > 0;
         var p = new Page(606);
-        p.Caption("Choose a Linux to try", 0, 94, 640, 30, Theme.Title, null, ContentAlignment.MiddleCenter);
+        p.Caption("Choose a Linux OS to try", 0, 94, 640, 30, Theme.Title, null, ContentAlignment.MiddleCenter);
         p.Caption("Try Linux downloads the official installer and checks it before use.", 0, 124, 640, 22, Theme.Small, Theme.Muted, ContentAlignment.MiddleCenter);
         int listH = Distro.Catalog.Length * 70 - 6;
         var list = p.Add(new OptionList { RowHeight = 64 }, 0, 154, 640, listH);
@@ -1603,15 +2193,15 @@ partial class MainForm : Form
         return false;
     }
 
-    async Task InstallWinq(Func<bool> cancelled)
+    async Task InstallWinq(Func<bool> cancelled, bool update = false)
     {
-        if (MessageBox.Show(this, "Try Linux runs systems with WINQ-EMU, a free QEMU build with GPU acceleration for Windows. It isn't installed yet.\n\nDownload and install it now (about 55 MB)?",
+        if (!update && MessageBox.Show(this, "Try Linux runs systems with WINQ-EMU, a free QEMU build with GPU acceleration for Windows. It isn't installed yet.\n\nDownload and install it now (about 55 MB)?",
                 "Try Linux", MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes)
             throw new OperationCanceledException();
         SetProgress("Downloading WINQ-EMU", -1, "github.com/cmspam/winq-emu");
         string url = await Task.Run(() =>
         {
-            string json = Net.GetString("https://api.github.com/repos/cmspam/winq-emu/releases/latest");
+            string json = Net.GetString(Updater.WinqApi);
             var m = Regex.Match(json, "\"browser_download_url\"\\s*:\\s*\"([^\"]+-Setup\\.exe)\"", RegexOptions.IgnoreCase);
             if (!m.Success) throw new Exception("Couldn't find the WINQ-EMU installer on GitHub. Install it from github.com/cmspam/winq-emu/releases, then try again.");
             return m.Groups[1].Value;

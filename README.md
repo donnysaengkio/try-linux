@@ -9,7 +9,7 @@ Try Linux is a small launcher around [WINQ-EMU](https://github.com/cmspam/winq-e
 a QEMU build for Windows that uses the Windows Hypervisor Platform and forwards
 OpenGL / Vulkan graphics (VirGL and Venus) to the guest.
 
-![Choose a Linux to try](docs/images/choose-screen.png)
+![Choose a Linux OS to try](docs/images/choose-os.png)
 
 ## Screenshots
 
@@ -54,6 +54,22 @@ On first setup Try Linux offers to:
 
 1. Download `TryLinux-<version>.zip` from [Releases](../../releases) and extract it.
 2. Run `TryLinux.exe`.
+3. Choose **Install** when Try Linux offers to install itself. It copies itself to
+   `%LOCALAPPDATA%\Programs\TryLinux` and adds **Try Linux** to the Start menu, so you
+   can delete the download. Choose **Run** to run it from where it is instead; you can
+   install it later from **Settings > Advanced > About**.
+
+**Updates:** Try Linux checks GitHub for a new release once a day. When there is one,
+an **Update to x.y.z** button appears on the home screen; it downloads the new
+version, checks it against the release's published SHA-256 checksum and restarts.
+The same check looks for a new WINQ-EMU release and offers **Update WINQ-EMU**, which
+runs its installer (Windows asks for permission; shut down running systems first).
+WINQ-EMU is an alpha, so check its release notes before updating. You can also check
+from **Settings > Advanced > About**, or turn the daily check off there.
+
+To uninstall, use **Windows Settings > Apps > Installed apps > Try Linux**. Your
+systems and downloads are kept in `%LOCALAPPDATA%\TryLinux`; delete that folder to
+remove them too.
 
 The app isn't code-signed, so Windows may show **"Windows protected your PC"**.
 Click **More info**, then **Run anyway**:
@@ -68,7 +84,7 @@ Get-FileHash .\TryLinux.exe -Algorithm SHA256
 
 ## Using it
 
-- **Choose a Linux**, then **Next** and **Install**. Setup downloads and verifies the
+- **Choose a Linux OS**, then **Next** and **Install**. Setup downloads and verifies the
   installer, creates the disk and opens the VM window. Install Linux onto the
   virtual disk; your Windows drive is never touched.
 - While a system runs, Try Linux sits in the tray. Right-click its icon to show the
