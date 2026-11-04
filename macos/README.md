@@ -24,6 +24,17 @@ Macs with Apple silicon run ARM64 (aarch64) Linux, so only distributions that pu
 ARM64 installers are listed. You can also install from any ARM64 `.iso` file or
 download link.
 
+## Screenshots
+
+![Choose a Linux to try](docs/images/choose-screen.png)
+
+| | |
+|---|---|
+| ![Your systems](docs/images/home-screen.png) | ![Set up Fedora Workstation](docs/images/setup-screen.png) |
+| **Your systems:** start, install or change a system | **Set up:** name, memory and cores, and disk size |
+| ![Downloading the installer](docs/images/progress-screen.png) | ![Settings](docs/images/settings-general.png) |
+| **Download:** the installer is checked against its SHA-256 checksum | **Settings:** display, resources, disk and a shared folder |
+
 ## Requirements
 
 - A Mac with Apple silicon (M1 or later)
