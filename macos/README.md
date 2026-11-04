@@ -33,7 +33,11 @@ download link.
 | ![Your systems](docs/images/home-screen.png) | ![Set up Fedora Workstation](docs/images/setup-screen.png) |
 | **Your systems:** start, install or change a system | **Set up:** name, memory and cores, and disk size |
 | ![Downloading the installer](docs/images/progress-screen.png) | ![Settings](docs/images/settings-general.png) |
-| **Download:** the installer is checked against its SHA-256 checksum | **Settings:** display, resources, disk and a shared folder |
+| **Download:** the installer is checked against its SHA-256 checksum | **Settings > General:** display, resources, disk and a shared folder |
+| ![Settings, Devices](docs/images/settings-devices.png) | ![Settings, Advanced](docs/images/settings-advanced.png) |
+| **Settings > Devices:** sound, microphone and clipboard sharing | **Settings > Advanced:** Rosetta, graphics, network and storage details |
+| ![Settings, Recovery](docs/images/settings-recovery.png) | |
+| **Settings > Recovery:** back up, restore, snapshots, reset, boot an ISO, clean up and delete | |
 
 ## Requirements
 
