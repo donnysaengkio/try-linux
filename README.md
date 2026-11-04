@@ -80,7 +80,7 @@ You can check the download against the SHA-256 hash published with each release:
 Get-FileHash .\TryLinux.exe -Algorithm SHA256
 ```
 
-### Uninstall
+## Uninstall
 
 Use **Windows Settings > Apps > Installed apps > Try Linux > Uninstall**. Quit Try
 Linux from its tray icon first. This removes the app, its Start menu entry, desktop
