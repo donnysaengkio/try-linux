@@ -26,17 +26,17 @@ download link.
 
 ## Screenshots
 
-![Choose a Linux to try](docs/images/choose-screen.png)
+![Choose a Linux OS to try](docs/images/choose-os.png)
 
 | | |
 |---|---|
-| ![Your systems](docs/images/home-screen.png) | ![Set up Fedora Workstation](docs/images/setup-screen.png) |
+| ![Your systems](docs/images/your-systems.png) | ![Set up Fedora Workstation](docs/images/set-up.png) |
 | **Your systems:** start, install or change a system | **Set up:** name, memory and cores, and disk size |
-| ![Downloading the installer](docs/images/progress-screen.png) | ![Settings](docs/images/settings-general.png) |
+| ![Downloading the installer](docs/images/download.png) | ![Settings](docs/images/settings-general-tab.png) |
 | **Download:** the installer is checked against its SHA-256 checksum | **Settings > General:** display, resources, disk and a shared folder |
-| ![Settings, Devices](docs/images/settings-devices.png) | ![Settings, Advanced](docs/images/settings-advanced.png) |
-| **Settings > Devices:** sound, microphone and clipboard sharing | **Settings > Advanced:** Rosetta, graphics, network and storage details |
-| ![Settings, Recovery](docs/images/settings-recovery.png) | |
+| ![Settings, Devices](docs/images/settings-devices-tab.png) | ![Settings, Advanced](docs/images/settings-advanced-tab.png) |
+| **Settings > Devices:** sound, microphone and clipboard sharing | **Settings > Advanced:** Rosetta, graphics, network, install and updates |
+| ![Settings, Recovery](docs/images/settings-recovery-tab.png) | |
 | **Settings > Recovery:** back up, restore, snapshots, reset, boot an ISO, clean up and delete | |
 
 ## Requirements
@@ -48,16 +48,60 @@ download link.
 ## Install
 
 1. Download `TryLinux-<version>-macOS.zip` from [Releases](../../releases) and open it.
-2. Move **Try Linux.app** to your Applications folder and open it.
-3. The app isn't notarized by Apple, so macOS blocks it the first time. Open
-   **System Settings > Privacy & Security**, scroll down, click **Open Anyway** next
-   to "Try Linux", and confirm.
+2. Open **Try Linux.app**. The app isn't notarized by Apple, so macOS blocks it the
+   first time. Open **System Settings > Privacy & Security**, scroll down, click
+   **Open Anyway** next to "Try Linux", and confirm.
+3. Try Linux asks whether to install itself:
+
+   <img src="docs/images/install-prompt.png" alt="Install Try Linux? prompt, with the Applications folder and Run and Install buttons" width="420">
+
+   - **Install** copies Try Linux to your Applications folder, so it's in Launchpad
+     and Spotlight, and moves the download to the Trash. **Try Linux is installed**
+     confirms it; click **Open** to start the installed copy. If you can't change
+     `/Applications`, it uses the Applications folder in your home folder.
+   - **Run** opens it from where it is, without installing. It won't ask again for
+     this version; you can install later from **Settings > Advanced > About**.
+   - Closing the window asks whether to quit, and Try Linux asks again next time.
+
+If a different version is already in Applications, the same prompt offers **Update**
+instead, which replaces it.
 
 To check the download against the SHA-256 hash published with each release:
 
 ```sh
 shasum -a 256 TryLinux-*-macOS.zip
 ```
+
+## Uninstall
+
+Quit Try Linux (from its menu bar icon, which shuts running systems down), then drag
+**Try Linux** from your Applications folder to the Trash. Your systems and downloads
+are kept in `~/Library/Application Support/TryLinux`; delete that folder to remove
+them too. If you turned on **Open at login**, turn it off first in Settings > General.
+
+## Updates
+
+Once a day, Try Linux checks GitHub for a new release. When there is one, an
+**Update to x.y.z** button appears on the home screen.
+
+<img src="docs/images/update-button.png" alt="Your systems screen with an Update to 1.0.1 button above the list" width="560">
+
+<img src="docs/images/update-prompt.png" alt="Update to Try Linux 1.0.1? prompt, with What's new and Update buttons" width="420">
+
+1. **What's new** opens the release notes; **Update** downloads the new version.
+2. Try Linux checks the download against the release's published SHA-256 checksum
+   and the app's signature. If either doesn't match, the update isn't used.
+3. Try Linux replaces itself and restarts. Linux runs inside Try Linux, so if
+   systems are running, choose **Update when I quit**: the update downloads now and
+   is installed the next time Try Linux quits.
+
+**Settings > Advanced > About** has **Check for updates** to check right away, and
+**Check for updates automatically (once a day)** to turn the daily check off.
+
+<img src="docs/images/settings-about.png" alt="Settings, Advanced tab, About section: version, Install, Check for updates automatically, and Check for updates" width="560">
+
+Versions before 1.0.1 don't have the Update button, so download the new version once
+by hand.
 
 ## Using it
 
@@ -73,7 +117,8 @@ shasum -a 256 TryLinux-*-macOS.zip
 - **General:** fullscreen, resolution, open at login, resource profile (Balanced /
   Maximum / Manual), disk capacity and a shared Mac folder.
 - **Devices:** sound, microphone and clipboard sharing.
-- **Advanced:** Rosetta for x86_64 Linux apps, and graphics and network details.
+- **Advanced:** Rosetta for x86_64 Linux apps, graphics and network details, and
+  **About** with the version, Install and update checks.
 - **Recovery:** back up, restore as a copy, snapshots, reset, boot an ISO, clean up
   downloads and delete.
 
