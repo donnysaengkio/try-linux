@@ -216,7 +216,7 @@ class TabStrip : Control
 
 partial class MainForm
 {
-    public const string Version = "1.1.4";
+    public const string Version = "1.1.5";
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
     void ShowSettings(VmConfig cfg)
@@ -229,7 +229,7 @@ partial class MainForm
         var icon = root.Add(new PictureBox { Image = Icons.Draw(Theme.D(44)), SizeMode = PictureBoxSizeMode.CenterImage, BackColor = Theme.Bg }, 0, 14, 48, 48);
         root.Caption(who, 62, 12, 578, 28, Theme.Title);
         var d = Distro.Find(cfg.DistroId);
-        root.Caption((d != null ? d.Name.ToUpperInvariant() : "CUSTOM ISO") + "  Â·  TRY LINUX v" + Version + (isRunning ? "  Â·  RUNNING" : ""),
+        root.Caption((d != null ? d.Name.ToUpperInvariant() : "CUSTOM ISO") + "  ·  TRY LINUX v" + Version + (isRunning ? "  ·  RUNNING" : ""),
             62, 40, 578, 22, Theme.Small, Theme.Muted);
 
         var tabs = root.Add(new TabStrip { Tabs = new[] { "General", "Devices", "Advanced", "Recovery" } }, 0, 76, 640, 34);
@@ -725,7 +725,7 @@ class SnapshotDialog : Form
     public SnapshotDialog(VmConfig cfg)
     {
         this.cfg = cfg;
-        Text = "Snapshots  Â·  " + cfg.DisplayName;
+        Text = "Snapshots  ·  " + cfg.DisplayName;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false;
         ShowInTaskbar = false;

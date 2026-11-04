@@ -15,13 +15,13 @@ OpenGL / Vulkan graphics (VirGL and Venus) to the guest.
 
 | | |
 |---|---|
-| ![Set up a system: name, resources, disk size](docs/images/setup.png) | ![Downloading and verifying the installer](docs/images/progress.png) |
+| ![Set up a system: name, resources, disk size](docs/images/set-up.png) | ![Downloading and verifying the installer](docs/images/download.png) |
 | **Set up:** name, resource profile and disk size | **Download:** the official ISO, checked against its SHA-256 |
-| ![Your systems](docs/images/home.png) | ![Settings, General tab](docs/images/settings-general.png) |
+| ![Your systems](docs/images/your-systems.png) | ![Settings, General tab](docs/images/settings-general-tab.png) |
 | **Your systems:** start, open settings or add another | **Settings, General:** display, startup, resources, storage |
-| ![Settings, Devices tab](docs/images/settings-devices.png) | ![Settings, Advanced tab](docs/images/settings-advanced.png) |
-| **Settings, Devices:** sound and microphone | **Settings, Advanced:** displays, rendering, port forwards |
-| ![Settings, Recovery tab](docs/images/settings-recovery.png) | |
+| ![Settings, Devices tab](docs/images/settings-devices-tab.png) | ![Settings, Advanced tab](docs/images/settings-advanced-tab.png) |
+| **Settings, Devices:** sound and microphone | **Settings, Advanced:** displays, rendering, port forwards, updates |
+| ![Settings, Recovery tab](docs/images/settings-recovery-tab.png) | |
 | **Settings, Recovery:** backups, snapshots, reset, storage | |
 
 ## Distributions
@@ -53,34 +53,78 @@ On first setup Try Linux offers to:
 ## Install
 
 1. Download `TryLinux-<version>.zip` from [Releases](../../releases) and extract it.
-2. Run `TryLinux.exe`.
-3. Choose **Install** when Try Linux offers to install itself. It copies itself to
-   `%LOCALAPPDATA%\Programs\TryLinux` and adds **Try Linux** to the Start menu, so you
-   can delete the download. Choose **Run** to run it from where it is instead; you can
-   install it later from **Settings > Advanced > About**.
+2. Run `TryLinux.exe`. The app isn't code-signed, so Windows may show
+   **"Windows protected your PC"**. Click **More info**, then **Run anyway**:
 
-**Updates:** Try Linux checks GitHub for a new release once a day. When there is one,
-an **Update to x.y.z** button appears on the home screen; it downloads the new
-version, checks it against the release's published SHA-256 checksum and restarts.
-The same check looks for a new WINQ-EMU release and offers **Update WINQ-EMU**, which
-runs its installer (Windows asks for permission; shut down running systems first).
-WINQ-EMU is an alpha, so check its release notes before updating. You can also check
-from **Settings > Advanced > About**, or turn the daily check off there.
+   <img src="docs/images/smartscreen.png" alt="Windows SmartScreen: Windows protected your PC, with Run anyway and Don't run buttons" width="420">
 
-To uninstall, use **Windows Settings > Apps > Installed apps > Try Linux**. Your
-systems and downloads are kept in `%LOCALAPPDATA%\TryLinux`; delete that folder to
-remove them too.
+3. Try Linux asks whether to install itself:
 
-The app isn't code-signed, so Windows may show **"Windows protected your PC"**.
-Click **More info**, then **Run anyway**:
+   <img src="docs/images/install-prompt.png" alt="Install Try Linux? prompt, with the install folder and Run and Install buttons" width="420">
 
-<img src="docs/images/smartscreen.png" alt="Windows SmartScreen: Windows protected your PC, with Run anyway and Don't run buttons" width="420">
+   - **Install** copies Try Linux to `%LOCALAPPDATA%\Programs\TryLinux` and adds it to
+     the Start menu, so you can delete the download. **Try Linux is installed**
+     confirms it; click **Open** to start the installed copy. No administrator
+     permission is needed.
+   - **Run** opens it from where it is, without installing. It won't ask again for
+     this version; you can install later from **Settings > Advanced > About**.
+   - Closing the window asks whether to quit, and Try Linux asks again next time.
+
+If a different version is already installed, the same prompt offers **Update**
+instead, which replaces the installed copy. Desktop shortcuts and Start with Windows
+entries made by another copy move to the installed one.
 
 You can check the download against the SHA-256 hash published with each release:
 
 ```powershell
 Get-FileHash .\TryLinux.exe -Algorithm SHA256
 ```
+
+### Uninstall
+
+Use **Windows Settings > Apps > Installed apps > Try Linux > Uninstall**. Quit Try
+Linux from its tray icon first. This removes the app, its Start menu entry, desktop
+shortcuts and Start with Windows entries. Your systems and downloads are kept in
+`%LOCALAPPDATA%\TryLinux`; delete that folder to remove them too.
+
+If you chose **Run** instead of installing, delete `TryLinux.exe` and any desktop
+shortcuts you made for it.
+
+## Updates
+
+Once a day, Try Linux checks GitHub for a new release of Try Linux and of
+[WINQ-EMU](https://github.com/cmspam/winq-emu), the emulator that runs your systems.
+When one is available, a button appears on the home screen: **Update to x.y.z**,
+**Update WINQ-EMU**, or **Updates available** when there are both.
+
+<img src="docs/images/update-button.png" alt="Your systems screen with an Update to 1.1.5 button above the list" width="560">
+
+**Try Linux updates**
+
+<img src="docs/images/update-prompt.png" alt="Update to Try Linux 1.1.5? prompt, with What's new and Update buttons" width="420">
+
+1. **What's new** opens the release notes; **Update** downloads the new `TryLinux.exe`.
+2. Try Linux checks the download against the release's published SHA-256 checksum.
+   If it doesn't match, the update isn't used.
+3. Try Linux replaces itself and restarts. If systems are running, choose **Restart
+   now** or **Update when I quit**; your systems keep running either way.
+
+Copies that aren't installed update themselves in place. Versions before 1.1.4 don't
+have the Update button, so download 1.1.4 once by hand.
+
+**WINQ-EMU updates**
+
+1. **Update WINQ-EMU** shows your version and the new one. WINQ-EMU is an alpha, so
+   check **What's new** before updating.
+2. Shut down running systems first; WINQ-EMU's files are in use while they run.
+3. Try Linux downloads the new installer from the WINQ-EMU releases page and runs it.
+   Windows asks for permission, because it installs to `C:\WINQ-EMU`.
+
+**Settings > Advanced > About** shows both versions, has **Check for updates** to
+check right away, and **Check for updates automatically (once a day)** to turn the
+daily check off.
+
+<img src="docs/images/settings-about.png" alt="Settings, Advanced tab, About section: versions, Check for updates automatically, and Check for updates" width="560">
 
 ## Using it
 
@@ -96,7 +140,7 @@ Get-FileHash .\TryLinux.exe -Algorithm SHA256
   - **Devices:** sound and microphone.
   - **Advanced:** guest displays, GPU / CPU / automatic rendering, Vulkan, GPU
     memory, port forwards (`tcp:2223:22` for this PC, `lan tcp:8080:80` for your
-    network).
+    network), and **About** with versions, install and update checks.
   - **Recovery:** back up, restore as a copy, snapshots, reset, boot an ISO, move
     storage, clean up downloads, delete.
 
