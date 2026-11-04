@@ -90,6 +90,7 @@ enum SelfTest {
         snap("setup", SetupView(plan: InstallPlan(distro: Distro.catalog[0], label: "Fedora Workstation")))
         model.progress = ProgressState(status: "Downloading Fedora-Workstation-Live-45-1.4.aarch64.iso", value: 0.42,
                                        detail: "1.17 GB of 2.78 GB  ·  24.8 MB/s  ·  2 min left", cancellable: true)
+        ProgressScreen.fixedTip = 0
         snap("progress", ProgressScreen())
         for (i, name) in ["settings-general", "settings-devices", "settings-advanced", "settings-recovery"].enumerated() {
             // General is captured taller so it shows everything without scrolling.

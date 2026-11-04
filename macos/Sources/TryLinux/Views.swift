@@ -230,6 +230,7 @@ struct ProgressScreen: View {
         "Turn on Rosetta in Settings to run x86_64 Linux apps on Apple silicon.",
         "Quitting Try Linux shuts running systems down, so save your work in Linux first.",
     ]
+    static var fixedTip: Int?       // the self-test pins one tip so its screenshot is stable
 
     var body: some View {
         Page {
@@ -239,7 +240,7 @@ struct ProgressScreen: View {
                 Bar(value: model.progress.value).frame(width: 400).padding(.top, 14)
                 Text(model.progress.detail).font(Theme.mono(11.5)).foregroundColor(Theme.muted).padding(.top, 10)
                 TimelineView(.periodic(from: .now, by: 7)) { tl in
-                    let i = Int(tl.date.timeIntervalSince1970 / 7) % Self.tips.count
+                    let i = Self.fixedTip ?? Int(tl.date.timeIntervalSince1970 / 7) % Self.tips.count
                     Text("Tip: " + Self.tips[i]).font(Theme.mono(11.5)).foregroundColor(Theme.accent)
                         .multilineTextAlignment(.center).frame(width: 560).padding(.top, 30)
                 }
