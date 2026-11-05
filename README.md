@@ -9,7 +9,7 @@ Try Linux is a small launcher around [WINQ-EMU](https://github.com/cmspam/winq-e
 a QEMU build for Windows that uses the Windows Hypervisor Platform and forwards
 OpenGL / Vulkan graphics (VirGL and Venus) to the guest.
 
-![Choose a Linux OS to try](docs/images/choose-os.png)
+![Choose a Linux OS](docs/images/choose-os.png)
 
 ## Screenshots
 
@@ -18,7 +18,7 @@ OpenGL / Vulkan graphics (VirGL and Venus) to the guest.
 | ![Set up a system: name, resources, disk size](docs/images/set-up.png) | ![Downloading and verifying the installer](docs/images/download.png) |
 | **Set up:** name, resource profile and disk size | **Download:** the official ISO, checked against its SHA-256 |
 | ![Your systems](docs/images/your-systems.png) | ![Settings, General tab](docs/images/settings-general-tab.png) |
-| **Your systems:** start, open settings or add another | **Settings, General:** display, startup, resources, storage |
+| **Your systems:** status, console, start or power commands | **Settings, General:** display, startup, resources, storage |
 | ![Settings, Devices tab](docs/images/settings-devices-tab.png) | ![Settings, Advanced tab](docs/images/settings-advanced-tab.png) |
 | **Settings, Devices:** sound and microphone | **Settings, Advanced:** displays, rendering, port forwards, updates |
 | ![Settings, Recovery tab](docs/images/settings-recovery-tab.png) | |
@@ -128,12 +128,50 @@ daily check off.
 
 ## Using it
 
-- **Choose a Linux OS**, then **Next** and **Install**. Setup downloads and verifies the
-  installer, creates the disk and opens the VM window. Install Linux onto the
-  virtual disk; your Windows drive is never touched.
-- While a system runs, Try Linux sits in the tray. Right-click its icon to show the
-  window, open the shared folder, shut down cleanly or force stop.
-- **Settings** (per system):
+**Choose a Linux OS**, then **Next** and **Install**. Setup downloads and verifies the
+installer, creates the disk and opens the VM window. Install Linux onto the virtual
+disk; your Windows drive is never touched.
+
+**Your systems** lists each system with its status on the right: **Running**,
+**Paused**, **Off, console open**, or **Ready to install**.
+
+- **Start** (or double-click) starts the selected system. Try Linux stays open on
+  Your systems, behind the system's window.
+- **Console** opens a running system's window. On a system that's off, it opens the
+  window with the system still off (**Off, console open**); click **Start** to power it
+  on there, or close the window. If the system is set to open fullscreen, Console
+  asks whether to power it on instead.
+- **Closing a system's window** leaves it running, shown as **Running, window
+  closed**. Double-click it or click **Console** to bring the window back.
+- **Restarting Linux** from inside it starts the system again on its own, in a fresh
+  window.
+- **Closing Try Linux** leaves your systems running, with Try Linux in the tray.
+  Right-click the tray icon to open a system's window, open its shared folder, or use
+  its power commands. A system started from a desktop shortcut or at Windows sign-in
+  starts with Try Linux in the tray.
+
+**Power** replaces **Start** while a system runs:
+
+<img src="docs/images/power-menu.png" alt="Your systems with the Power menu open: Shut down, Restart, Pause, Force stop and Reset" width="480">
+
+- **Shut down** presses the power button, so Linux shuts down cleanly. Its desktop
+  may ask first; GNOME goes ahead on its own after 60 seconds.
+- **Restart** shuts down the same way, then starts the system again with any settings
+  you changed.
+- **Pause** freezes the system where it is; **Resume** continues.
+- **Force stop** turns it off immediately, and **Reset** restarts it immediately. Both
+  lose unsaved work.
+
+Each command except Pause and Resume asks you to confirm first:
+
+<img src="docs/images/confirm-shut-down.png" alt="Shut down Fedora Workstation? Linux shuts down cleanly. Its desktop may ask first; GNOME goes ahead on its own after 60 seconds. Cancel and Shut down buttons" width="400"> <img src="docs/images/confirm-force-stop.png" alt="Force Fedora Workstation to stop? This turns it off immediately, like unplugging a PC. Unsaved work in Linux is lost. Cancel and Force stop buttons" width="400">
+
+**Several systems can run at once**, each in its own window with its own status and
+Power menu. Each one uses the memory its resource profile gives it: two **Balanced**
+systems fit, but two **Maximum** ones need more memory than your PC has. New systems
+get their own SSH port (2223, 2224, ...), so their port forwards don't clash.
+
+**Settings** (per system):
   - **General:** fullscreen and which display, start at Windows sign-in, desktop
     shortcut, resource profile (Balanced / Maximum / Manual), disk capacity,
     shared Windows folder (read-only unless allowed).
@@ -143,6 +181,11 @@ daily check off.
     network), and **About** with versions, install and update checks.
   - **Recovery:** back up, restore as a copy, snapshots, reset, boot an ISO, move
     storage, clean up downloads, delete.
+
+**Reset**, **Delete**, **Clean up downloads**, and reverting or deleting a snapshot ask
+first, and pressing Enter picks **Cancel**:
+
+<img src="docs/images/confirm-delete.png" alt="Delete Fedora Workstation? This permanently removes its virtual disk and everything installed in it. Downloaded ISOs are kept. Cancel and Delete buttons" width="400"> <img src="docs/images/confirm-clean-up.png" alt="Delete 2 downloaded files? 4.0 GiB in all, with the file names listed. You can download them again later. Cancel and Delete buttons" width="400">
 
 Keyboard: **Ctrl+Alt+G** releases the mouse and keyboard, **Ctrl+Alt+F** toggles
 fullscreen.
@@ -168,7 +211,7 @@ look for **Virtualization**. It should say **Enabled**.
 Linux needs the processor's virtualization feature, which some PCs ship with turned off.
 Try Linux shows this message:
 
-<img src="docs/images/troubleshoot-bios-message.png" alt="Try Linux message: Hardware virtualization is turned off in your PC's BIOS/UEFI settings, with steps to turn it on" width="413">
+<img src="docs/images/troubleshoot-bios-message.png" alt="Try Linux message: Fedora Workstation can't start yet. Hardware virtualization is turned off in your PC's BIOS/UEFI settings, with steps to turn it on" width="420">
 
 1. Open **Settings > System > Recovery**, and next to **Advanced startup** click **Restart now**.
 
@@ -183,9 +226,14 @@ Try Linux shows this message:
 Setup can still download and prepare a system before you change the setting; click
 **Install** on the home page afterwards.
 
-**"Windows Hypervisor Platform is turned off"**
-Let Try Linux turn it on (Windows asks for permission), or do it yourself: press Win+R,
-type `optionalfeatures`, tick **Windows Hypervisor Platform**, click **OK**, then restart.
+**"Turn on Windows Hypervisor Platform?"**
+Click **Turn on** and Try Linux turns it on; Windows asks for permission, then needs one
+restart.
+
+<img src="docs/images/troubleshoot-whp-prompt.png" alt="Try Linux prompt: Turn on Windows Hypervisor Platform? with Not now and Turn on buttons" width="420">
+
+Or do it yourself: press Win+R, type `optionalfeatures`, tick **Windows Hypervisor
+Platform**, click **OK**, then restart.
 
 <img src="docs/images/troubleshoot-windows-features.png" alt="Turn Windows features on or off, with Windows Hypervisor Platform outlined" width="415">
 
@@ -203,7 +251,9 @@ Try Linux can't run on this PC.
 
 - No camera or USB passthrough, and no choice of sound device (Windows defaults
   are used). WINQ-EMU doesn't support these.
-- No clipboard sharing or drag-and-drop between Windows and Linux.
+- No clipboard sharing or drag-and-drop between Windows and Linux: WINQ-EMU's QEMU
+  is built without SPICE, which QEMU's clipboard channel needs. Use the shared folder,
+  or SSH (`ssh -p 2223 you@localhost`) to paste into a terminal.
 - Chromium-based browsers can show black video in the guest; Firefox works best.
 - WINQ-EMU is alpha software.
 

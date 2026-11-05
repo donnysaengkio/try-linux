@@ -216,7 +216,7 @@ class TabStrip : Control
 
 partial class MainForm
 {
-    public const string Version = "1.1.5";
+    public const string Version = "1.1.6";
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
     void ShowSettings(VmConfig cfg)
@@ -634,8 +634,9 @@ partial class MainForm
                 if (dlg.ShowDialog(this) != DialogResult.OK) return;
                 iso = dlg.FileName;
             }
-        if (MessageBox.Show(this, "Reset " + cfg.DisplayName + "?\n\nThis erases everything installed in it, including its snapshots, and starts over with the installer. Back it up first if you might need anything.",
-                "Reset system", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+        if (!ThemedDialog.Show(this, "Reset " + cfg.DisplayName + "?",
+                "This erases everything installed in it, including its snapshots, and starts over with the installer.", null,
+                "Back it up first if you might need anything.", "Reset", "Cancel", true)) return;
         RunTool(cfg, "Resetting " + cfg.DisplayName, () =>
         {
             long size = DiskInfo.Read(cfg.Disk).Virtual;
@@ -652,8 +653,9 @@ partial class MainForm
 
     void DeleteSystem(VmConfig cfg)
     {
-        if (MessageBox.Show(this, "Delete " + cfg.DisplayName + "?\n\nThis permanently removes its virtual disk and everything installed in it. Downloaded ISOs are kept.",
-                "Delete system", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+        if (!ThemedDialog.Show(this, "Delete " + cfg.DisplayName + "?",
+                "This permanently removes its virtual disk and everything installed in it.", null,
+                "Downloaded ISOs are kept.", "Delete", "Cancel", true)) return;
         try
         {
             SetRunAtLogin(cfg, false);
@@ -705,14 +707,20 @@ partial class MainForm
         foreach (var dir in new[] { AppSettings.IsoDir, AppSettings.DownloadsDir })
             if (Directory.Exists(dir))
                 files.AddRange(new DirectoryInfo(dir).GetFiles().Where(f => !needed.Contains(f.FullName)));
-        if (files.Count == 0) { Info("Nothing to clean up. Installers that a system still needs are kept."); return; }
+        if (files.Count == 0)
+        {
+            ThemedDialog.Show(this, "Nothing to clean up", "Installers that a system still needs are kept.", null, null, "OK");
+            return;
+        }
         long total = files.Sum(f => f.Length);
-        if (MessageBox.Show(this, "Delete " + files.Count + " downloaded file(s), " + Gib(total) + "?\n\n" +
-                string.Join("\n", files.Take(8).Select(f => f.Name)) + (files.Count > 8 ? "\n..." : "") +
-                "\n\nYou can download them again later.", "Clean up", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+        if (!ThemedDialog.Show(this, "Delete " + files.Count + " downloaded " + (files.Count == 1 ? "file" : "files") + "?",
+                Gib(total) + " in all:",
+                string.Join("\n", files.Take(8).Select(f => f.Name)) + (files.Count > 8 ? "\n... and " + (files.Count - 8) + " more" : ""),
+                "You can download them again later.", "Delete", "Cancel", true)) return;
         int failed = 0;
         foreach (var f in files) try { f.Delete(); } catch { failed++; }
-        Info("Freed " + Gib(total) + "." + (failed > 0 ? " " + failed + " file(s) were in use and kept." : ""));
+        ThemedDialog.Show(this, "Freed " + Gib(total),
+            failed > 0 ? failed + " file(s) were in use and kept." : null, null, null, "OK");
     }
 }
 
@@ -764,13 +772,13 @@ class SnapshotDialog : Form
         revert.Click += delegate
         {
             string s = Selected();
-            if (s != null && Ask("Revert " + cfg.DisplayName + " to \"" + s + "\"? Changes made since then are lost."))
+            if (s != null && Ask("Revert to this snapshot?", s, "Changes made to " + cfg.DisplayName + " since then are lost.", "Revert"))
                 Act(() => Winq.Run(Winq.Img, "snapshot -a " + MainForm.Q(s) + " " + MainForm.Q(cfg.Disk)));
         };
         delete.Click += delegate
         {
             string s = Selected();
-            if (s != null && Ask("Delete the snapshot \"" + s + "\"?"))
+            if (s != null && Ask("Delete this snapshot?", s, "It can't be restored afterwards.", "Delete"))
                 Act(() => Winq.Run(Winq.Img, "snapshot -d " + MainForm.Q(s) + " " + MainForm.Q(cfg.Disk)));
         };
         Load += delegate { Reload(); };
@@ -781,16 +789,16 @@ class SnapshotDialog : Form
         return list.SelectedIndex >= 0 && list.SelectedIndex < snaps.Count ? snaps[list.SelectedIndex].Key : null;
     }
 
-    bool Ask(string q)
+    bool Ask(string title, string snapshot, string text, string action)
     {
-        return MessageBox.Show(this, q, "Snapshots", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) == DialogResult.Yes;
+        return ThemedDialog.Show(this, title, null, snapshot, text, action, "Cancel", true);
     }
 
     void Act(Action a)
     {
         Cursor = Cursors.WaitCursor;
         try { a(); }
-        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Snapshots", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        catch (Exception ex) { ThemedDialog.Show(this, "Snapshots", ex.Message, null, null, "OK"); }
         Cursor = Cursors.Default;
         Reload();
     }

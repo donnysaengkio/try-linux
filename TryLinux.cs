@@ -679,10 +679,56 @@ class RunningVm
 {
     public VmConfig Cfg;
     public Process P;
-    public int QmpPort;
+    public int QmpPort, EventPort;
     public bool Installer, Cpu;
+    // QEMU's window, kept because Process.MainWindowHandle is zero while it's hidden.
+    public IntPtr Window;
+    public bool Hidden, Paused;
+    // Opened from Console while off (QEMU -S): the window is open but the machine hasn't been powered on.
+    public bool Held;
+    // Power menu: Restart asks Linux to shut down, then starts it again (if it shuts down within a few
+    // minutes, so a cancelled prompt doesn't turn a later shutdown into a restart); Reset and Force stop end QEMU.
+    public DateTime RestartAsked = DateTime.MinValue;
+    public bool ResetAsked, ForceStopped;
     public DateTime Started = DateTime.Now;
     public readonly StringBuilder Err = new StringBuilder();
+    // Why QEMU stopped, from its SHUTDOWN event: "guest-shutdown" for a power-off, "guest-reset" for a restart.
+    public volatile string ShutdownReason;
+    public System.Threading.Thread Watcher;
+
+    // Listens on a second QMP monitor (the first stays free for commands like system_powerdown).
+    public void WatchEvents()
+    {
+        var vm = this;
+        Watcher = new System.Threading.Thread(() =>
+        {
+            for (int i = 0; i < 240; i++)
+            {
+                try { if (vm.P.HasExited) return; } catch { return; }
+                try
+                {
+                    using (var c = new TcpClient("127.0.0.1", vm.EventPort))
+                    using (var s = c.GetStream())
+                    {
+                        var r = new StreamReader(s);
+                        var w = new StreamWriter(s) { AutoFlush = true, NewLine = "\n" };
+                        r.ReadLine();
+                        w.WriteLine("{\"execute\":\"qmp_capabilities\"}");
+                        string line;
+                        while ((line = r.ReadLine()) != null)
+                        {
+                            var m = Regex.Match(line, "\"event\"\\s*:\\s*\"SHUTDOWN\".*?\"reason\"\\s*:\\s*\"([^\"]+)\"");
+                            if (m.Success) vm.ShutdownReason = m.Groups[1].Value;
+                        }
+                        return;
+                    }
+                }
+                catch (SocketException) { System.Threading.Thread.Sleep(250); }
+                catch (IOException) { return; }
+            }
+        }) { IsBackground = true, Name = "QMP events" };
+        Watcher.Start();
+    }
 }
 
 // ---------------------------------------------------------------- network
@@ -996,6 +1042,44 @@ static class Native
         if (c.IsHandleCreated) apply(c, EventArgs.Empty); else c.HandleCreated += apply;
     }
 
+    // ---- closing a VM window hides it instead (QEMU runs with window-close=off)
+
+    public delegate IntPtr HookProc(int code, IntPtr w, IntPtr l);
+    [DllImport("user32.dll")] static extern IntPtr SetWindowsHookEx(int id, HookProc proc, IntPtr module, uint thread);
+    [DllImport("user32.dll")] public static extern bool UnhookWindowsHookEx(IntPtr hook);
+    [DllImport("user32.dll")] public static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr w, IntPtr l);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern IntPtr GetModuleHandle(string name);
+    [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(POINT p);
+    [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h, uint flags);
+    [DllImport("user32.dll")] static extern bool PhysicalToLogicalPointForPerMonitorDPI(IntPtr h, ref POINT p);
+    [DllImport("user32.dll")] static extern IntPtr SendMessageTimeout(IntPtr h, uint msg, IntPtr w, IntPtr l, uint flags, uint ms, out IntPtr result);
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+    public struct POINT { public int X, Y; }
+
+    // A low-level mouse hook (WH_MOUSE_LL); `proc` must stay referenced while it's installed.
+    public static IntPtr HookMouse(HookProc proc) { return SetWindowsHookEx(14, proc, GetModuleHandle(null), 0); }
+
+    // True when (x, y), in physical screen pixels, is on the close button of top-level window `h`.
+    public static bool OnCloseButton(IntPtr h, int x, int y)
+    {
+        var p = new POINT { X = x, Y = y };
+        if (GetAncestor(WindowFromPoint(p), 2) != h) return false;   // GA_ROOT
+        try { PhysicalToLogicalPointForPerMonitorDPI(h, ref p); } catch (EntryPointNotFoundException) { }
+        IntPtr hit;
+        if (SendMessageTimeout(h, 0x0084, IntPtr.Zero, (IntPtr)((p.Y << 16) | (p.X & 0xFFFF)), 0x0002, 500, out hit) == IntPtr.Zero)   // WM_NCHITTEST, SMTO_ABORTIFHUNG
+            return false;
+        return (int)hit == 20;   // HTCLOSE
+    }
+
+    public static void HideWindow(IntPtr h) { ShowWindow(h, 0); }   // SW_HIDE
+
+    public static void ShowAndFocus(IntPtr h)
+    {
+        if (h == IntPtr.Zero) return;
+        if (!IsWindowVisible(h)) ShowWindow(h, 5);   // SW_SHOW
+        BringToFront(h);
+    }
+
     public static void MoveTo(IntPtr h, int x, int y)
     {
         SetWindowPos(h, IntPtr.Zero, x, y, 0, 0, 0x0001 | 0x0004);   // SWP_NOSIZE | SWP_NOZORDER
@@ -1005,13 +1089,11 @@ static class Native
     public static void SendCtrlAltF(IntPtr h)
     {
         SetForegroundWindow(h);
-        byte ctrl = 0x11, alt = 0x12, f = 0x46;
-        keybd_event(ctrl, 0, 0, UIntPtr.Zero);
-        keybd_event(alt, 0, 0, UIntPtr.Zero);
-        keybd_event(f, 0, 0, UIntPtr.Zero);
-        keybd_event(f, 0, 2, UIntPtr.Zero);
-        keybd_event(alt, 0, 2, UIntPtr.Zero);
-        keybd_event(ctrl, 0, 2, UIntPtr.Zero);
+        // SDL reads the hardware scan code and QEMU checks for the left Ctrl and Alt keys, so send
+        // those exactly: VK_LCONTROL, VK_LMENU and F with their scan codes.
+        byte[,] keys = { { 0xA2, 0x1D }, { 0xA4, 0x38 }, { 0x46, 0x21 } };
+        for (int i = 0; i < 3; i++) keybd_event(keys[i, 0], keys[i, 1], 0, UIntPtr.Zero);
+        for (int i = 2; i >= 0; i--) keybd_event(keys[i, 0], keys[i, 1], 2, UIntPtr.Zero);   // KEYEVENTF_KEYUP
     }
 
     [DllImport("WinHvPlatform.dll")] static extern int WHvCreatePartition(out IntPtr partition);
@@ -1397,6 +1479,35 @@ static class ThemedDialog
     }
 }
 
+// Menus in the app's dark colours.
+class DarkMenu : ToolStripProfessionalRenderer
+{
+    public DarkMenu() : base(new Colors()) { RoundedEdges = false; }
+
+    protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
+    {
+        e.TextColor = !e.Item.Enabled ? Theme.Muted : e.Item.ForeColor == Theme.Danger ? Theme.Danger : Theme.Text;
+        base.OnRenderItemText(e);
+    }
+
+    protected override void OnRenderArrow(ToolStripArrowRenderEventArgs e) { e.ArrowColor = Theme.Text; base.OnRenderArrow(e); }
+
+    class Colors : ProfessionalColorTable
+    {
+        public override Color ToolStripDropDownBackground { get { return Theme.Card; } }
+        public override Color ImageMarginGradientBegin { get { return Theme.Card; } }
+        public override Color ImageMarginGradientMiddle { get { return Theme.Card; } }
+        public override Color ImageMarginGradientEnd { get { return Theme.Card; } }
+        public override Color MenuBorder { get { return Theme.Border; } }
+        public override Color MenuItemBorder { get { return Theme.Accent; } }
+        public override Color MenuItemSelected { get { return Theme.CardSelected; } }
+        public override Color MenuItemSelectedGradientBegin { get { return Theme.CardSelected; } }
+        public override Color MenuItemSelectedGradientEnd { get { return Theme.CardSelected; } }
+        public override Color SeparatorDark { get { return Theme.Border; } }
+        public override Color SeparatorLight { get { return Theme.Card; } }
+    }
+}
+
 class FlatBtn : Button
 {
     public FlatBtn(string text, bool primary = false, bool danger = false)
@@ -1426,7 +1537,8 @@ class FlatBtn : Button
 
 class OptionRow : Control
 {
-    public string Title = "", Sub = "";
+    public string Title = "", Sub = "", Status = "";
+    public Color StatusColor = Theme.Muted;
     bool selected, hover;
 
     public OptionRow()
@@ -1447,10 +1559,19 @@ class OptionRow : Control
         if (selected) using (var b = new SolidBrush(Theme.Accent)) g.FillRectangle(b, 0, 0, Theme.D(4), Height);
         int pad = Theme.D(18), half = Height / 2;
         var flags = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
+        int textW = Width - pad * 2;
+        if (Status.Length > 0)
+        {
+            // The status sits on the right, centred on the row; the text to its left is shortened to fit.
+            int statusW = TextRenderer.MeasureText(g, Status, Theme.Small, Size.Empty, TextFormatFlags.NoPrefix).Width;
+            TextRenderer.DrawText(g, Status, Theme.Small, new Rectangle(Width - pad - statusW, 0, statusW, Height), StatusColor,
+                TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+            textW -= statusW + Theme.D(16);
+        }
         if (Height < Theme.D(64))
         {
-            TextRenderer.DrawText(g, Title, Theme.Bold, new Rectangle(pad, Theme.D(4), Width - pad * 2, half - Theme.D(2)), Theme.Text, flags);
-            TextRenderer.DrawText(g, Sub, Theme.Small, new Rectangle(pad, half, Width - pad * 2, half - Theme.D(6)), Theme.Muted, flags);
+            TextRenderer.DrawText(g, Title, Theme.Bold, new Rectangle(pad, Theme.D(4), textW, half - Theme.D(2)), Theme.Text, flags);
+            TextRenderer.DrawText(g, Sub, Theme.Small, new Rectangle(pad, half, textW, half - Theme.D(6)), Theme.Muted, flags);
             return;
         }
         // Tall rows: title on top, description wrapped onto the lines below.
@@ -1473,9 +1594,9 @@ class OptionList : Panel
         BackColor = Theme.Bg;
     }
 
-    public void AddItem(string title, string sub, object tag)
+    public void AddItem(string title, string sub, object tag, string status = null, Color? statusColor = null)
     {
-        var row = new OptionRow { Title = title, Sub = sub, Tag = tag };
+        var row = new OptionRow { Title = title, Sub = sub, Tag = tag, Status = status ?? "", StatusColor = statusColor ?? Theme.Muted };
         int index = rows.Count;
         row.MouseDown += delegate { SelectedIndex = index; };
         row.DoubleClick += delegate { if (Activated != null) Activated(this, EventArgs.Empty); };
@@ -1675,6 +1796,8 @@ partial class MainForm : Form
     readonly Dictionary<string, RunningVm> running = new Dictionary<string, RunningVm>();
     readonly NotifyIcon tray;
     readonly string startArg;
+    // Started from a shortcut or at sign-in (--start): go to the tray once it's up. Otherwise Try Linux stays open.
+    bool trayAfterStart;
     bool busy, cancelRequested, quitting, trayHintShown, restartPending;
     FlatBtn homeUpdate;     // the home screen's "Update to x.y.z" button, shown once a check finds one
     string stagedUpdate;    // a verified update waiting to be applied when Try Linux quits
@@ -1698,7 +1821,7 @@ partial class MainForm : Form
         ClientSize = new Size(Math.Min(D(980), area.Width - 40), Math.Min(D(640), area.Height - 60));
         MinimumSize = new Size(D(700), D(520));
 
-        tray = new NotifyIcon { Icon = Icon, Text = "Try Linux", Visible = true, ContextMenuStrip = new ContextMenuStrip() };
+        tray = new NotifyIcon { Icon = Icon, Text = "Try Linux", Visible = true, ContextMenuStrip = new ContextMenuStrip { Renderer = new DarkMenu(), ShowItemToolTips = true } };
         tray.ContextMenuStrip.Opening += delegate { BuildTrayMenu(); };
         tray.DoubleClick += delegate { ShowLauncher(); };
 
@@ -1724,7 +1847,7 @@ partial class MainForm : Form
         if (startArg != null)
         {
             var cfg = VmConfig.All().FirstOrDefault(c => c.Name.Equals(startArg, StringComparison.OrdinalIgnoreCase));
-            if (cfg != null) { Boot(cfg); return; }
+            if (cfg != null) { trayAfterStart = true; Boot(cfg); return; }
         }
         ShowHome();
     }
@@ -1742,6 +1865,14 @@ partial class MainForm : Form
             if (busy && !ConfirmCancel()) { e.Cancel = true; return; }
         }
         cancelRequested = true;
+        // Without Try Linux nothing could show a hidden system again, so show them all.
+        StopWatchingCloseButtons();
+        // Paused ones are resumed for the same reason.
+        foreach (var vm in running.Values)
+        {
+            if (vm.Hidden) Native.ShowAndFocus(vm.Window);
+            if (vm.Paused) try { Net.Qmp(vm.QmpPort, "cont"); } catch { }
+        }
         tray.Visible = false;
         tray.Dispose();
         if (stagedUpdate != null) try { Updater.Apply(stagedUpdate, Updater.Available); } catch { }
@@ -1769,12 +1900,32 @@ partial class MainForm : Form
         var p = new Page(520);
         p.Caption("Your systems", 0, 100, 640, 30, Theme.Title);
         var list = p.Add(new OptionList(), 0, 140, 640, 270);
-        foreach (var vm in vms) list.AddItem(vm.DisplayName, Describe(vm), vm);
+        foreach (var vm in vms)
+            list.AddItem(vm.DisplayName, Describe(vm), vm, Status(vm), On(vm) ? Theme.Accent : Theme.Muted);
 
-        var add = p.Add(new FlatBtn("Add a system"), 0, 428, 170, 42);
-        var settings = p.Add(new FlatBtn("Settings"), 182, 428, 140, 42);
-        var start = p.Add(new FlatBtn("Start", true), 470, 428, 170, 42);
-        p.Caption("Double-click a system to start it.", 0, 482, 640, 24, Theme.Small, Theme.Muted);
+        // Four equal buttons across the 640-wide column, 12 apart.
+        var add = p.Add(new FlatBtn("Add a system"), 0, 428, 151, 42);
+        var settings = p.Add(new FlatBtn("Settings"), 163, 428, 151, 42);
+        p.Tag = "home";
+        // Console opens the system's window; for a system that's off, the window opens with it still off.
+        var console = p.Add(new FlatBtn("Console"), 326, 428, 151, 42);
+        var start = p.Add(new FlatBtn("Start", true), 489, 428, 151, 42);
+        // A running system has Power in place of Start: a menu, so nothing powers off from one click.
+        // Double-clicking it opens its window.
+        var power = p.Add(new FlatBtn("Power  ▾") { Visible = false }, 489, 428, 151, 42);
+        power.Click += delegate
+        {
+            var vm = (VmConfig)list.SelectedTag;
+            RunningVm r;
+            if (vm == null || !running.TryGetValue(vm.Name, out r)) return;
+            var menu = new ContextMenuStrip { Renderer = new DarkMenu(), Font = Theme.Body, ShowItemToolTips = true, ShowImageMargin = false,
+                                              MinimumSize = new Size(power.Width, 0) };
+            menu.Items.AddRange(PowerItems(r));
+            foreach (ToolStripItem i in menu.Items) i.Padding = new Padding(Theme.D(6), Theme.D(3), 0, Theme.D(3));
+            menu.Closed += delegate { BeginInvoke((Action)menu.Dispose); };
+            menu.Show(power, new Point(0, power.Height));
+        };
+        p.Caption("Double-click a system to start it, or to open its window while it runs.", 0, 482, 640, 24, Theme.Small, Theme.Muted);
         homeUpdate = p.Add(new FlatBtn("Update") { Visible = false }, 440, 96, 200, 36);
         homeUpdate.ForeColor = Theme.Accent;
         homeUpdate.FlatAppearance.BorderColor = Theme.Accent;
@@ -1786,12 +1937,21 @@ partial class MainForm : Form
         {
             var vm = (VmConfig)list.SelectedTag;
             if (vm == null) return;
-            start.Text = running.ContainsKey(vm.Name) ? "Show" : vm.PendingInstall ? "Install" : "Start";
+            start.Text = vm.PendingInstall ? "Install" : "Start";
+            start.Visible = !On(vm);
+            power.Visible = !start.Visible;
         };
         list.SelectedIndex = 0;
         EventHandler go = delegate { var vm = (VmConfig)list.SelectedTag; if (vm != null) Boot(vm); };
         list.Activated += go;
-        start.Click += go;
+        start.Click += delegate
+        {
+            var vm = (VmConfig)list.SelectedTag;
+            RunningVm r;
+            if (vm == null) return;
+            if (running.TryGetValue(vm.Name, out r) && r.Held) PowerOn(r); else Boot(vm);
+        };
+        console.Click += delegate { var vm = (VmConfig)list.SelectedTag; if (vm != null) OpenConsole(vm); };
         add.Click += delegate { ShowChoose(); };
         settings.Click += delegate { var vm = (VmConfig)list.SelectedTag; if (vm != null) ShowSettings(vm); };
         AcceptButton = start;
@@ -1926,15 +2086,26 @@ partial class MainForm : Form
         vm.Resources(out cores, out ram);
         var d = Distro.Find(vm.DistroId);
         string what = d != null ? d.Name : Path.GetFileName(vm.Iso);
-        string state = running.ContainsKey(vm.Name) ? "running" : vm.PendingInstall ? "ready to install" : "";
-        return string.Join("  ·  ", new[] { what, ram + " GB, " + cores + " cores", state }.Where(s => !string.IsNullOrEmpty(s)));
+        return string.Join("  ·  ", new[] { what, ram + " GB, " + cores + " cores" }.Where(s => !string.IsNullOrEmpty(s)));
+    }
+
+    // Powered on: running or paused, not a console opened while off.
+    bool On(VmConfig vm) { RunningVm r; return running.TryGetValue(vm.Name, out r) && !r.Held; }
+
+    // Shown on the right of the system's row on Your systems.
+    string Status(VmConfig vm)
+    {
+        RunningVm r;
+        if (running.TryGetValue(vm.Name, out r))
+            return r.Held ? "Off, console open" : (r.Paused ? "Paused" : "Running") + (r.Hidden ? ", window closed" : "");
+        return vm.PendingInstall ? "Ready to install" : "";
     }
 
     void ShowChoose()
     {
         bool hasVms = VmConfig.All().Count > 0;
         var p = new Page(606);
-        p.Caption("Choose a Linux OS to try", 0, 94, 640, 30, Theme.Title, null, ContentAlignment.MiddleCenter);
+        p.Caption("Choose a Linux OS", 0, 94, 640, 30, Theme.Title, null, ContentAlignment.MiddleCenter);
         p.Caption("Try Linux downloads the official installer and checks it before use.", 0, 124, 640, 22, Theme.Small, Theme.Muted, ContentAlignment.MiddleCenter);
         int listH = Distro.Catalog.Length * 70 - 6;
         var list = p.Add(new OptionList { RowHeight = 64 }, 0, 154, 640, listH);
@@ -2091,8 +2262,7 @@ partial class MainForm : Form
 
     bool ConfirmCancel()
     {
-        return MessageBox.Show(this, "Stop setting up?\n\nAnything already downloaded is kept, so next time it picks up where it left off.",
-            "Try Linux", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
+        return Ask("Stop setting up?", "Anything already downloaded is kept, so next time it picks up where it left off.", "Stop", "Keep going");
     }
 
     // ------------------------------------------------------------ install
@@ -2104,8 +2274,8 @@ partial class MainForm : Form
         if (virt == VirtState.FirmwareOff)
         {
             // Setup can still download now, so it's ready once the BIOS setting is changed.
-            if (MessageBox.Show(this, Virt.Message(virt) + "\n\nDownload and prepare " + cfg.DisplayName + " now anyway, so it's ready after you change the setting?",
-                    "Try Linux", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+            if (!Ask("Download " + cfg.DisplayName + " anyway?", Virt.Message(virt) +
+                    "\n\nTry Linux can download and prepare it now, so it's ready after you change the setting.", "Download", "Cancel")) return;
         }
         else if (virt == VirtState.FeatureOff && !restartPending && !await EnableHypervisor()) return;
         else if (virt == VirtState.NotRunning) restartPending = true;
@@ -2176,8 +2346,8 @@ partial class MainForm : Form
 
     async Task<bool> EnableHypervisor()
     {
-        if (MessageBox.Show(this, "Try Linux needs Windows Hypervisor Platform, which is turned off.\n\nTurn it on now? Windows asks for permission, then needs one restart. Setup can keep downloading in the meantime.",
-                "Try Linux", MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes) return false;
+        if (!Ask("Turn on Windows Hypervisor Platform?", "Try Linux needs it, and it's turned off. Windows asks for permission, then needs one restart. Setup can keep downloading in the meantime.",
+                "Turn on", "Not now")) return false;
         int code;
         try
         {
@@ -2195,8 +2365,8 @@ partial class MainForm : Form
 
     async Task InstallWinq(Func<bool> cancelled, bool update = false)
     {
-        if (!update && MessageBox.Show(this, "Try Linux runs systems with WINQ-EMU, a free QEMU build with GPU acceleration for Windows. It isn't installed yet.\n\nDownload and install it now (about 55 MB)?",
-                "Try Linux", MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes)
+        if (!update && !Ask("Install WINQ-EMU?", "Try Linux runs systems with WINQ-EMU, a free QEMU build with GPU acceleration for Windows. It isn't installed yet. Download and install it now (about 55 MB)?",
+                "Install", "Cancel"))
             throw new OperationCanceledException();
         SetProgress("Downloading WINQ-EMU", -1, "github.com/cmspam/winq-emu");
         string url = await Task.Run(() =>
@@ -2247,7 +2417,9 @@ partial class MainForm : Form
 
     void Boot(VmConfig cfg) { Boot(cfg, cfg.Render == 2); }
 
-    void Boot(VmConfig cfg, bool cpu)
+    // `restart` starts a system again after Linux restarted it: no progress page or tray notice.
+    // `held` opens its window with the machine still powered off (QEMU -S); Start powers it on.
+    void Boot(VmConfig cfg, bool cpu, bool restart = false, bool held = false)
     {
         RunningVm existing;
         if (running.TryGetValue(cfg.Name, out existing)) { ShowVm(existing); return; }
@@ -2259,12 +2431,16 @@ partial class MainForm : Form
         var virt = Virt.Check();
         if (virt != VirtState.Ready) { Error(cfg.DisplayName + " can't start yet.\n\n" + Virt.Message(virt)); return; }
         bool installer = cfg.PendingInstall && File.Exists(cfg.Iso);
-        ShowProgress("Starting " + cfg.DisplayName, false);
-        SetProgress("Starting " + cfg.DisplayName, -1,
-            string.Join("  ·  ", new[] { installer ? "Booting the installer" : "", cpu ? "CPU rendering" : "" }.Where(s => s.Length > 0)));
+        if (!restart && !held)
+        {
+            ShowProgress("Starting " + cfg.DisplayName, false);
+            SetProgress("Starting " + cfg.DisplayName, -1,
+                string.Join("  ·  ", new[] { installer ? "Booting the installer" : "", cpu ? "CPU rendering" : "" }.Where(s => s.Length > 0)));
+        }
         GrowDisk(cfg);
-        var vm = Launch(cfg, installer, cpu);
+        var vm = Launch(cfg, installer, cpu, held);
         if (vm == null) { ShowHome(); return; }
+        if (held) ShowHome();
 
         var poll = new Timer { Interval = 250 };
         poll.Tick += delegate
@@ -2275,7 +2451,9 @@ partial class MainForm : Form
             {
                 poll.Dispose();
                 IntPtr h = vm.P.MainWindowHandle;
+                vm.Window = h;
                 Native.BringToFront(h);
+                if (held) return;   // still off: Try Linux stays open with Start
                 RecordRender(vm);
                 var target = FullscreenScreen(cfg);
                 if (cfg.Fullscreen && target != null && h != IntPtr.Zero)
@@ -2291,8 +2469,14 @@ partial class MainForm : Form
                     };
                     later.Start();
                 }
-                HideToTray(cfg.DisplayName + " is running", "Right-click the Try Linux icon here to shut it down or open settings.");
+                if (restart) return;
+                if (trayAfterStart)
+                {
+                    trayAfterStart = false;
+                    HideToTray(cfg.DisplayName + " is running", "Right-click the Try Linux icon here to shut it down or open settings.");
+                }
                 ShowHome();
+                Native.BringToFront(h);   // the system's window stays in front of Try Linux
             }
         };
         poll.Start();
@@ -2332,28 +2516,35 @@ partial class MainForm : Form
         catch (IOException) { }
     }
 
-    RunningVm Launch(VmConfig cfg, bool installer, bool cpu)
+    RunningVm Launch(VmConfig cfg, bool installer, bool cpu, bool held = false)
     {
         int cores, ram;
         cfg.Resources(out cores, out ram);
-        var vm = new RunningVm { Cfg = cfg, Installer = installer, Cpu = cpu, QmpPort = Net.FreePort() };
+        var vm = new RunningVm { Cfg = cfg, Installer = installer, Cpu = cpu, Held = held, QmpPort = Net.FreePort() };
+        do vm.EventPort = Net.FreePort(); while (vm.EventPort == vm.QmpPort);
         string outputs = cfg.Displays > 1 ? ",max_outputs=" + cfg.Displays : "";
         string gpu = cpu ? "virtio-vga" + outputs
             : (cfg.Venus ? "virtio-vga-gl,blob=on,hostmem=" + cfg.GpuMemGB + "G,venus=on" : "virtio-vga-gl") + outputs;
         var a = new List<string> {
             "-machine q35,accel=whpx", "-cpu host",
             "-smp " + cores, "-m " + ram + "G",
-            "-display " + (cpu ? "sdl" : "sdl,gl=on"),
+            // window-close=off: closing the window doesn't quit QEMU; Try Linux hides it instead.
+            "-display " + (cpu ? "sdl" : "sdl,gl=on") + ",window-close=off",
             "-device " + gpu,
             "-drive " + Q("file=" + cfg.Disk + ",format=qcow2,if=virtio"),
             "-device virtio-net-pci,netdev=net0",
             "-netdev user,id=net0" + string.Concat(cfg.ForwardRules().Select(f => "," + f.ToHostFwd())),
             "-usb", "-device usb-tablet",
             "-name " + Q(cfg.DisplayName),
-            "-qmp tcp:127.0.0.1:" + vm.QmpPort + ",server=on,wait=off"
+            "-qmp tcp:127.0.0.1:" + vm.QmpPort + ",server=on,wait=off",
+            "-qmp tcp:127.0.0.1:" + vm.EventPort + ",server=on,wait=off",
+            // Restarting Linux ends QEMU (with a "guest-reset" SHUTDOWN event) and Try Linux starts it
+            // again. Resetting in place could leave QEMU's GPU state behind and stop it from coming back.
+            "-action reboot=shutdown"
         };
         if (cfg.Sound) { a.Add("-device intel-hda"); a.Add("-device " + (cfg.Mic ? "hda-duplex" : "hda-output")); }
-        if (cfg.Fullscreen && FullscreenScreen(cfg) == null) a.Add("-full-screen");
+        if (cfg.Fullscreen && FullscreenScreen(cfg) == null && !held) a.Add("-full-screen");
+        if (held) a.Add("-S");   // window open, machine powered off until "cont"
         // BIOS boot (QEMU's default SeaBIOS): WINQ-EMU notes Vulkan is far slower under EFI.
         // once=d boots the installer this time only, so the post-install reboot goes to disk.
         if (installer) { a.Add("-cdrom " + Q(cfg.Iso)); a.Add("-boot once=d"); }
@@ -2377,23 +2568,36 @@ partial class MainForm : Form
         {
             vm.P.Start();
             vm.P.BeginErrorReadLine();
+            vm.WatchEvents();
         }
         catch (Exception ex) { Error("Couldn't start QEMU: " + ex.Message); return null; }
         running[cfg.Name] = vm;
+        WatchCloseButtons();
         return vm;
     }
 
     void OnVmExited(RunningVm vm)
     {
         running.Remove(vm.Cfg.Name);
+        if (running.Count == 0) StopWatchingCloseButtons();
         double secs = (DateTime.Now - vm.Started).TotalSeconds;
         // An installer session that ran a while has most likely installed the system.
-        if (vm.Installer && secs > 60)
+        if (vm.Installer && secs > 60 && !vm.Held)
         {
             var fresh = VmConfig.Load(vm.Cfg.Dir);
             fresh.PendingInstall = false;
             if (File.Exists(fresh.Disk)) fresh.Save();
         }
+        // Linux restarted, or Restart / Reset from the power menu: start it again, with any changed
+        // settings. (The SHUTDOWN event can arrive just after the exit.)
+        if (vm.Watcher != null) vm.Watcher.Join(1500);
+        bool restartAsked = vm.ShutdownReason == "guest-shutdown" && (DateTime.Now - vm.RestartAsked).TotalMinutes < 5;
+        if ((vm.ShutdownReason == "guest-reset" || restartAsked || vm.ResetAsked) && !quitting)
+        {
+            var again = VmConfig.Load(vm.Cfg.Dir);
+            if (File.Exists(again.Disk)) { Boot(again, vm.Cpu, true); return; }
+        }
+        if (vm.ForceStopped) { if (!busy && Visible) ShowHome(); return; }
         if (vm.P.ExitCode != 0 && secs < 20)
         {
             string msg;
@@ -2404,7 +2608,7 @@ partial class MainForm : Form
             {
                 // Automatic rendering: this PC couldn't use the GPU path, so retry on the CPU.
                 ShowLauncher();
-                Boot(VmConfig.Load(vm.Cfg.Dir), true);
+                Boot(VmConfig.Load(vm.Cfg.Dir), true, false, vm.Held);
                 return;
             }
             if (portClash) msg += "\n\nA forwarded port is already in use. Change the port forwards in Settings > Advanced.";
@@ -2419,17 +2623,165 @@ partial class MainForm : Form
     void ShowVm(RunningVm vm)
     {
         vm.P.Refresh();
-        Native.BringToFront(vm.P.MainWindowHandle);
+        if (vm.Window == IntPtr.Zero) vm.Window = vm.P.MainWindowHandle;
+        Native.ShowAndFocus(vm.Window);
+        if (vm.Hidden) { vm.Hidden = false; if (Visible && !busy) ShowHome(); }
     }
 
-    void Shutdown(RunningVm vm)
+    // QEMU ignores its window's close button (window-close=off), so watch for clicks on it and hide
+    // the window instead: the system keeps running and Your systems shows it.
+    IntPtr mouseHook;
+    Native.HookProc mouseProc;
+
+    void WatchCloseButtons()
+    {
+        if (mouseHook != IntPtr.Zero) return;
+        mouseProc = (code, w, l) =>
+        {
+            if (code >= 0 && (int)w == 0x0202)   // WM_LBUTTONUP
+            {
+                int x = Marshal.ReadInt32(l, 0), y = Marshal.ReadInt32(l, 4);
+                Ui(() => CloseClicked(x, y));   // after the hook returns: hooks must be quick
+            }
+            return Native.CallNextHookEx(mouseHook, code, w, l);
+        };
+        mouseHook = Native.HookMouse(mouseProc);
+    }
+
+    void StopWatchingCloseButtons()
+    {
+        if (mouseHook == IntPtr.Zero) return;
+        Native.UnhookWindowsHookEx(mouseHook);
+        mouseHook = IntPtr.Zero;
+    }
+
+    void CloseClicked(int x, int y)
+    {
+        var vm = running.Values.FirstOrDefault(v => v.Window != IntPtr.Zero && !v.Hidden && Native.OnCloseButton(v.Window, x, y));
+        if (vm == null) return;
+        if (vm.Held) { CloseConsole(vm); return; }   // nothing is running, so just close it
+        Native.HideWindow(vm.Window);
+        vm.Hidden = true;
+        ShowLauncher();
+    }
+
+    // Presses the VM's power button. Linux shuts down cleanly; GNOME asks first and powers off after 60 seconds.
+    void Shutdown(RunningVm vm, bool restart = false)
+    {
+        // Some desktops ask before powering off, so the window must be visible to answer.
+        if (vm.Hidden) ShowVm(vm);
+        if (restart) vm.RestartAsked = DateTime.Now;
+        bool paused = vm.Paused;
+        Qmp(vm, paused ? new[] { "cont", "system_powerdown" } : new[] { "system_powerdown" }, restart ? "restart" : "shut down");
+        vm.Paused = false;
+        tray.ShowBalloonTip(3000, restart ? "Restarting" : "Shutting down",
+            vm.Cfg.DisplayName + (restart ? " shuts down, then starts again." : " is shutting down."), ToolTipIcon.Info);
+        if (paused) RefreshHome();
+    }
+
+    // Console: a running system's window, or for one that's off, its window with the machine still off.
+    // In fullscreen that would be a blank screen, so it offers to power the system on instead.
+    void OpenConsole(VmConfig cfg)
+    {
+        RunningVm r;
+        if (running.TryGetValue(cfg.Name, out r)) { ShowVm(r); return; }
+        if (cfg.Fullscreen)
+        {
+            if (Confirm(cfg.DisplayName + " isn't running",
+                    "Would you like to power it on?", "Power on"))
+                Boot(cfg);
+            return;
+        }
+        Boot(cfg, cfg.Render == 2, false, true);
+    }
+
+    // Powers on a system whose console was opened while it was off.
+    void PowerOn(RunningVm vm)
+    {
+        Qmp(vm, new[] { "cont" }, "power on");
+        vm.Held = false;
+        vm.Started = DateTime.Now;   // the installer check counts from here
+        RecordRender(vm);
+        RefreshHome();
+        ShowVm(vm);
+    }
+
+    void CloseConsole(RunningVm vm)
+    {
+        vm.ForceStopped = true;   // ends quietly: no error, restart or CPU-rendering retry
+        Qmp(vm, new[] { "quit" }, "close the console of");
+    }
+
+    bool Confirm(string title, string text, string action, bool danger = false)
+    {
+        return ThemedDialog.Show(Visible ? this : null, title, text, null, null, action, "Cancel", danger);
+    }
+
+    void SetPaused(RunningVm vm, bool pause)
+    {
+        Qmp(vm, new[] { pause ? "stop" : "cont" }, pause ? "pause" : "resume");
+        vm.Paused = pause;
+        RefreshHome();
+    }
+
+    // Reset and Force stop lose unsaved work, so they ask first.
+    void Reset(RunningVm vm)
+    {
+        if (!Confirm("Reset " + vm.Cfg.DisplayName + "?",
+                "This restarts it immediately, like a PC's reset button. Unsaved work in Linux is lost.", "Reset", true)) return;
+        // Ending QEMU and starting it again is a cleaner reset than resetting in place (see -action reboot=shutdown).
+        vm.ResetAsked = true;
+        Qmp(vm, new[] { "quit" }, "reset");
+    }
+
+    void ForceStop(RunningVm vm)
+    {
+        if (!Confirm("Force " + vm.Cfg.DisplayName + " to stop?",
+                "This turns it off immediately, like unplugging a PC. Unsaved work in Linux is lost.", "Force stop", true)) return;
+        vm.ForceStopped = true;
+        try { vm.P.Kill(); } catch { }
+    }
+
+    void Qmp(RunningVm vm, string[] commands, string what)
     {
         Task.Run(() =>
         {
-            try { Net.Qmp(vm.QmpPort, "system_powerdown"); }
-            catch (Exception ex) { Ui(() => Error("Couldn't ask " + vm.Cfg.DisplayName + " to shut down: " + ex.Message)); }
+            try { foreach (var c in commands) Net.Qmp(vm.QmpPort, c); }
+            catch (Exception ex) { Ui(() => Error("Couldn't " + what + " " + vm.Cfg.DisplayName + ": " + ex.Message)); }
         });
-        tray.ShowBalloonTip(3000, "Shutting down", vm.Cfg.DisplayName + " is shutting down.", ToolTipIcon.Info);
+    }
+
+    void RefreshHome() { if (Visible && !busy && page != null && page.Tag as string == "home") ShowHome(); }
+
+    // The power commands for a running system, for the home page's Power menu and the tray menu.
+    ToolStripItem[] PowerItems(RunningVm v)
+    {
+        Func<string, string, Action, ToolStripMenuItem> item = (text, tip, act) =>
+            new ToolStripMenuItem(text, null, delegate { act(); }) { ToolTipText = tip };
+        Func<ToolStripMenuItem, ToolStripMenuItem> danger = i => { i.ForeColor = Theme.Danger; return i; };
+        if (v.Held) return new ToolStripItem[] {
+            item("Power on", "Starts the system in its open window", () => PowerOn(v)),
+            item("Close console", "Closes the window; the system stays off", () => CloseConsole(v)),
+        };
+        return new ToolStripItem[] {
+            item("Shut down", "Presses the power button so Linux shuts down cleanly", () =>
+            {
+                if (Confirm("Shut down " + v.Cfg.DisplayName + "?",
+                        "Linux shuts down cleanly. Its desktop may ask first; GNOME goes ahead on its own after 60 seconds.", "Shut down"))
+                    Shutdown(v);
+            }),
+            item("Restart", "Shuts Linux down cleanly, then starts it again with any changed settings", () =>
+            {
+                if (Confirm("Restart " + v.Cfg.DisplayName + "?",
+                        "Linux shuts down cleanly, then starts again with any settings you changed. Its desktop may ask first; GNOME goes ahead on its own after 60 seconds.", "Restart"))
+                    Shutdown(v, true);
+            }),
+            v.Paused ? item("Resume", "Continues where it was paused", () => SetPaused(v, false))
+                     : item("Pause", "Freezes the system where it is, without shutting down", () => SetPaused(v, true)),
+            new ToolStripSeparator(),
+            danger(item("Force stop", "Turns it off immediately; unsaved work is lost", () => ForceStop(v))),
+            danger(item("Reset", "Restarts it immediately; unsaved work is lost", () => Reset(v))),
+        };
     }
 
     void BuildTrayMenu()
@@ -2440,16 +2792,11 @@ partial class MainForm : Form
         {
             var v = vm;
             var item = new ToolStripMenuItem(v.Cfg.DisplayName);
-            item.DropDownItems.Add("Show window", null, delegate { ShowVm(v); });
+            item.DropDownItems.Add("Open window", null, delegate { ShowVm(v); });
             if (v.Cfg.SharedFolder.Length > 0)
                 item.DropDownItems.Add("Open shared folder", null, delegate { Process.Start("explorer.exe", Q(v.Cfg.SharedFolder)); });
-            item.DropDownItems.Add("Shut down", null, delegate { Shutdown(v); });
-            item.DropDownItems.Add("Force stop", null, delegate
-            {
-                if (MessageBox.Show("Force " + v.Cfg.DisplayName + " to stop? Unsaved work in it is lost.", "Try Linux",
-                        MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
-                    try { v.P.Kill(); } catch { }
-            });
+            item.DropDownItems.Add(new ToolStripSeparator());
+            item.DropDownItems.AddRange(PowerItems(v));
             m.Items.Add(item);
         }
         if (running.Count == 0) m.Items.Add(new ToolStripMenuItem("No systems running") { Enabled = false });
@@ -2457,8 +2804,7 @@ partial class MainForm : Form
         m.Items.Add("Open Try Linux", null, delegate { ShowLauncher(); });
         m.Items.Add("Quit Try Linux", null, delegate
         {
-            if (running.Count > 0 && MessageBox.Show("Quit Try Linux? Running systems keep running, but without the tray menu.",
-                    "Try Linux", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            if (running.Count > 0 && !Ask("Quit Try Linux?", "Running systems keep running, but without the tray menu.", "Quit")) return;
             quitting = true;
             Close();
         });
@@ -2490,8 +2836,29 @@ partial class MainForm : Form
         try { BeginInvoke(a); } catch (InvalidOperationException) { }
     }
 
-    void Error(string msg) { MessageBox.Show(this, msg, "Try Linux", MessageBoxButtons.OK, MessageBoxIcon.Error); }
-    void Info(string msg) { MessageBox.Show(this, msg, "Try Linux", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+    void Error(string msg) { Notice(msg, "Something went wrong"); }
+    void Info(string msg) { Notice(msg, "Try Linux"); }
+
+    // A themed notice. Its title is the message's first part: up to a blank line, a colon or the
+    // first sentence, when that's short; otherwise `fallback`, with the whole message below.
+    void Notice(string msg, string fallback)
+    {
+        msg = msg.Trim();
+        string title = null, body = null;
+        int cut;
+        if ((cut = msg.IndexOf("\n\n")) > 0) { title = msg.Substring(0, cut); body = msg.Substring(cut + 2); }
+        else if ((cut = msg.IndexOf(": ")) > 0) { title = msg.Substring(0, cut); body = msg.Substring(cut + 2); }
+        else if ((cut = msg.IndexOf(". ")) > 0) { title = msg.Substring(0, cut + 1); body = msg.Substring(cut + 2); }
+        else title = msg;
+        if (title.Length > 70) { title = fallback; body = msg; }
+        if (body != null && body.Length > 0) body = char.ToUpper(body[0]) + body.Substring(1);
+        ThemedDialog.Show(Visible ? this : null, title.TrimEnd('.', ':'), body, null, null, "OK");
+    }
+
+    bool Ask(string title, string text, string yes, string no = "Cancel", bool danger = false)
+    {
+        return ThemedDialog.Show(Visible ? this : null, title, text, null, null, yes, no, danger);
+    }
 
     // Quote a single command-line argument for the Windows argument parser.
     public static string Q(string s) { return "\"" + s.Replace("\"", "\\\"") + "\""; }
