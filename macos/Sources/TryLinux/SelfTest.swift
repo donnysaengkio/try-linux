@@ -130,6 +130,12 @@ enum SelfTest {
         model.updateAvailable = "1.0.2"
         snap("home-update", HomeView())
         model.updateAvailable = nil
+        // Fedora shown as running (Power in place of Start) without starting it.
+        model.previewStatus = ["fedora": "Running"]
+        snap("home-running", HomeView())
+        model.previewStatus = ["fedora": "Running, window closed"]
+        snap("home-window-closed", HomeView())
+        model.previewStatus = [:]
         snap("choose", ChooseView())
         snap("setup", SetupView(plan: InstallPlan(distro: Distro.catalog[0], label: "Fedora Workstation")))
         model.progress = ProgressState(status: "Downloading Fedora-Workstation-Live-45-1.4.aarch64.iso", value: 0.42,
@@ -173,6 +179,22 @@ enum SelfTest {
         dialog("update-when-quit", DialogView(title: "Update when you quit?",
             text: "Linux runs inside Try Linux, so restarting now would stop your running systems. Try Linux can download the update now and install it the next time it quits.",
             path: nil, after: nil, primary: "Update when I quit", secondary: "Cancel", danger: false, pick: { _ in }))
+        // Power menu and Recovery confirmations, and Console's question for a fullscreen system.
+        let sys = c.displayName
+        dialog("confirm-shut-down", DialogView(title: "Shut down \(sys)?",
+            text: "Linux shuts down cleanly. Its desktop may ask first; GNOME goes ahead on its own after 60 seconds.",
+            path: nil, after: nil, primary: "Shut down", secondary: "Cancel", danger: false, pick: { _ in }))
+        dialog("confirm-force-stop", DialogView(title: "Force \(sys) to stop?",
+            text: "This turns it off immediately, like unplugging a Mac. Unsaved work in Linux is lost.",
+            path: nil, after: nil, primary: "Force stop", secondary: "Cancel", danger: true, pick: { _ in }))
+        dialog("confirm-delete", DialogView(title: "Delete \(sys)?",
+            text: "This permanently removes its virtual disk, snapshots and everything installed in it.",
+            path: nil, after: "Downloaded ISOs are kept.", primary: "Delete", secondary: "Cancel", danger: true, pick: { _ in }))
+        dialog("confirm-clean-up", DialogView(title: "Delete 2 downloaded files?", text: "4.3 GB in all:",
+            path: "Fedora-Workstation-Live-45-1.4.aarch64.iso\nubuntu-26.04-desktop-arm64.iso",
+            after: "You can download them again later.", primary: "Delete", secondary: "Cancel", danger: true, pick: { _ in }))
+        dialog("console-ask", DialogView(title: "\(sys) isn't running", text: "Would you like to power it on?",
+            path: nil, after: nil, primary: "Power on", secondary: "Cancel", danger: false, pick: { _ in }))
         Icons.writeIconset(to: dir.appendingPathComponent("AppIcon.iconset"))
 
         try? (lines.joined(separator: "\n") + "\n").write(to: dir.appendingPathComponent("results.txt"), atomically: true, encoding: .utf8)

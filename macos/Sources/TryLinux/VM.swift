@@ -99,11 +99,24 @@ enum VMBuilder {
 final class VMSession: NSObject, ObservableObject, VZVirtualMachineDelegate, NSWindowDelegate {
     let config: VMConfig
     let installer: Bool
-    let started = Date()
+    private(set) var started = Date()
     private let vm: VZVirtualMachine
     private var window: NSWindow?
     private var finished = false
     var onStop: ((VMSession, Error?) -> Void)?
+    var onChange: (() -> Void)?          // state shown on Your systems changed
+    var onWindowClosed: (() -> Void)?    // the window was closed; the launcher shows the system's status
+
+    // Opened from Console while off: the window is open, but the machine hasn't been started.
+    private(set) var held = false
+    private(set) var hidden = false
+    private(set) var paused = false
+    // Power menu: Restart asks Linux to shut down, then starts it again (if it stops within a few
+    // minutes, so a cancelled prompt doesn't turn a later shutdown into a restart). Reset stops it
+    // at once and starts it again. Force stop and closing a console end it quietly.
+    var restartAsked = Date.distantPast
+    var resetAsked = false
+    var quiet = false
 
     init(config: VMConfig, installer: Bool) throws {
         var c = config
@@ -119,6 +132,7 @@ final class VMSession: NSObject, ObservableObject, VZVirtualMachineDelegate, NSW
     }
 
     func start(_ completion: @escaping (Error?) -> Void) {
+        started = Date()   // the installer check counts from here
         vm.start { result in
             switch result {
             case .success: completion(nil)
@@ -127,7 +141,28 @@ final class VMSession: NSObject, ObservableObject, VZVirtualMachineDelegate, NSW
         }
     }
 
-    func showWindow() {
+    // A window for a system that's off. Start (or Power on) starts it in this window.
+    func showConsole() {
+        held = true
+        showWindow(fullscreen: false)
+        window?.title = config.displayName + " (off)"
+    }
+
+    func powerOn(_ completion: @escaping (Error?) -> Void) {
+        start { [weak self] error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if error == nil {
+                    self.held = false
+                    self.window?.title = self.config.displayName
+                    self.onChange?()
+                }
+                completion(error)
+            }
+        }
+    }
+
+    func showWindow(fullscreen: Bool? = nil) {
         let view = VZVirtualMachineView()
         view.virtualMachine = vm
         view.capturesSystemKeys = true
@@ -148,37 +183,51 @@ final class VMSession: NSObject, ObservableObject, VZVirtualMachineDelegate, NSW
         win.makeKeyAndOrderFront(nil)
         win.makeFirstResponder(view)
         NSApp.activate(ignoringOtherApps: true)
-        if config.fullscreen { win.toggleFullScreen(nil) }
+        if fullscreen ?? config.fullscreen { win.toggleFullScreen(nil) }
     }
 
     func bringToFront() {
+        if hidden { hidden = false; onChange?() }
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    // Asks Linux to power off, like pressing a power button.
+    // Asks Linux to power off, like pressing a power button. A paused system is resumed first,
+    // since it can't answer while paused.
     func requestShutdown() {
+        if paused { setPaused(false) { [weak self] in self?.requestShutdown() }; return }
         if vm.canRequestStop { try? vm.requestStop() }
     }
 
+    func setPaused(_ pause: Bool, then done: (() -> Void)? = nil) {
+        let handler: (Result<Void, Error>) -> Void = { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if case .success = result { self.paused = pause; self.onChange?() }
+                done?()
+            }
+        }
+        if pause, vm.canPause { vm.pause(completionHandler: handler) }
+        else if !pause, vm.canResume { vm.resume(completionHandler: handler) }
+        else { done?() }
+    }
+
     func forceStop() {
+        if held { quiet = true; finish(nil); return }   // never started: just close the window
         guard vm.canStop else { return }
         vm.stop { [weak self] error in self?.finish(error) }
     }
 
+    // Closing the window leaves the system running; Your systems shows it and Console brings it back.
+    // A console that was never powered on just closes.
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        let alert = NSAlert()
-        alert.messageText = "Shut down \(config.displayName)?"
-        alert.informativeText = "Shut Down asks Linux to power off cleanly. Force Stop turns it off at once; unsaved work in Linux is lost."
-        alert.addButton(withTitle: "Shut Down")
-        alert.addButton(withTitle: "Force Stop")
-        alert.addButton(withTitle: "Cancel")
-        switch alert.runModal() {
-        case .alertFirstButtonReturn: requestShutdown()
-        case .alertSecondButtonReturn: forceStop()
-        default: break
-        }
-        return false   // the window closes when the system has stopped
+        if held { forceStop(); return false }
+        if sender.styleMask.contains(.fullScreen) { sender.toggleFullScreen(nil) }
+        sender.orderOut(nil)
+        hidden = true
+        onChange?()
+        onWindowClosed?()
+        return false
     }
 
     func guestDidStop(_ virtualMachine: VZVirtualMachine) { finish(nil) }

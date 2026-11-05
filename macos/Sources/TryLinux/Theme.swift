@@ -109,6 +109,8 @@ struct OptionRow: View {
     let subtitle: String
     let selected: Bool
     var twoLine = false
+    var status = ""                  // shown on the right, centred on the row
+    var statusColor = Theme.muted
     @State private var hover = false
 
     var body: some View {
@@ -124,6 +126,10 @@ struct OptionRow: View {
             .padding(.trailing, 18)
             .padding(.vertical, 9)
             Spacer(minLength: 0)
+            if !status.isEmpty {
+                Text(status).font(Theme.mono(11.5)).foregroundColor(statusColor).lineLimit(1)
+                    .fixedSize().padding(.trailing, 18)
+            }
         }
         .frame(maxWidth: .infinity, minHeight: twoLine ? 64 : 54, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)   // keep to its content; don't stretch into free space

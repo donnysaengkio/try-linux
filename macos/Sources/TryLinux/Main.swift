@@ -62,16 +62,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Linux runs inside this app, so quitting has to shut running systems down first.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        let sessions = Array(AppModel.shared.running.values)
+        // Consoles that were never powered on just close.
+        for s in AppModel.shared.running.values where s.held { s.forceStop() }
+        let sessions = AppModel.shared.running.values.filter { !$0.held }
         if sessions.isEmpty { return .terminateNow }
-        let alert = NSAlert()
-        alert.messageText = "Shut down running systems?"
-        alert.informativeText = sessions.map(\.config.displayName).joined(separator: ", ") +
-            " will be shut down. Save your work in Linux first."
-        alert.addButton(withTitle: "Shut Down and Quit")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return .terminateCancel }
-        for s in sessions { s.requestShutdown() }
+        guard ThemedDialog.show("Shut down running systems?",
+                                sessions.map(\.config.displayName).joined(separator: ", ") + " will be shut down. Save your work in Linux first.",
+                                primary: "Shut down and quit", secondary: "Cancel") == .primary else { return .terminateCancel }
+        for s in sessions { s.bringToFront(); s.requestShutdown() }   // shown, so any question Linux asks can be answered
         // Give each guest up to 20 seconds to power off, then stop what's left.
         DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
             for s in AppModel.shared.running.values { s.forceStop() }
@@ -92,12 +90,12 @@ struct MenuBarContent: View {
         } else {
             ForEach(Array(model.running.values), id: \.config.id) { s in
                 Menu(s.config.displayName) {
-                    Button("Show window") { s.bringToFront() }
+                    Button("Open window") { s.bringToFront() }
                     if !s.config.sharedFolder.isEmpty {
                         Button("Open shared folder") { NSWorkspace.shared.open(URL(fileURLWithPath: s.config.sharedFolder)) }
                     }
-                    Button("Shut down") { s.requestShutdown() }
-                    Button("Force stop") { model.confirmForceStop(s) }
+                    Divider()
+                    PowerMenuItems(s: s)
                 }
             }
         }

@@ -26,12 +26,12 @@ download link.
 
 ## Screenshots
 
-![Choose a Linux OS to try](docs/images/choose-os.png)
+![Choose a Linux OS](docs/images/choose-os.png)
 
 | | |
 |---|---|
 | ![Your systems](docs/images/your-systems.png) | ![Set up Fedora Workstation](docs/images/set-up.png) |
-| **Your systems:** start, install or change a system | **Set up:** name, memory and cores, and disk size |
+| **Your systems:** status, console, start or power commands | **Set up:** name, memory and cores, and disk size |
 | ![Downloading the installer](docs/images/download.png) | ![Settings](docs/images/settings-general-tab.png) |
 | **Download:** the installer is checked against its SHA-256 checksum | **Settings > General:** display, resources, disk and a shared folder |
 | ![Settings, Devices](docs/images/settings-devices-tab.png) | ![Settings, Advanced](docs/images/settings-advanced-tab.png) |
@@ -105,12 +105,46 @@ by hand.
 
 ## Using it
 
-- **Choose a Linux**, then **Next** and **Install**. Try Linux downloads and verifies the
-  installer, creates a virtual disk and opens the system in its own window. Install
-  Linux onto the virtual disk; your Mac's drive is never touched.
-- Running systems are in the **Try Linux menu bar icon**: show the window, open the
-  shared folder, shut down cleanly or force stop.
-- Quitting Try Linux shuts running systems down, so save your work in Linux first.
+**Choose a Linux OS**, then **Next** and **Install**. Try Linux downloads and verifies the
+installer, creates a virtual disk and opens the system in its own window. Install Linux
+onto the virtual disk; your Mac's drive is never touched.
+
+**Your systems** lists each system with its status on the right: **Running**,
+**Paused**, **Off, console open**, or **Ready to install**.
+
+<img src="docs/images/your-systems.png" alt="Your systems with Fedora Workstation running, and the Add a system, Settings, Console and Power buttons" width="560">
+
+- **Start** (or double-click) starts the selected system.
+- **Console** opens a running system's window. On a system that's off, it opens the
+  window with the system still off (**Off, console open**); click **Start** to power it
+  on there, or close the window. If the system is set to open fullscreen, Console
+  asks whether to power it on instead.
+- **Closing a system's window** leaves it running, shown as **Running, window
+  closed**. Double-click it or click **Console** to bring the window back.
+- **The Try Linux menu bar icon** lists running systems: open a window, open the
+  shared folder, or use the power commands below.
+- **Quitting Try Linux** shuts running systems down, so save your work in Linux first.
+
+**Power** replaces **Start** while a system runs:
+
+- **Shut down** presses the power button, so Linux shuts down cleanly. Its desktop
+  may ask first; GNOME goes ahead on its own after 60 seconds.
+- **Restart** shuts down the same way, then starts the system again with any settings
+  you changed.
+- **Pause** freezes the system where it is; **Resume** continues.
+- **Force stop** turns it off immediately, and **Reset** restarts it immediately. Both
+  lose unsaved work.
+
+Each command except Pause and Resume asks you to confirm first:
+
+<img src="docs/images/confirm-shut-down.png" alt="Shut down Fedora Workstation? Linux shuts down cleanly. Its desktop may ask first; GNOME goes ahead on its own after 60 seconds. Cancel and Shut down buttons" width="400"> <img src="docs/images/confirm-force-stop.png" alt="Force Fedora Workstation to stop? This turns it off immediately, like unplugging a Mac. Unsaved work in Linux is lost. Cancel and Force stop buttons" width="400">
+
+Restarting Linux from inside it turns the system off instead (see
+[Limitations](#limitations)); use **Power > Restart** to restart it.
+
+**Several systems can run at once**, each in its own window with its own status and
+Power menu. Each one uses the memory its resource profile gives it: two **Balanced**
+systems fit, but two **Maximum** ones need more memory than your Mac has.
 
 **Settings** (for each system):
 
@@ -121,6 +155,11 @@ by hand.
   **About** with the version, Install and update checks.
 - **Recovery:** back up, restore as a copy, snapshots, reset, boot an ISO, clean up
   downloads and delete.
+
+**Reset**, **Delete**, **Clean up**, and reverting or deleting a snapshot ask first, and
+pressing Return picks **Cancel**:
+
+<img src="docs/images/confirm-delete.png" alt="Delete Fedora Workstation? This permanently removes its virtual disk, snapshots and everything installed in it. Downloaded ISOs are kept. Cancel and Delete buttons" width="400"> <img src="docs/images/confirm-clean-up.png" alt="Delete 2 downloaded files? 4.3 GB in all, with the file names listed. You can download them again later. Cancel and Delete buttons" width="400">
 
 ### Shared folder
 
@@ -157,6 +196,9 @@ sudo /usr/sbin/update-binfmts --install rosetta /media/rosetta/rosetta \
 - No port forwarding. To reach Linux from the Mac (for example over SSH), use its IP
   address; run `ip addr` in Linux to see it.
 - No camera or USB passthrough.
+- Restarting Linux from inside it turns the system off: Apple Virtualization reports a
+  restart the same way as a power-off, so Try Linux can't start it again on its own.
+  Use **Power > Restart** instead, or start it again from Your systems.
 
 ## Building from source
 

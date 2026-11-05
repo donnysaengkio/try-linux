@@ -61,15 +61,49 @@ final class AppModel: ObservableObject {
         screen = systems.isEmpty ? .choose : .home
     }
 
+    // A themed notice. Its title is the message's first part (up to a blank line, a colon or the
+    // first sentence) when that's short; otherwise `title`, with the whole message below.
     func show(_ message: String, title: String = "Try Linux") {
-        alert = AlertItem(title: title, message: message)
+        let msg = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        var head = msg, body: String? = nil
+        for sep in ["\n\n", ": ", ". "] {
+            if let r = msg.range(of: sep), r.lowerBound > msg.startIndex {
+                head = String(msg[..<r.lowerBound]) + (sep == ". " ? "." : "")
+                body = String(msg[r.upperBound...])
+                break
+            }
+        }
+        if head.count > 70 { head = title; body = msg }
+        if let b = body, let first = b.first { body = first.uppercased() + b.dropFirst() }
+        head = head.trimmingCharacters(in: CharacterSet(charactersIn: ".:"))
+        let heading = head, text = body?.isEmpty == false ? body : nil
+        Task { @MainActor in ThemedDialog.show(heading, text, primary: "OK") }
     }
 
     func describe(_ c: VMConfig) -> String {
         let res = c.resources()
         let what = Distro.find(c.distroId)?.name ?? URL(fileURLWithPath: c.iso).lastPathComponent
-        let state = running[c.id] != nil ? "running" : (c.pendingInstall ? "ready to install" : "")
-        return [what, "\(res.ramGB) GB, \(res.cores) cores", state].filter { !$0.isEmpty }.joined(separator: "  ·  ")
+        return [what, "\(res.ramGB) GB, \(res.cores) cores"].filter { !$0.isEmpty }.joined(separator: "  ·  ")
+    }
+
+    // The self-test shows systems as running without starting them.
+    var previewStatus: [String: String] = [:]
+
+    // Shown on the right of the system's row on Your systems.
+    func status(_ c: VMConfig) -> String {
+        if let s = previewStatus[c.id] { return s }
+        if let s = running[c.id] {
+            if s.held { return "Off, console open" }
+            return (s.paused ? "Paused" : "Running") + (s.hidden ? ", window closed" : "")
+        }
+        return c.pendingInstall ? "Ready to install" : ""
+    }
+
+    // Powered on: running or paused, not a console opened while off.
+    func isOn(_ c: VMConfig) -> Bool {
+        if let s = previewStatus[c.id] { return s.hasPrefix("Running") || s.hasPrefix("Paused") }
+        if let s = running[c.id] { return !s.held }
+        return false
     }
 
     // MARK: install
@@ -152,15 +186,19 @@ final class AppModel: ObservableObject {
 
     // MARK: running
 
+    // Starts a system, or brings a running one's window to the front. `console` opens its window
+    // with the system still off; Start or Power on starts it there.
     @MainActor
-    func boot(_ config: VMConfig, isoOverride: Bool = false) {
+    func boot(_ config: VMConfig, isoOverride: Bool = false, console: Bool = false) {
         if let s = running[config.id] { s.bringToFront(); return }
         guard VZVirtualMachine.isSupported else { show(Self.unsupported); return }
         var c = config
         do { try Disk.grow(c.diskURL, gb: c.diskGB) } catch { show("Couldn't grow the disk, so it keeps its current size.\n\n\(error.localizedDescription)") }
         let installer = c.pendingInstall && FileManager.default.fileExists(atPath: c.iso)
-        screen = .progress
-        progress = ProgressState(status: "Starting \(c.displayName)", detail: installer ? "Booting the installer" : "")
+        if !console {
+            screen = .progress
+            progress = ProgressState(status: "Starting \(c.displayName)", detail: installer ? "Booting the installer" : "")
+        }
         let session: VMSession
         do { session = try VMSession(config: c, installer: installer) } catch {
             goHome()
@@ -170,6 +208,12 @@ final class AppModel: ObservableObject {
         c = session.config
         running[c.id] = session
         session.onStop = { [weak self] s, error in self?.stopped(s, error) }
+        session.onChange = { [weak self] in self?.objectWillChange.send() }
+        session.onWindowClosed = { Self.showLauncher() }
+        if console {
+            session.showConsole()
+            return
+        }
         session.start { [weak self] error in
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -180,35 +224,111 @@ final class AppModel: ObservableObject {
                     return
                 }
                 session.showWindow()
-                var fresh = VMConfig.load(c.dir) ?? c
-                let f = DateFormatter()
-                f.dateFormat = "yyyy-MM-dd HH:mm"
-                fresh.lastBoot = f.string(from: Date())
-                try? fresh.save()
+                self.recordBoot(c)
                 self.goHome()
             }
         }
     }
 
+    private func recordBoot(_ c: VMConfig) {
+        var fresh = VMConfig.load(c.dir) ?? c
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd HH:mm"
+        fresh.lastBoot = f.string(from: Date())
+        try? fresh.save()
+    }
+
+    // Console: a running system's window, or for one that's off, its window with the system still off.
+    // In fullscreen that would be a blank screen, so it offers to power the system on instead.
+    @MainActor
+    func openConsole(_ c: VMConfig) {
+        if let s = running[c.id] { s.bringToFront(); return }
+        if c.fullscreen {
+            if ThemedDialog.show("\(c.displayName) isn't running", "Would you like to power it on?",
+                                 primary: "Power on", secondary: "Cancel") == .primary { boot(c) }
+            return
+        }
+        boot(c, console: true)
+    }
+
+    // Start on a system whose console is open: powers it on in that window.
+    @MainActor
+    func powerOn(_ s: VMSession) {
+        s.powerOn { [weak self] error in
+            guard let self else { return }
+            if let error {
+                self.show("\(s.config.displayName) couldn't start.\n\n\(error.localizedDescription)")
+                return
+            }
+            self.recordBoot(s.config)
+            s.bringToFront()
+        }
+    }
+
+    // MARK: power menu
+
+    @MainActor
+    func shutDown(_ s: VMSession) {
+        guard ThemedDialog.show("Shut down \(s.config.displayName)?",
+                                "Linux shuts down cleanly. Its desktop may ask first; GNOME goes ahead on its own after 60 seconds.",
+                                primary: "Shut down", secondary: "Cancel") == .primary else { return }
+        s.bringToFront()   // so any question Linux asks can be answered
+        s.requestShutdown()
+    }
+
+    @MainActor
+    func restart(_ s: VMSession) {
+        guard ThemedDialog.show("Restart \(s.config.displayName)?",
+                                "Linux shuts down cleanly, then starts again with any settings you changed. Its desktop may ask first; GNOME goes ahead on its own after 60 seconds.",
+                                primary: "Restart", secondary: "Cancel") == .primary else { return }
+        s.restartAsked = Date()
+        s.bringToFront()
+        s.requestShutdown()
+    }
+
+    @MainActor
+    func forceStop(_ s: VMSession) {
+        guard ThemedDialog.show("Force \(s.config.displayName) to stop?",
+                                "This turns it off immediately, like unplugging a Mac. Unsaved work in Linux is lost.",
+                                primary: "Force stop", secondary: "Cancel", danger: true) == .primary else { return }
+        s.quiet = true
+        s.forceStop()
+    }
+
+    @MainActor
+    func reset(_ s: VMSession) {
+        guard ThemedDialog.show("Reset \(s.config.displayName)?",
+                                "This restarts it immediately, like a reset button. Unsaved work in Linux is lost.",
+                                primary: "Reset", secondary: "Cancel", danger: true) == .primary else { return }
+        s.resetAsked = true
+        s.forceStop()
+    }
+
+    static func showLauncher() {
+        if let w = NSApp.windows.first(where: { $0.identifier?.rawValue == "main" || $0.title == "Try Linux" }) {
+            w.makeKeyAndOrderFront(nil)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     private func stopped(_ s: VMSession, _ error: Error?) {
         running[s.config.id] = nil
         // An installer session that ran a while has most likely installed the system.
-        if s.installer && Date().timeIntervalSince(s.started) > 60, var fresh = VMConfig.load(s.config.dir) {
+        if s.installer && !s.held && Date().timeIntervalSince(s.started) > 60, var fresh = VMConfig.load(s.config.dir) {
             fresh.pendingInstall = false
             try? fresh.save()
         }
-        if let error { show("\(s.config.displayName) stopped with an error.\n\n\(error.localizedDescription)") }
+        // Restart or Reset from the Power menu: start it again, with any changed settings.
+        // (Apple Virtualization reports a restart from inside Linux the same way as a power-off.)
+        let again = s.resetAsked || (error == nil && Date().timeIntervalSince(s.restartAsked) < 300)
+        if again, let fresh = VMConfig.load(s.config.dir) {
+            reload()
+            Task { @MainActor in self.boot(fresh) }
+            return
+        }
+        if let error, !s.quiet { show("\(s.config.displayName) stopped with an error.\n\n\(error.localizedDescription)") }
         if !busy, screen == .home || screen == .choose { goHome() } else { reload() }
         if running.isEmpty, let done = onAllStopped { onAllStopped = nil; done() }
-    }
-
-    func confirmForceStop(_ s: VMSession) {
-        let alert = NSAlert()
-        alert.messageText = "Force \(s.config.displayName) to stop?"
-        alert.informativeText = "Unsaved work in Linux is lost."
-        alert.addButton(withTitle: "Force Stop")
-        alert.addButton(withTitle: "Cancel")
-        if alert.runModal() == .alertFirstButtonReturn { s.forceStop() }
     }
 
     // MARK: settings helpers
@@ -291,14 +411,12 @@ final class AppModel: ObservableObject {
 }
 
 enum Ask {
-    static func confirm(_ title: String, _ text: String, _ ok: String, destructive: Bool = false) -> Bool {
-        let a = NSAlert()
-        a.messageText = title
-        a.informativeText = text
-        a.alertStyle = destructive ? .critical : .warning
-        a.addButton(withTitle: ok)
-        a.addButton(withTitle: "Cancel")
-        return a.runModal() == .alertFirstButtonReturn
+    // A themed yes/no prompt. Destructive ones have a red button, and Return picks Cancel.
+    @MainActor
+    static func confirm(_ title: String, _ text: String, _ ok: String, path: String? = nil, after: String? = nil,
+                        destructive: Bool = false) -> Bool {
+        ThemedDialog.show(title, text.isEmpty ? nil : text, path: path, after: after,
+                          primary: ok, secondary: "Cancel", danger: destructive) == .primary
     }
 
     static func text(_ title: String, _ prompt: String) -> String? {

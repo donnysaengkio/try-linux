@@ -1,4 +1,5 @@
 // The launcher's pages: your systems, choosing a distribution, setup and progress.
+import AppKit
 import SwiftUI
 
 struct RootView: View {
@@ -14,9 +15,6 @@ struct RootView: View {
             case .settings(let id):
                 if let c = model.systems.first(where: { $0.id == id }) { SettingsView(config: c).id(c.id) } else { HomeView() }
             }
-        }
-        .alert(item: $model.alert) { a in
-            Alert(title: Text(a.title), message: Text(a.message), dismissButton: .default(Text("OK")))
         }
     }
 }
@@ -43,7 +41,8 @@ struct HomeView: View {
             .padding(.top, 16)
             VStack(spacing: 6) {
                 ForEach(model.systems) { vm in
-                    OptionRow(title: vm.displayName, subtitle: model.describe(vm), selected: vm.id == current?.id)
+                    OptionRow(title: vm.displayName, subtitle: model.describe(vm), selected: vm.id == current?.id,
+                              status: model.status(vm), statusColor: model.isOn(vm) ? Theme.accent : Theme.muted)
                         .onTapGesture(count: 2) { selectedId = vm.id; model.boot(vm) }
                         .onTapGesture { selectedId = vm.id }
                 }
@@ -51,22 +50,86 @@ struct HomeView: View {
             }
             .frame(height: 270, alignment: .top)
             .padding(.top, 10)
+            // Four equal buttons across the 640-wide column, 12 apart.
             HStack(spacing: 12) {
-                Button("Add a system") { model.screen = .choose }.buttonStyle(FlatButton()).frame(width: 170, height: 42)
-                Button("Settings") { if let c = current { model.screen = .settings(c.id) } }.buttonStyle(FlatButton()).frame(width: 140, height: 42)
-                Spacer()
-                Button(startTitle) { if let c = current { model.boot(c) } }.buttonStyle(FlatButton(primary: true)).frame(width: 170, height: 42)
-                    .keyboardShortcut(.defaultAction)
+                Button("Add a system") { model.screen = .choose }.buttonStyle(FlatButton()).frame(width: 151, height: 42)
+                Button("Settings") { if let c = current { model.screen = .settings(c.id) } }.buttonStyle(FlatButton()).frame(width: 151, height: 42)
+                // Console opens the system's window; for a system that's off, the window opens with it still off.
+                Button("Console") { if let c = current { model.openConsole(c) } }.buttonStyle(FlatButton()).frame(width: 151, height: 42)
+                if let c = current, model.isOn(c) {
+                    // Power replaces Start while a system runs: a menu, so nothing powers off from one click.
+                    Button("Power  \u{25BE}") { if let s = model.running[c.id] { PowerMenu.show(model, s) } }
+                        .buttonStyle(FlatButton()).frame(width: 151, height: 42)
+                } else {
+                    Button(startTitle) { start() }.buttonStyle(FlatButton(primary: true)).frame(width: 151, height: 42)
+                        .keyboardShortcut(.defaultAction)
+                }
             }
             .padding(.top, 16)
-            Note(text: "Double-click a system to start it. Running systems are in the Try Linux menu bar icon.").padding(.top, 12)
+            Note(text: "Double-click a system to start it, or to open its window while it runs.").padding(.top, 12)
         }
     }
 
     private var startTitle: String {
         guard let c = current else { return "Start" }
-        if model.running[c.id] != nil { return "Show" }
         return c.pendingInstall ? "Install" : "Start"
+    }
+
+    // Start powers on a console opened while the system was off, or starts the system.
+    private func start() {
+        guard let c = current else { return }
+        if let s = model.running[c.id], s.held { model.powerOn(s) } else { model.boot(c) }
+    }
+}
+
+// The Power commands for a running system, as a menu under the mouse (the home page's Power button).
+enum PowerMenu {
+    private final class Action: NSObject {
+        let run: () -> Void
+        init(_ run: @escaping () -> Void) { self.run = run }
+        @objc func fire() { run() }
+    }
+
+    @MainActor
+    static func show(_ model: AppModel, _ s: VMSession) {
+        let menu = NSMenu()
+        var actions: [Action] = []
+        func add(_ title: String, danger: Bool = false, _ run: @escaping () -> Void) {
+            let a = Action(run)
+            actions.append(a)
+            let item = NSMenuItem(title: title, action: #selector(Action.fire), keyEquivalent: "")
+            item.target = a
+            if danger { item.attributedTitle = NSAttributedString(string: title, attributes: [.foregroundColor: NSColor(Theme.danger)]) }
+            menu.addItem(item)
+        }
+        add("Shut down") { model.shutDown(s) }
+        add("Restart") { model.restart(s) }
+        add(s.paused ? "Resume" : "Pause") { s.setPaused(!s.paused) }
+        menu.addItem(.separator())
+        add("Force stop", danger: true) { model.forceStop(s) }
+        add("Reset", danger: true) { model.reset(s) }
+        menu.appearance = NSAppearance(named: .darkAqua)
+        withExtendedLifetime(actions) { _ = menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil) }
+    }
+}
+
+// The same commands in the menu bar icon's menu.
+struct PowerMenuItems: View {
+    @EnvironmentObject var model: AppModel
+    let s: VMSession
+
+    var body: some View {
+        if s.held {
+            Button("Power on") { model.powerOn(s) }
+            Button("Close console") { s.forceStop() }
+        } else {
+            Button("Shut down") { model.shutDown(s) }
+            Button("Restart") { model.restart(s) }
+            Button(s.paused ? "Resume" : "Pause") { s.setPaused(!s.paused) }
+            Divider()
+            Button("Force stop") { model.forceStop(s) }
+            Button("Reset") { model.reset(s) }
+        }
     }
 }
 
@@ -76,7 +139,7 @@ struct ChooseView: View {
 
     var body: some View {
         Page {
-            Heading(text: "Choose a Linux OS to try", centered: true).padding(.top, 10)
+            Heading(text: "Choose a Linux OS", centered: true).padding(.top, 10)
             Text("Try Linux downloads the official ARM64 installer and checks it before use.")
                 .font(Theme.mono(11.5)).foregroundColor(Theme.muted)
                 .frame(maxWidth: .infinity).padding(.top, 6)
@@ -232,7 +295,7 @@ struct ProgressScreen: View {
     @EnvironmentObject var model: AppModel
 
     static let tips = [
-        "Running systems live in the Try Linux menu bar icon; use it to shut them down cleanly.",
+        "Closing a system's window leaves it running. Double-click it on Your systems to open it again.",
         "The installer only sees a virtual disk, a file on your Mac. Your Mac's drive is never touched.",
         "Copy and paste works between macOS and Linux once Linux has spice-vdagent (Fedora and Ubuntu include it).",
         "Settings can share a Mac folder with Linux: sudo mount -t virtiofs host /mnt/host",

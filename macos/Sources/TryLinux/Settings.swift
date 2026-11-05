@@ -242,7 +242,7 @@ struct SettingsView: View {
 
     private func stopped() -> Bool {
         if !isRunning { return true }
-        model.show("Shut \(c.displayName) down first, from its window or the Try Linux menu bar icon.")
+        model.show("Shut \(c.displayName) down first\n\nUse Power on Your systems, or the Try Linux menu bar icon.")
         return false
     }
 
@@ -271,7 +271,8 @@ struct SettingsView: View {
             guard let picked = Ask.file("Choose the installer to start over with") else { return }
             iso = picked
         }
-        guard Ask.confirm("Reset \(c.displayName)?", "This erases everything installed in it, including its snapshots, and starts over with the installer. Back it up first if you might need anything.", "Reset", destructive: true) else { return }
+        guard Ask.confirm("Reset \(c.displayName)?", "This erases everything installed in it, including its snapshots, and starts over with the installer.", "Reset",
+                          after: "Back it up first if you might need anything.", destructive: true) else { return }
         let cfg = c, isoPath = iso.path
         model.runTool("Resetting \(cfg.displayName)", for: cfg.id) {
             let size = max(16, Int(Disk.capacity(cfg.diskURL) >> 30), cfg.diskGB)
@@ -298,17 +299,22 @@ struct SettingsView: View {
         let needed = Set(model.systems.filter(\.pendingInstall).map(\.iso))
         let files = ((try? FileManager.default.contentsOfDirectory(at: Paths.isos, includingPropertiesForKeys: [.fileSizeKey])) ?? [])
             .filter { !needed.contains($0.path) }
-        guard !files.isEmpty else { model.show("Nothing to clean up. Installers that a system still needs are kept."); return }
+        guard !files.isEmpty else {
+            ThemedDialog.show("Nothing to clean up", "Installers that a system still needs are kept.", primary: "OK")
+            return
+        }
         let total = files.reduce(Int64(0)) { $0 + Int64((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
-        let names = files.prefix(8).map(\.lastPathComponent).joined(separator: "\n") + (files.count > 8 ? "\n…" : "")
-        guard Ask.confirm("Delete \(files.count) downloaded file(s), \(formatBytes(total))?", names + "\n\nYou can download them again later.", "Delete") else { return }
+        let names = files.prefix(8).map(\.lastPathComponent).joined(separator: "\n") + (files.count > 8 ? "\n… and \(files.count - 8) more" : "")
+        guard Ask.confirm("Delete \(files.count) downloaded \(files.count == 1 ? "file" : "files")?", "\(formatBytes(total)) in all:",
+                          "Delete", path: names, after: "You can download them again later.", destructive: true) else { return }
         var failed = 0
         for f in files { do { try FileManager.default.removeItem(at: f) } catch { failed += 1 } }
-        model.show("Freed \(formatBytes(total))." + (failed > 0 ? " \(failed) file(s) couldn't be deleted." : ""))
+        ThemedDialog.show("Freed \(formatBytes(total))", failed > 0 ? "\(failed) file(s) couldn't be deleted." : nil, primary: "OK")
     }
 
     private func delete() {
-        guard stopped(), Ask.confirm("Delete \(c.displayName)?", "This permanently removes its virtual disk, snapshots and everything installed in it. Downloaded ISOs are kept.", "Delete", destructive: true) else { return }
+        guard stopped(), Ask.confirm("Delete \(c.displayName)?", "This permanently removes its virtual disk, snapshots and everything installed in it.", "Delete",
+                                     after: "Downloaded ISOs are kept.", destructive: true) else { return }
         do { try FileManager.default.removeItem(at: c.dir) } catch { model.show("Couldn't delete it completely: \(error.localizedDescription)") }
         model.goHome()
     }
@@ -384,13 +390,15 @@ struct SnapshotsSheet: View {
             HStack(spacing: 10) {
                 Button("Take snapshot") { act { try Snapshots.take(config) } }.buttonStyle(FlatButton(primary: true)).frame(width: 160, height: 34)
                 Button("Revert") {
-                    if let s = current, Ask.confirm("Revert to \(s.id)?", "Changes made to \(config.displayName) since then are lost.", "Revert", destructive: true) {
+                    if let s = current, Ask.confirm("Revert to this snapshot?", "", "Revert", path: s.id,
+                                                    after: "Changes made to \(config.displayName) since then are lost.", destructive: true) {
                         act { try Snapshots.revert(config, to: s) }
                     }
                 }
                 .buttonStyle(FlatButton()).frame(width: 100, height: 34).disabled(current == nil)
                 Button("Delete") {
-                    if let s = current, Ask.confirm("Delete the snapshot \(s.id)?", "", "Delete", destructive: true) {
+                    if let s = current, Ask.confirm("Delete this snapshot?", "", "Delete", path: s.id,
+                                                    after: "It can't be restored afterwards.", destructive: true) {
                         act { try Snapshots.delete(config, s) }
                     }
                 }
