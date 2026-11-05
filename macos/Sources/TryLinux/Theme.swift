@@ -2,35 +2,57 @@
 import AppKit
 import SwiftUI
 
+// Colors follow Proton's palette (proton.me/blog/new-visual-universe) on a Proton Pass-style dark UI.
 enum Theme {
-    static let bg = rgb(20, 22, 28)
-    static let card = rgb(30, 33, 42)
-    static let cardHover = rgb(38, 42, 54)
-    static let cardSelected = rgb(40, 52, 62)
-    static let border = rgb(54, 60, 76)
-    static let text = rgb(216, 222, 233)
-    static let muted = rgb(132, 142, 162)
-    static let accent = rgb(136, 192, 208)
-    static let accent2 = rgb(129, 161, 193)
-    static let danger = rgb(220, 120, 128)
+    static let bg = rgb(25, 25, 39)              // #191927
+    static let card = rgb(34, 33, 52)
+    static let cardHover = rgb(42, 40, 62)
+    static let cardSelected = rgb(48, 45, 69)    // #302D45
+    static let box = rgb(29, 28, 45)             // containers that group rows
+    static let border = rgb(56, 48, 88)          // #383058
+    static let text = rgb(245, 244, 242)         // #F5F4F2
+    static let muted = rgb(150, 146, 176)
+    // Accent is the main call to action only (Start, Next, Save). Highlight is the logo and active
+    // form elements: selection, tabs, checkboxes, progress, section titles.
+    static let accent = rgb(109, 74, 255)        // #6D4AFF
+    static let accentHover = rgb(138, 110, 255)  // #8A6EFF
+    static let accent2 = rgb(56, 37, 128)        // #382580
+    static let highlight = rgb(167, 146, 255)    // #A792FF
+    static let highlight2 = rgb(138, 110, 255)   // #8A6EFF
+    static let success = rgb(102, 222, 177)      // #66DEB1, a running system
+    static let warning = rgb(249, 217, 73)       // #F9D949
+    static let danger = rgb(235, 80, 141)        // #EB508D
 
     static func rgb(_ r: Double, _ g: Double, _ b: Double) -> Color {
         Color(red: r / 255, green: g / 255, blue: b / 255)
     }
 
-    // Blend from accent (top of the logo) to accent2 (bottom).
+    // Blend from highlight (top of the logo) to highlight2 (bottom).
     static func logoRow(_ t: Double) -> Color {
-        rgb(136 + (129 - 136) * t, 192 + (161 - 192) * t, 208 + (193 - 208) * t)
+        rgb(167 + (138 - 167) * t, 146 + (110 - 146) * t, 255)
     }
 
+    // The monospaced font is for headings only (page and section titles, system names); everything else
+    // (descriptions, labels, buttons, tabs) is the system's sans-serif font.
     static func mono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
         .system(size: size, weight: weight, design: .monospaced)
+    }
+
+    static func sans(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        .system(size: size, weight: weight)
+    }
+}
+
+// A bordered container that groups related rows, a shade darker than the rows inside it.
+struct BoxStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content.padding(6).background(Theme.box).overlay(Rectangle().stroke(Theme.border, lineWidth: 1))
     }
 }
 
 struct PixelLogo: View {
     var word = "TRY LINUX"
-    var px: CGFloat = 10
+    var px: CGFloat = 7
 
     static let glyphs: [Character: [String]] = [
         "T": ["#####", "..#..", "..#..", "..#..", "..#..", "..#..", "..#.."],
@@ -50,11 +72,11 @@ struct PixelLogo: View {
             // Center the letters plus their drop shadow.
             let x0 = ((size.width - cols * px - shadow) / 2).rounded(.down)
             let y0 = ((size.height - 7 * px - shadow) / 2).rounded(.down)
-            draw(ctx, x0 + shadow, y0 + shadow) { _ in Theme.rgb(34, 52, 62) }
+            draw(ctx, x0 + shadow, y0 + shadow) { _ in Theme.accent2 }
             draw(ctx, x0, y0) { row in Theme.logoRow(row / 6) }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 84)
+        .frame(height: 56)
     }
 
     private func draw(_ ctx: GraphicsContext, _ x0: CGFloat, _ y0: CGFloat, _ color: (Double) -> Color) {
@@ -73,7 +95,7 @@ struct PixelLogo: View {
 struct FlatButton: ButtonStyle {
     var primary = false
     var danger = false
-    var accent = false      // accent-colored text and outline, for offers like "Update to x.y.z"
+    var accent = false      // highlight-colored text and outline, for secondary offers
 
     func makeBody(configuration: Configuration) -> some View {
         FlatButtonBody(configuration: configuration, primary: primary, danger: danger, accent: accent)
@@ -90,14 +112,14 @@ private struct FlatButtonBody: View {
 
     var body: some View {
         let fill: Color = primary
-            ? (configuration.isPressed ? Theme.accent2 : (hover ? Theme.rgb(160, 210, 224) : Theme.accent))
+            ? (configuration.isPressed ? Theme.accent2 : (hover ? Theme.accentHover : Theme.accent))
             : (configuration.isPressed || hover ? Theme.cardHover : Theme.card)
         configuration.label
-            .font(Theme.mono(13, .bold))
-            .foregroundColor(primary ? Theme.bg : (danger ? Theme.danger : (accent ? Theme.accent : Theme.text)))
+            .font(Theme.sans(13, .semibold))
+            .foregroundColor(primary ? .white : (danger ? Theme.danger : (accent ? Theme.highlight : Theme.text)))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(fill)
-            .overlay(Rectangle().stroke(primary || accent ? Theme.accent : (danger ? Theme.danger : Theme.border), lineWidth: 1))
+            .overlay(Rectangle().stroke(primary ? Theme.accent : accent ? Theme.highlight : (danger ? Theme.danger : Theme.border), lineWidth: 1))
             .contentShape(Rectangle())
             .opacity(enabled ? 1 : 0.45)
             .onHover { hover = $0 }
@@ -111,14 +133,19 @@ struct OptionRow: View {
     var twoLine = false
     var status = ""                  // shown on the right, centred on the row
     var statusColor = Theme.muted
+    // A system's values (CPU, memory, disk), shown as columns on the right with the status in its own
+    // column before them. The column headers are above the list (see StatHeaders).
+    var stats: [String] = []
     @State private var hover = false
+
+    static let statusW: CGFloat = 76, statW: CGFloat = 86, gap: CGFloat = 10, trailing: CGFloat = 18
 
     var body: some View {
         HStack(spacing: 0) {
-            Rectangle().fill(selected ? Theme.accent : Color.clear).frame(width: 4)
-            VStack(alignment: .leading, spacing: 4) {
+            Rectangle().fill(selected ? Theme.highlight : Color.clear).frame(width: 4)
+            VStack(alignment: .leading, spacing: 7) {
                 Text(title).font(Theme.mono(13, .bold)).foregroundColor(Theme.text).lineLimit(1)
-                Text(subtitle).font(Theme.mono(11.5)).foregroundColor(Theme.muted)
+                Text(subtitle).font(Theme.sans(11.5)).foregroundColor(Theme.muted)
                     .lineLimit(twoLine ? 2 : 1)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -126,15 +153,25 @@ struct OptionRow: View {
             .padding(.trailing, 18)
             .padding(.vertical, 9)
             Spacer(minLength: 0)
-            if !status.isEmpty {
-                Text(status).font(Theme.mono(11.5)).foregroundColor(statusColor).lineLimit(1)
+            if !stats.isEmpty {
+                Text(status).font(Theme.sans(11.5)).foregroundColor(statusColor).lineLimit(1)
+                    .fixedSize().frame(minWidth: Self.statusW, alignment: .leading)
+                Rectangle().fill(Theme.border).frame(width: 1, height: 30)
+                Spacer().frame(width: Self.gap - 1)
+                ForEach(stats.indices, id: \.self) { i in
+                    Text(stats[i]).font(Theme.sans(13, .semibold)).foregroundColor(Theme.text).lineLimit(1)
+                        .frame(width: Self.statW, alignment: .leading)
+                }
+                Spacer().frame(width: Self.trailing)
+            } else if !status.isEmpty {
+                Text(status).font(Theme.sans(11.5)).foregroundColor(statusColor).lineLimit(1)
                     .fixedSize().padding(.trailing, 18)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: twoLine ? 64 : 54, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: twoLine ? 70 : 54, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)   // keep to its content; don't stretch into free space
         .background(selected ? Theme.cardSelected : (hover ? Theme.cardHover : Theme.card))
-        .overlay(Rectangle().stroke(selected ? Theme.accent : Theme.border, lineWidth: 1))
+        .overlay(Rectangle().stroke(selected ? Theme.highlight : Theme.border, lineWidth: 1))
         .contentShape(Rectangle())
         .onHover { hover = $0 }
     }
@@ -148,10 +185,10 @@ struct Segmented: View {
         HStack(spacing: 0) {
             ForEach(options.indices, id: \.self) { i in
                 Text(options[i])
-                    .font(Theme.mono(13, .bold))
+                    .font(Theme.sans(13, .semibold))
                     .foregroundColor(i == selection ? Theme.bg : Theme.text)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(i == selection ? Theme.accent : Theme.card)
+                    .background(i == selection ? Theme.highlight : Theme.card)
                     .contentShape(Rectangle())
                     .onTapGesture { selection = i }
             }
@@ -168,11 +205,11 @@ struct TabStrip: View {
         HStack(spacing: 6) {
             ForEach(tabs.indices, id: \.self) { i in
                 Text(tabs[i])
-                    .font(Theme.mono(13, .bold))
-                    .foregroundColor(i == selection ? Theme.accent : Theme.text)
+                    .font(Theme.sans(13, .semibold))
+                    .foregroundColor(i == selection ? Theme.highlight : Theme.text)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(i == selection ? Theme.cardSelected : Theme.card)
-                    .overlay(Rectangle().stroke(i == selection ? Theme.accent : Theme.border, lineWidth: 1))
+                    .overlay(Rectangle().stroke(i == selection ? Theme.highlight : Theme.border, lineWidth: 1))
                     .contentShape(Rectangle())
                     .onTapGesture { selection = i }
             }
@@ -190,14 +227,14 @@ struct CheckRow: View {
         Button { on.toggle() } label: {
             HStack(spacing: 8) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 3).fill(on ? Theme.accent : Theme.card)
+                    RoundedRectangle(cornerRadius: 3).fill(on ? Theme.highlight : Theme.card)
                     RoundedRectangle(cornerRadius: 3).stroke(Theme.border, lineWidth: 1)
                     if on {
                         Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundColor(Theme.bg)
                     }
                 }
                 .frame(width: 16, height: 16)
-                Text(title).font(Theme.mono(13)).foregroundColor(Theme.text)
+                Text(title).font(Theme.sans(13)).foregroundColor(Theme.text)
                 Spacer(minLength: 0)
             }
             .contentShape(Rectangle())
@@ -217,7 +254,7 @@ struct NumberField: View {
     var body: some View {
         HStack(spacing: 0) {
             Text("\(value)")
-                .font(Theme.mono(13))
+                .font(Theme.sans(13))
                 .foregroundColor(enabled ? Theme.text : Theme.muted)
                 .frame(width: 58, alignment: .leading)
                 .padding(.leading, 8)
@@ -251,7 +288,7 @@ struct TextInput: View {
     var body: some View {
         TextField(placeholder, text: $text)
             .textFieldStyle(.plain)
-            .font(Theme.mono(13))
+            .font(Theme.sans(13))
             .foregroundColor(Theme.text)
             .padding(.horizontal, 8)
             .frame(height: 26)
@@ -269,11 +306,11 @@ struct Bar: View {
             ZStack(alignment: .leading) {
                 Rectangle().fill(Theme.card)
                 if let v = value {
-                    Rectangle().fill(Theme.accent).frame(width: geo.size.width * min(1, max(0, v)))
+                    Rectangle().fill(Theme.highlight).frame(width: geo.size.width * min(1, max(0, v)))
                 } else {
                     TimelineView(.animation) { tl in
                         let t = tl.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.6) / 1.6
-                        Rectangle().fill(Theme.accent)
+                        Rectangle().fill(Theme.highlight)
                             .frame(width: geo.size.width * 0.3)
                             .offset(x: geo.size.width * (t * 1.3 - 0.3))
                     }
@@ -323,7 +360,7 @@ struct Note: View {
 
     var body: some View {
         Text(text)
-            .font(Theme.mono(11.5))
+            .font(Theme.sans(11.5))
             .foregroundColor(color)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -337,7 +374,7 @@ struct FormRow<Content: View>: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
-            Text(label).font(Theme.mono(13)).foregroundColor(Theme.text).frame(width: 180, alignment: .leading)
+            Text(label).font(Theme.sans(13)).foregroundColor(Theme.text).frame(width: 180, alignment: .leading)
             content()
             Spacer(minLength: 0)
         }
@@ -348,7 +385,8 @@ struct SectionTitle: View {
     let text: String
 
     var body: some View {
-        Text(text).font(Theme.mono(13, .bold)).foregroundColor(Theme.accent).padding(.top, 14).padding(.bottom, 4)
+        // Twice the space above each section as before.
+        Text(text).font(Theme.mono(13, .bold)).foregroundColor(Theme.highlight).padding(.top, 28).padding(.bottom, 4)
     }
 }
 

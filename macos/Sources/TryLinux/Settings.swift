@@ -25,7 +25,7 @@ struct SettingsView: View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 header
-                TabStrip(tabs: ["General", "Devices", "Advanced", "Recovery"], selection: $tab).padding(.top, 14)
+                TabStrip(tabs: ["General", "Devices", "Advanced", "Recovery"], selection: $tab).padding(.top, 28)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 10) {
                         switch tab {
@@ -49,14 +49,53 @@ struct SettingsView: View {
         .sheet(isPresented: $showSnapshots) { SnapshotsSheet(config: c).environmentObject(model) }
     }
 
+    // Renaming: the pencil after the name edits it in place; Return (or clicking away) saves, Esc cancels.
+    @State private var editingName = false
+    @State private var nameDraft = ""
+    @FocusState private var nameFocused: Bool
+
+    private func finishRename(_ keep: Bool) {
+        guard editingName else { return }
+        editingName = false
+        let n = nameDraft.trimmingCharacters(in: .whitespaces)
+        if keep, !n.isEmpty, n != c.displayName {
+            c.displayName = n
+            model.rename(c, to: n)
+        }
+    }
+
     private var header: some View {
         HStack(spacing: 14) {
             Image(nsImage: Icons.image(size: 48)).resizable().frame(width: 48, height: 48)
             VStack(alignment: .leading, spacing: 4) {
-                Text(c.displayName).font(Theme.mono(19, .bold)).foregroundColor(Theme.text)
-                Text([(Distro.find(c.distroId)?.name ?? "Custom ISO").uppercased(), "TRY LINUX FOR MAC v\(AppInfo.version)", isRunning ? "RUNNING" : ""]
+                if editingName {
+                    TextField("", text: $nameDraft)
+                        .textFieldStyle(.plain)
+                        .font(Theme.mono(19, .bold)).foregroundColor(Theme.text)
+                        .padding(.horizontal, 6).frame(height: 28)
+                        .background(Theme.card).overlay(Rectangle().stroke(Theme.border, lineWidth: 1))
+                        .focused($nameFocused)
+                        .onSubmit { finishRename(true) }
+                        .onExitCommand { finishRename(false) }
+                        .onChange(of: nameFocused) { focused in if !focused { finishRename(true) } }
+                } else {
+                    HStack(spacing: 8) {
+                        Text(c.displayName).font(Theme.mono(19, .bold)).foregroundColor(Theme.text).lineLimit(1)
+                        Button {
+                            nameDraft = c.displayName
+                            editingName = true
+                            DispatchQueue.main.async { nameFocused = true }
+                        } label: {
+                            Image(systemName: "pencil").font(.system(size: 13)).foregroundColor(Theme.muted)
+                                .frame(width: 24, height: 24).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Rename")
+                    }
+                }
+                Text([model.osLabel(c).uppercased(), "TRY LINUX FOR MAC v\(AppInfo.version)", isRunning ? "RUNNING" : ""]
                     .filter { !$0.isEmpty }.joined(separator: "  ·  "))
-                    .font(Theme.mono(11.5)).foregroundColor(Theme.muted)
+                    .font(Theme.sans(11.5)).foregroundColor(Theme.muted)
             }
             Spacer()
         }
@@ -80,12 +119,12 @@ struct SettingsView: View {
         SectionTitle(text: "Storage and sharing")
         FormRow(label: "Disk capacity (GB)") {
             NumberField(value: $c.diskGB, range: 0...4096, step: 8)
-            Text("0 keeps the current size").font(Theme.mono(11.5)).foregroundColor(Theme.muted)
+            Text("0 keeps the current size").font(Theme.sans(11.5)).foregroundColor(Theme.muted)
         }
         Note(text: "Increasing grows the disk next launch; lowering never shrinks it. Linux may need to expand its partition to use the new space.")
         Note(text: "Current capacity: \(gb(Disk.capacity(c.diskURL))) (\(gb(Disk.used(c.diskURL))) used). Free on this Mac: \(gb(UInt64(max(0, Disk.freeSpace(c.dir))))).")
         FormRow(label: "Location") {
-            Text(Paths.display(c.dir)).font(Theme.mono(11.5)).foregroundColor(Theme.muted).lineLimit(1).truncationMode(.middle)
+            Text(Paths.display(c.dir)).font(Theme.sans(11.5)).foregroundColor(Theme.muted).lineLimit(1).truncationMode(.middle)
         }
         FormRow(label: "Shared folder") {
             TextInput(text: $c.sharedFolder).frame(width: 300)
@@ -242,7 +281,7 @@ struct SettingsView: View {
 
     private func stopped() -> Bool {
         if !isRunning { return true }
-        model.show("Shut \(c.displayName) down first\n\nUse Power on Your systems, or the Try Linux menu bar icon.")
+        model.show("Shut \(c.displayName) down first\n\nUse Power on Virtual Machines, or the Try Linux menu bar icon.")
         return false
     }
 
@@ -284,7 +323,7 @@ struct SettingsView: View {
             fresh.iso = isoPath
             fresh.pendingInstall = true
             try fresh.save()
-            return "\(cfg.displayName) was reset. Click Launch to run the installer."
+            return "\(cfg.displayName) was reset. Click Install on Virtual Machines to run the installer."
         }
     }
 
@@ -322,23 +361,14 @@ struct SettingsView: View {
     // MARK: Footer
 
     private var footer: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Note(text: isRunning ? "\(c.displayName) is running. Changes apply the next time it starts." : "Your files persist between sessions. Choose your settings, then launch.")
-            HStack(spacing: 10) {
-                Button("Back") { model.goHome() }.buttonStyle(FlatButton()).frame(width: 120, height: 42)
-                Spacer()
-                Button("Save") { if save() { model.goHome() } }.buttonStyle(FlatButton()).frame(width: 120, height: 42)
-                Button(isRunning ? "Show \(short)" : "Launch \(short)") { if save() { model.boot(c) } }
-                    .buttonStyle(FlatButton(primary: true)).frame(width: 190, height: 42)
-                    .keyboardShortcut(.defaultAction)
-            }
+        // Save is the page's main action; start a system from Virtual Machines.
+        HStack(spacing: 10) {
+            Button("Back") { model.goHome() }.buttonStyle(FlatButton()).frame(width: 120, height: 42)
+            Spacer()
+            Button("Save") { if save() { model.goHome() } }.buttonStyle(FlatButton(primary: true)).frame(width: 140, height: 42)
+                .keyboardShortcut(.defaultAction)
         }
         .padding(.top, 12)
-    }
-
-    private var short: String {
-        let first = c.displayName.split(separator: " ").first.map(String.init) ?? c.displayName
-        return String(first.prefix(14))
     }
 
     private func save() -> Bool {
@@ -377,10 +407,10 @@ struct SnapshotsSheet: View {
                     Note(text: "No snapshots yet.").padding(10)
                 }
                 ForEach(items) { s in
-                    Text(s.id).font(Theme.mono(13)).foregroundColor(Theme.text)
+                    Text(s.id).font(Theme.sans(13)).foregroundColor(Theme.text)
                         .frame(maxWidth: .infinity, alignment: .leading).padding(8)
                         .background(s.id == selected ? Theme.cardSelected : Theme.card)
-                        .overlay(Rectangle().stroke(s.id == selected ? Theme.accent : Theme.border, lineWidth: 1))
+                        .overlay(Rectangle().stroke(s.id == selected ? Theme.highlight : Theme.border, lineWidth: 1))
                         .contentShape(Rectangle())
                         .onTapGesture { selected = s.id }
                 }

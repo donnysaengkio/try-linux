@@ -6,6 +6,14 @@ struct RootView: View {
     @EnvironmentObject var model: AppModel
 
     var body: some View {
+        VStack(spacing: 0) {
+            NoticeArea()
+            screens
+        }
+        .background(Theme.bg)
+    }
+
+    @ViewBuilder private var screens: some View {
         Group {
             switch model.screen {
             case .home: HomeView()
@@ -19,6 +27,106 @@ struct RootView: View {
     }
 }
 
+// The window's notification area, above every page: updates, results and problems that don't need an answer.
+// Each has a colored edge and icon by kind, an optional action button and a dismiss X.
+struct NoticeArea: View {
+    @EnvironmentObject var model: AppModel
+
+    private var all: [Notice] {
+        var list: [Notice] = []
+        if model.stagedUpdate != nil, let v = model.updateAvailable {
+            list.append(Notice(id: "update", kind: .info, text: "Try Linux \(v) is downloaded and installs when you quit Try Linux."))
+        } else if let v = model.updateAvailable {
+            list.append(Notice(id: "update", kind: .info, text: "Try Linux \(v) is available. You have \(AppInfo.version).",
+                               actionTitle: "Update", action: { Task { @MainActor in await model.startUpdate() } }))
+        }
+        return list.filter { !model.dismissedNotices.contains($0.id) } + model.notices
+    }
+
+    var body: some View {
+        if !all.isEmpty {
+            VStack(spacing: 8) {
+                ForEach(all) { n in NoticeRow(notice: n) }
+            }
+            .frame(width: 640)
+            .padding(.top, 12)
+            .padding(.bottom, 4)
+            .frame(maxWidth: .infinity)
+        }
+    }
+}
+
+struct NoticeRow: View {
+    @EnvironmentObject var model: AppModel
+    let notice: Notice
+
+    private var color: Color {
+        switch notice.kind {
+        case .success: return Theme.success
+        case .warning: return Theme.warning
+        case .error: return Theme.danger
+        case .info: return Theme.highlight
+        }
+    }
+
+    private var symbol: String {
+        switch notice.kind {
+        case .success: return "checkmark.circle"
+        case .warning: return "exclamationmark.triangle"
+        case .error: return "xmark.circle"
+        case .info: return "info.circle"
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Rectangle().fill(color).frame(width: 4)
+            Image(systemName: symbol).foregroundColor(color).font(.system(size: 14)).frame(width: 22)
+            Text(notice.text).font(Theme.sans(13)).foregroundColor(Theme.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 12)
+            if let title = notice.actionTitle, let action = notice.action {
+                Button(title, action: action).buttonStyle(NoticeButton(color: color)).frame(width: 110, height: 30)
+            }
+            Button { model.dismiss(notice.id) } label: {
+                Image(systemName: "xmark").font(.system(size: 10, weight: .semibold)).foregroundColor(Theme.muted)
+                    .frame(width: 28, height: 28).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 6)
+        }
+        .frame(minHeight: 44)
+        .background(Theme.card)
+        .overlay(Rectangle().stroke(Theme.border, lineWidth: 1))
+    }
+}
+
+// A notification's action: its kind's color for the text and outline.
+private struct NoticeButton: ButtonStyle {
+    let color: Color
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.font(Theme.sans(13, .semibold)).foregroundColor(color)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(configuration.isPressed ? Theme.cardHover : Theme.card)
+            .overlay(Rectangle().stroke(color, lineWidth: 1))
+            .contentShape(Rectangle())
+    }
+}
+
+// Column headers for the rows' status and stats, on the title row and lined up with OptionRow's columns.
+struct StatHeaders: View {
+    var body: some View {
+        HStack(spacing: 0) {
+            Text("STATUS").frame(width: OptionRow.statusW, alignment: .leading)
+            Spacer().frame(width: OptionRow.gap)
+            ForEach(["CPU", "MEM", "DISK"], id: \.self) { Text($0).frame(width: OptionRow.statW, alignment: .leading) }
+            Spacer().frame(width: OptionRow.trailing)
+        }
+        .font(Theme.sans(11)).foregroundColor(Theme.muted)
+    }
+}
+
 struct HomeView: View {
     @EnvironmentObject var model: AppModel
     @State private var selectedId: String?
@@ -29,27 +137,26 @@ struct HomeView: View {
 
     var body: some View {
         Page {
-            HStack {
-                Heading(text: "Your systems")
-                if model.stagedUpdate != nil {
-                    Button("Updates when you quit") {}.buttonStyle(FlatButton()).frame(width: 220, height: 34).disabled(true)
-                } else if let v = model.updateAvailable {
-                    Button("Update to \(v)") { Task { await model.startUpdate() } }
-                        .buttonStyle(FlatButton(accent: true)).frame(width: 200, height: 34)
-                }
+            // The title, with the rows' column headers on the same line, over a divider.
+            HStack(alignment: .lastTextBaseline, spacing: 0) {
+                Heading(text: "Virtual Machines").fixedSize()
+                Spacer(minLength: 0)
+                StatHeaders()
             }
-            .padding(.top, 16)
+            .padding(.top, 32)
+            Rectangle().fill(Theme.border).frame(height: 1).padding(.top, 8)
             VStack(spacing: 6) {
                 ForEach(model.systems) { vm in
-                    OptionRow(title: vm.displayName, subtitle: model.describe(vm), selected: vm.id == current?.id,
-                              status: model.status(vm), statusColor: model.isOn(vm) ? Theme.accent : Theme.muted)
+                    OptionRow(title: vm.displayName, subtitle: model.osLabel(vm), selected: vm.id == current?.id,
+                              status: model.status(vm), statusColor: model.isOn(vm) ? Theme.success : Theme.muted,
+                              stats: model.stats(vm))
                         .onTapGesture(count: 2) { selectedId = vm.id; model.boot(vm) }
                         .onTapGesture { selectedId = vm.id }
                 }
                 Spacer(minLength: 0)
             }
             .frame(height: 270, alignment: .top)
-            .padding(.top, 10)
+            .padding(.top, 12)
             // Four equal buttons across the 640-wide column, 12 apart.
             HStack(spacing: 12) {
                 Button("Add a system") { model.screen = .choose }.buttonStyle(FlatButton()).frame(width: 151, height: 42)
@@ -65,8 +172,7 @@ struct HomeView: View {
                         .keyboardShortcut(.defaultAction)
                 }
             }
-            .padding(.top, 16)
-            Note(text: "Double-click a system to start it, or to open its window while it runs.").padding(.top, 12)
+            .padding(.top, 32)
         }
     }
 
@@ -139,10 +245,11 @@ struct ChooseView: View {
 
     var body: some View {
         Page {
-            Heading(text: "Choose a Linux OS", centered: true).padding(.top, 10)
+            Heading(text: "Choose a Linux OS", centered: true).padding(.top, 20)
             Text("Try Linux downloads the official ARM64 installer and checks it before use.")
-                .font(Theme.mono(11.5)).foregroundColor(Theme.muted)
+                .font(Theme.sans(11.5)).foregroundColor(Theme.muted)
                 .frame(maxWidth: .infinity).padding(.top, 6)
+            // Two containers: the distributions, then your own installer. One selection across both (-1 is your own).
             VStack(spacing: 6) {
                 ForEach(Distro.catalog.indices, id: \.self) { i in
                     let d = Distro.catalog[i]
@@ -151,14 +258,14 @@ struct ChooseView: View {
                         .onTapGesture { selected = i }
                 }
             }
-            .padding(.top, 12)
-            HStack(spacing: 10) {
-                Text("Or install from").font(Theme.mono(11.5)).foregroundColor(Theme.muted).frame(width: 150, alignment: .leading)
-                Button("An ISO file…") { fromFile() }.buttonStyle(FlatButton()).frame(width: 160, height: 36)
-                Button("A link…") { fromLink() }.buttonStyle(FlatButton()).frame(width: 130, height: 36)
-                Spacer()
-            }
-            .padding(.top, 12)
+            .modifier(BoxStyle())
+            .padding(.top, 24)
+            OptionRow(title: "Use your own installer", subtitle: "An .iso file already on this Mac, or a URL link to download one",
+                      selected: selected == -1)
+                .onTapGesture(count: 2) { selected = -1; next() }
+                .onTapGesture { selected = -1 }
+                .modifier(BoxStyle())
+                .padding(.top, 12)
             HStack {
                 if !model.systems.isEmpty {
                     Button("Back") { model.goHome() }.buttonStyle(FlatButton()).frame(width: 120, height: 42)
@@ -167,26 +274,96 @@ struct ChooseView: View {
                 Button("Next") { next() }.buttonStyle(FlatButton(primary: true)).frame(width: 140, height: 42)
                     .keyboardShortcut(.defaultAction)
             }
-            .padding(.top, 16)
+            .padding(.top, 24)
         }
     }
 
     private func next() {
+        if selected == -1 {
+            if let plan = OwnInstallerDialog.ask() { model.screen = .setup(plan) }
+            return
+        }
         let d = Distro.catalog[selected]
         model.screen = .setup(InstallPlan(distro: d, label: d.name))
     }
+}
 
-    private func fromFile() {
-        guard let url = Ask.file("Choose a Linux installer (ARM64 / aarch64)") else { return }
-        model.screen = .setup(InstallPlan(localISO: url, label: url.deletingPathExtension().lastPathComponent))
+// "Use your own installer": choose an ISO file on this Mac, or paste a URL link, in one dialog.
+// Choosing a file clears the link and typing a link clears the file, so Save uses whichever is set.
+enum OwnInstallerDialog {
+    @MainActor
+    static func ask() -> InstallPlan? {
+        var plan: InstallPlan?
+        ThemedDialog.present { close in
+            OwnInstallerView { result in plan = result; close() }
+        }
+        return plan
+    }
+}
+
+struct OwnInstallerView: View {
+    let done: (InstallPlan?) -> Void
+    @State private var iso: URL?
+    @State private var link = ""
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 16) {
+                Image(nsImage: Icons.image(size: 40)).resizable().frame(width: 40, height: 40)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Use your own installer").font(Theme.mono(16, .bold)).foregroundColor(Theme.text)
+                    Text("An ISO file on this Mac").font(Theme.mono(13, .bold)).foregroundColor(Theme.text).padding(.top, 14)
+                    Button("Choose an ISO file…") { choose() }.buttonStyle(FlatButton()).frame(width: 200, height: 32).padding(.top, 8)
+                    Text(iso?.lastPathComponent ?? "No file chosen").font(Theme.sans(11.5))
+                        .foregroundColor(iso == nil ? Theme.muted : Theme.highlight).padding(.top, 6)
+                    // "OR", centred on a divider line.
+                    HStack(spacing: 10) {
+                        Rectangle().fill(Theme.border).frame(height: 1)
+                        Text("OR").font(Theme.sans(11)).foregroundColor(Theme.muted)
+                        Rectangle().fill(Theme.border).frame(height: 1)
+                    }
+                    .padding(.vertical, 14)
+                    Text("URL Link").font(Theme.mono(13, .bold)).foregroundColor(Theme.text)
+                    TextInput(text: $link, placeholder: "https://… (address of an .iso file)").padding(.top, 8)
+                        .onChange(of: link) { v in if !v.isEmpty { iso = nil; error = nil } }
+                    Text(error ?? "Paste the address of an ARM64 (aarch64) .iso file.").font(Theme.sans(11.5))
+                        .foregroundColor(error == nil ? Theme.muted : Theme.danger).padding(.top, 6)
+                }
+            }
+            HStack(spacing: 10) {
+                Spacer()
+                Button("Cancel") { done(nil) }.buttonStyle(FlatButton()).frame(width: 150, height: 36)
+                    .keyboardShortcut(.cancelAction)
+                Button("Save") { save() }.buttonStyle(FlatButton(primary: true)).frame(width: 150, height: 36)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(iso == nil && link.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            .padding(.top, 22)
+        }
+        .padding(24)
+        .frame(width: 520)
+        .background(Theme.bg)
     }
 
-    private func fromLink() {
-        guard let s = Ask.text("Download from a link", "Address of an ARM64 (aarch64) .iso file"),
-              let url = URL(string: s), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
+    private func choose() {
+        guard let url = Ask.file("Choose a Linux installer (ARM64 / aarch64)") else { return }
+        iso = url
+        link = ""
+        error = nil
+    }
+
+    private func save() {
+        if let iso {
+            done(InstallPlan(localISO: iso, label: iso.deletingPathExtension().lastPathComponent))
             return
         }
-        model.screen = .setup(InstallPlan(url: url, label: url.deletingPathExtension().lastPathComponent))
+        let s = link.trimmingCharacters(in: .whitespaces)
+        guard let url = URL(string: s), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
+            error = "That isn't a web address. It should start with https://"
+            return
+        }
+        done(InstallPlan(url: url, label: url.deletingPathExtension().lastPathComponent))
     }
 }
 
@@ -201,9 +378,9 @@ struct ResourcePicker: View {
                 Segmented(options: VMConfig.profileNames, selection: $profile).frame(width: 450, height: 32)
             }
             FormRow(label: "") {
-                Text("Memory GB").font(Theme.mono(11.5)).foregroundColor(Theme.muted)
+                Text("Memory GB").font(Theme.sans(11.5)).foregroundColor(Theme.muted)
                 NumberField(value: $ramGB, range: 2...VMConfig.hostRamGB).disabled(profile != 2)
-                Text("Cores").font(Theme.mono(11.5)).foregroundColor(Theme.muted).padding(.leading, 20)
+                Text("Cores").font(Theme.sans(11.5)).foregroundColor(Theme.muted).padding(.leading, 20)
                 NumberField(value: $cores, range: 1...VMConfig.hostCores).disabled(profile != 2)
             }
             FormRow(label: "") { Note(text: summary) }
@@ -238,10 +415,10 @@ struct SetupView: View {
                 ResourcePicker(profile: $profile, ramGB: $ramGB, cores: $cores)
                 FormRow(label: "Disk size") {
                     NumberField(value: $diskGB, range: 16...2048, step: 8)
-                    Text("GB, grows only as you use it").font(Theme.mono(11.5)).foregroundColor(Theme.muted)
+                    Text("GB, grows only as you use it").font(Theme.sans(11.5)).foregroundColor(Theme.muted)
                 }
                 FormRow(label: "Storage") {
-                    Text(storage).font(Theme.mono(11.5)).foregroundColor(Theme.muted).lineLimit(1).truncationMode(.middle)
+                    Text(storage).font(Theme.sans(11.5)).foregroundColor(Theme.muted).lineLimit(1).truncationMode(.middle)
                     if model.systems.isEmpty {
                         Button("Change") { changeStorage() }.buttonStyle(FlatButton()).frame(width: 100, height: 28)
                     }
@@ -295,7 +472,7 @@ struct ProgressScreen: View {
     @EnvironmentObject var model: AppModel
 
     static let tips = [
-        "Closing a system's window leaves it running. Double-click it on Your systems to open it again.",
+        "Closing a system's window leaves it running. Double-click it on Virtual Machines to open it again.",
         "The installer only sees a virtual disk, a file on your Mac. Your Mac's drive is never touched.",
         "Copy and paste works between macOS and Linux once Linux has spice-vdagent (Fedora and Ubuntu include it).",
         "Settings can share a Mac folder with Linux: sudo mount -t virtiofs host /mnt/host",
@@ -307,13 +484,13 @@ struct ProgressScreen: View {
     var body: some View {
         Page {
             VStack(spacing: 0) {
-                Text(model.progress.status).font(Theme.mono(13)).foregroundColor(Theme.text)
+                Text(model.progress.status).font(Theme.sans(13)).foregroundColor(Theme.text)
                     .lineLimit(1).truncationMode(.middle).padding(.top, 40)
                 Bar(value: model.progress.value).frame(width: 400).padding(.top, 14)
-                Text(model.progress.detail).font(Theme.mono(11.5)).foregroundColor(Theme.muted).padding(.top, 10)
+                Text(model.progress.detail).font(Theme.sans(11.5)).foregroundColor(Theme.muted).padding(.top, 10)
                 TimelineView(.periodic(from: .now, by: 7)) { tl in
                     let i = Self.fixedTip ?? Int(tl.date.timeIntervalSince1970 / 7) % Self.tips.count
-                    Text("Tip: " + Self.tips[i]).font(Theme.mono(11.5)).foregroundColor(Theme.accent)
+                    Text("Tip: " + Self.tips[i]).font(Theme.sans(11.5)).foregroundColor(Theme.highlight)
                         .multilineTextAlignment(.center).frame(width: 560).padding(.top, 30)
                 }
                 if model.progress.cancellable {

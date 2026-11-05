@@ -12,23 +12,36 @@ enum ThemedDialog {
     static func show(_ title: String, _ text: String? = nil, path: String? = nil, after: String? = nil,
                      primary: String, secondary: String? = nil, danger: Bool = false) -> DialogResult {
         var result = DialogResult.closed
+        present { close in
+            DialogView(title: title, text: text, path: path, after: after, primary: primary,
+                       secondary: secondary, danger: danger) { picked in
+                result = picked
+                close()
+            }
+        }
+        return result
+    }
+
+    // Shows `content` as a modal dialog with no title bar (it keeps the window's rounded corners and
+    // shadow, and drags by its background). `content` calls the closure it's given to close it.
+    @MainActor
+    static func present<V: View>(_ content: (@escaping () -> Void) -> V) {
         let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 520, height: 200),
-                            styleMask: [.titled, .closable], backing: .buffered, defer: false)
+                            styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
         panel.title = "Try Linux"
+        panel.titleVisibility = .hidden
+        panel.titlebarAppearsTransparent = true
+        for b in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] { panel.standardWindowButton(b)?.isHidden = true }
+        panel.isMovableByWindowBackground = true
         panel.appearance = NSAppearance(named: .darkAqua)
         panel.backgroundColor = NSColor(Theme.bg)
         panel.isReleasedWhenClosed = false
-        let view = DialogView(title: title, text: text, path: path, after: after, primary: primary,
-                              secondary: secondary, danger: danger) { picked in
-            result = picked
-            NSApp.stopModal()
-        }
-        let host = NSHostingView(rootView: view)
+        let host = NSHostingView(rootView: content { NSApp.stopModal() }.preferredColorScheme(.dark))
         host.frame.size = host.fittingSize
         panel.contentView = host
         panel.setContentSize(host.fittingSize)
         panel.center()
-        // The red close button counts as closing the prompt.
+        // Closing the panel some other way (e.g. Cmd-W) counts as closing the prompt.
         let watcher = CloseWatcher()
         panel.delegate = watcher
         withExtendedLifetime(watcher) {
@@ -36,7 +49,6 @@ enum ThemedDialog {
             NSApp.runModal(for: panel)
         }
         panel.orderOut(nil)
-        return result
     }
 
     private final class CloseWatcher: NSObject, NSWindowDelegate {
@@ -63,7 +75,7 @@ struct DialogView: View {
                         .fixedSize(horizontal: false, vertical: true)
                     if let text { paragraph(text) }
                     if let path {
-                        Text(path).font(Theme.mono(11.5)).foregroundColor(Theme.accent)
+                        Text(path).font(Theme.sans(11.5)).foregroundColor(Theme.highlight)
                             .padding(8).frame(maxWidth: .infinity, alignment: .leading).background(Theme.card)
                     }
                     if let after { paragraph(after) }
@@ -96,7 +108,7 @@ struct DialogView: View {
     }
 
     private func paragraph(_ s: String) -> some View {
-        Text(s).font(Theme.mono(12)).foregroundColor(Theme.muted)
+        Text(s).font(Theme.sans(12)).foregroundColor(Theme.muted)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
     }

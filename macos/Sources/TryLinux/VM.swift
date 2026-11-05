@@ -104,7 +104,7 @@ final class VMSession: NSObject, ObservableObject, VZVirtualMachineDelegate, NSW
     private var window: NSWindow?
     private var finished = false
     var onStop: ((VMSession, Error?) -> Void)?
-    var onChange: (() -> Void)?          // state shown on Your systems changed
+    var onChange: (() -> Void)?          // state shown on Virtual Machines changed
     var onWindowClosed: (() -> Void)?    // the window was closed; the launcher shows the system's status
 
     // Opened from Console while off: the window is open, but the machine hasn't been started.
@@ -218,7 +218,7 @@ final class VMSession: NSObject, ObservableObject, VZVirtualMachineDelegate, NSW
         vm.stop { [weak self] error in self?.finish(error) }
     }
 
-    // Closing the window leaves the system running; Your systems shows it and Console brings it back.
+    // Closing the window leaves the system running; Virtual Machines shows it and Console brings it back.
     // A console that was never powered on just closes.
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         if held { forceStop(); return false }

@@ -25,6 +25,17 @@ struct AlertItem: Identifiable {
     let message: String
 }
 
+enum NoticeKind { case info, success, warning, error }
+
+// A notification in the window's notification area, above every page.
+struct Notice: Identifiable {
+    let id: String
+    let kind: NoticeKind
+    let text: String
+    var actionTitle: String? = nil
+    var action: (() -> Void)? = nil
+}
+
 final class AppModel: ObservableObject {
     static let shared = AppModel()
 
@@ -41,6 +52,9 @@ final class AppModel: ObservableObject {
     @Published var alert: AlertItem?
     @Published var updateAvailable: String?     // a newer release found by the update check
     @Published var stagedUpdate: URL?           // a checked update waiting to be installed at quit
+    @Published var notices: [Notice] = []
+    @Published var dismissedNotices: Set<String> = []
+    private var noticeCount = 0
     var cancelRequested = false
     var busy = false
     var onAllStopped: (() -> Void)?
@@ -61,10 +75,39 @@ final class AppModel: ObservableObject {
         screen = systems.isEmpty ? .choose : .home
     }
 
-    // A themed notice. Its title is the message's first part (up to a blank line, a colon or the
-    // first sentence) when that's short; otherwise `title`, with the whole message below.
+    // Notifications: shown above every page until dismissed. A dismissed one stays hidden this session.
+    func post(_ id: String, _ kind: NoticeKind, _ text: String, actionTitle: String? = nil, action: (() -> Void)? = nil) {
+        guard !dismissedNotices.contains(id) else { return }
+        notices.removeAll { $0.id == id }
+        notices.append(Notice(id: id, kind: kind, text: text, actionTitle: actionTitle, action: action))
+    }
+
+    func dismiss(_ id: String) {
+        dismissedNotices.insert(id)
+        notices.removeAll { $0.id == id }
+    }
+
+    static var launcherVisible: Bool {
+        NSApp.windows.contains { !($0 is NSPanel) && $0.isVisible && $0.title == "Try Linux" }
+    }
+
+    // A message: while the Try Linux window is open, a notification (info clears itself after 10 seconds);
+    // otherwise a themed dialog. Its dialog title is the message's first part (up to a blank line, a colon or
+    // the first sentence) when that's short; otherwise `title`, with the whole message below.
     func show(_ message: String, title: String = "Try Linux") {
+        if !Thread.isMainThread { DispatchQueue.main.async { self.show(message, title: title) }; return }
         let msg = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        if Self.launcherVisible {
+            let lower = msg.lowercased()
+            let kind: NoticeKind = lower.contains("couldn't") || lower.contains("error") || lower.contains("isn't") ? .error : .info
+            noticeCount += 1
+            let id = "msg\(noticeCount)"
+            post(id, kind, msg.replacingOccurrences(of: "\n\n", with: "\n"))
+            if kind == .info {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in self?.notices.removeAll { $0.id == id } }
+            }
+            return
+        }
         var head = msg, body: String? = nil
         for sep in ["\n\n", ": ", ". "] {
             if let r = msg.range(of: sep), r.lowerBound > msg.startIndex {
@@ -89,7 +132,7 @@ final class AppModel: ObservableObject {
     // The self-test shows systems as running without starting them.
     var previewStatus: [String: String] = [:]
 
-    // Shown on the right of the system's row on Your systems.
+    // Shown on the right of the system's row on Virtual Machines.
     func status(_ c: VMConfig) -> String {
         if let s = previewStatus[c.id] { return s }
         if let s = running[c.id] {
@@ -97,6 +140,37 @@ final class AppModel: ObservableObject {
             return (s.paused ? "Paused" : "Running") + (s.hidden ? ", window closed" : "")
         }
         return c.pendingInstall ? "Ready to install" : ""
+    }
+
+    // What's installed: the distribution and the version in its installer's file name, e.g.
+    // "Fedora-Workstation-Live-45-1.4.aarch64.iso" -> "Fedora Workstation 45". A custom ISO shows its file name.
+    func osLabel(_ c: VMConfig) -> String {
+        let file = URL(fileURLWithPath: c.iso).deletingPathExtension().lastPathComponent
+        guard let d = Distro.find(c.distroId) else { return c.iso.isEmpty ? "Custom ISO" : file }
+        let cleaned = file.replacingOccurrences(of: "(x86_64|amd64|aarch64|arm64|64-?bit)", with: "", options: .regularExpression)
+        if let r = cleaned.range(of: "(?<![A-Za-z0-9])[0-9]+(\\.[0-9]+)?", options: .regularExpression) {
+            return d.name + " " + cleaned[r]
+        }
+        return d.name
+    }
+
+    // The values shown in a system's row: CPU, memory and how much space its disk takes now.
+    func stats(_ c: VMConfig) -> [String] {
+        let r = c.resources()
+        let used = Double(Disk.used(c.diskURL))
+        let disk = used >= 1_073_741_824 ? String(format: "%.1f GB", used / 1_073_741_824) : "\(Int(used / 1_048_576)) MB"
+        return ["\(r.cores) \(r.cores == 1 ? "core" : "cores")", "\(r.ramGB) GB", previewDisk[c.id] ?? disk]
+    }
+
+    var previewDisk: [String: String] = [:]   // the self-test shows realistic disk sizes
+
+    // Renames a system (its display name; the folder and id stay).
+    func rename(_ c: VMConfig, to name: String) {
+        let n = name.trimmingCharacters(in: .whitespaces)
+        guard !n.isEmpty, var fresh = VMConfig.load(c.dir) else { return }
+        fresh.displayName = n
+        try? fresh.save()
+        reload()
     }
 
     // Powered on: running or paused, not a console opened while off.

@@ -100,10 +100,16 @@ enum SelfTest {
         Paths.displayRoot = "~/Library/Application Support/TryLinux"
         c.sharedFolder = "~/Documents"
         c.cores = 5
-        var ubuntu = VMConfig(id: "ubuntu", displayName: "Ubuntu Desktop")
+        // Systems renamed by the user, with the OS and version taken from their installers' file names.
+        c.displayName = "Dev box"
+        c.iso = "/Users/you/Library/Application Support/TryLinux/isos/Fedora-Workstation-Live-45-1.4.aarch64.iso"
+        var ubuntu = VMConfig(id: "ubuntu", displayName: "Ubuntu test")
         ubuntu.distroId = "ubuntu"
+        ubuntu.iso = "/Users/you/Library/Application Support/TryLinux/isos/ubuntu-26.04-desktop-arm64.iso"
         ubuntu.profile = 1
         let model = AppModel(preview: [c, ubuntu])
+        model.previewDisk = ["fedora": "16.5 GB", "ubuntu": "9.2 GB"]
+        lines.append("os labels\t\(model.osLabel(c)) / \(model.osLabel(ubuntu))")
         func snap<V: View>(_ name: String, _ view: V, height: CGFloat = 700) {
             let root = view.environmentObject(model).frame(width: 980, height: height).background(Theme.bg).preferredColorScheme(.dark)
             let renderer = ImageRenderer(content: root)
@@ -127,9 +133,19 @@ enum SelfTest {
             win.orderOut(nil)
         }
         snap("home", HomeView())
-        model.updateAvailable = "1.0.2"
-        snap("home-update", HomeView())
+        // The update notification, in the notification area above the page.
+        model.updateAvailable = "1.0.3"
+        snap("home-update", VStack(spacing: 0) { NoticeArea(); HomeView() })
         model.updateAvailable = nil
+        // One notification of each kind.
+        model.notices = [
+            Notice(id: "a", kind: .info, text: "Try Linux 1.0.3 is available. You have \(AppInfo.version).", actionTitle: "Update", action: {}),
+            Notice(id: "b", kind: .success, text: "Dev box was backed up to ~/Backups."),
+            Notice(id: "c", kind: .warning, text: "Ubuntu test couldn't grow its disk, so it keeps its current size."),
+            Notice(id: "d", kind: .error, text: "Couldn't save settings: the disk is full."),
+        ]
+        snap("notices", VStack(spacing: 0) { NoticeArea(); HomeView() }, height: 860)
+        model.notices = []
         // Fedora shown as running (Power in place of Start) without starting it.
         model.previewStatus = ["fedora": "Running"]
         snap("home-running", HomeView())
@@ -149,7 +165,7 @@ enum SelfTest {
         // The About section at the bottom of Advanced, with the install and update controls.
         snap("settings-about", SettingsView(config: c, tab: 2), height: 760)
 
-        func dialog(_ name: String, _ view: DialogView) {
+        func dialog<V: View>(_ name: String, _ view: V) {
             let root = view.preferredColorScheme(.dark)
             let host = NSHostingView(rootView: root)
             let size = host.fittingSize
@@ -173,7 +189,7 @@ enum SelfTest {
             primary: "Open", secondary: nil, danger: false, pick: { _ in }))
         dialog("quit-prompt", DialogView(title: "Quit Try Linux?", text: "Try Linux will close without installing. You'll be asked again the next time you open it.",
             path: nil, after: nil, primary: "Quit", secondary: "Back", danger: false, pick: { _ in }))
-        dialog("update-prompt", DialogView(title: "Update to Try Linux 1.0.2?",
+        dialog("update-prompt", DialogView(title: "Update to Try Linux 1.0.3?",
             text: "You have version \(AppInfo.version). Try Linux downloads the update from GitHub, checks it against its published checksum and restarts.",
             path: nil, after: "Your Linux systems aren't affected.", primary: "Update", secondary: "What's new", danger: false, pick: { _ in }))
         dialog("update-when-quit", DialogView(title: "Update when you quit?",
@@ -195,6 +211,7 @@ enum SelfTest {
             after: "You can download them again later.", primary: "Delete", secondary: "Cancel", danger: true, pick: { _ in }))
         dialog("console-ask", DialogView(title: "\(sys) isn't running", text: "Would you like to power it on?",
             path: nil, after: nil, primary: "Power on", secondary: "Cancel", danger: false, pick: { _ in }))
+        dialog("own-installer", OwnInstallerView(done: { _ in }))
         Icons.writeIconset(to: dir.appendingPathComponent("AppIcon.iconset"))
 
         try? (lines.joined(separator: "\n") + "\n").write(to: dir.appendingPathComponent("results.txt"), atomically: true, encoding: .utf8)
