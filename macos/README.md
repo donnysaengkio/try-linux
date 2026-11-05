@@ -30,8 +30,8 @@ download link.
 
 | | |
 |---|---|
-| ![Your systems](docs/images/your-systems.png) | ![Set up Fedora Workstation](docs/images/set-up.png) |
-| **Your systems:** status, console, start or power commands | **Set up:** name, memory and cores, and disk size |
+| ![Virtual Machines](docs/images/your-systems.png) | ![Set up Fedora Workstation](docs/images/set-up.png) |
+| **Virtual Machines:** status, CPU, memory and disk use, console, start or power commands | **Set up:** name, memory and cores, and disk size |
 | ![Downloading the installer](docs/images/download.png) | ![Settings](docs/images/settings-general-tab.png) |
 | **Download:** the installer is checked against its SHA-256 checksum | **Settings > General:** display, resources, disk and a shared folder |
 | ![Settings, Devices](docs/images/settings-devices-tab.png) | ![Settings, Advanced](docs/images/settings-advanced-tab.png) |
@@ -81,12 +81,12 @@ them too. If you turned on **Open at login**, turn it off first in Settings > Ge
 
 ## Updates
 
-Once a day, Try Linux checks GitHub for a new release. When there is one, an
-**Update to x.y.z** button appears on the home screen.
+Once a day, Try Linux checks GitHub for a new release. When there is one, a
+notification with an **Update** button appears at the top of the window.
 
-<img src="docs/images/update-button.png" alt="Your systems screen with an Update to 1.0.2 button above the list" width="560">
+<img src="docs/images/update-button.png" alt="Virtual Machines with a notification: Try Linux 1.0.3 is available, with an Update button" width="560">
 
-<img src="docs/images/update-prompt.png" alt="Update to Try Linux 1.0.2? prompt, with What's new and Update buttons" width="420">
+<img src="docs/images/update-prompt.png" alt="Update to Try Linux 1.0.3? prompt, with What's new and Update buttons" width="420">
 
 1. **What's new** opens the release notes; **Update** downloads the new version.
 2. Try Linux checks the download against the release's published SHA-256 checksum
@@ -107,12 +107,18 @@ by hand.
 
 **Choose a Linux OS**, then **Next** and **Install**. Try Linux downloads and verifies the
 installer, creates a virtual disk and opens the system in its own window. Install Linux
-onto the virtual disk; your Mac's drive is never touched.
+onto the virtual disk; your Mac's drive is never touched. To use an installer you
+already have, choose **Use your own installer**: pick an ISO file on your Mac, or paste
+a URL link to one.
 
-**Your systems** lists each system with its status on the right: **Running**,
-**Paused**, **Off, console open**, or **Ready to install**.
+<img src="docs/images/own-installer.png" alt="Use your own installer: Choose an ISO file, or paste a URL link, with Cancel and Save buttons" width="420">
 
-<img src="docs/images/your-systems.png" alt="Your systems with Fedora Workstation running, and the Add a system, Settings, Console and Power buttons" width="560">
+**Virtual Machines** lists each system with its name, the OS and version it was
+installed from, and columns for its **Status** (**Running**, **Paused**, **Off, console
+open** or **Ready to install**), **CPU**, **memory** and how much **disk** space it takes
+now. To rename a system, click the pencil after its name in Settings.
+
+<img src="docs/images/your-systems.png" alt="Virtual Machines with Dev box running: Status, CPU, MEM and DISK columns, and the Add a system, Settings, Console and Power buttons" width="560">
 
 - **Start** (or double-click) starts the selected system.
 - **Console** opens a running system's window. On a system that's off, it opens the
@@ -121,6 +127,8 @@ onto the virtual disk; your Mac's drive is never touched.
   asks whether to power it on instead.
 - **Closing a system's window** leaves it running, shown as **Running, window
   closed**. Double-click it or click **Console** to bring the window back.
+- **Notifications** (updates, results and problems) appear at the top of the window;
+  click the X to dismiss one.
 - **The Try Linux menu bar icon** lists running systems: open a window, open the
   shared folder, or use the power commands below.
 - **Quitting Try Linux** shuts running systems down, so save your work in Linux first.
@@ -198,7 +206,7 @@ sudo /usr/sbin/update-binfmts --install rosetta /media/rosetta/rosetta \
 - No camera or USB passthrough.
 - Restarting Linux from inside it turns the system off: Apple Virtualization reports a
   restart the same way as a power-off, so Try Linux can't start it again on its own.
-  Use **Power > Restart** instead, or start it again from Your systems.
+  Use **Power > Restart** instead, or start it again from Virtual Machines.
 
 ## Building from source
 
