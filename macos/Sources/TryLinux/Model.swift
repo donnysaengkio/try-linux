@@ -253,6 +253,7 @@ final class AppModel: ObservableObject {
     // Use Your Own Installer > An Existing Virtual Disk: copies a raw disk image (APFS makes the copy a
     // clone, so it's quick and takes no extra space until either changes) into a new system, then starts it.
     // Nothing is installed; the original file isn't changed.
+    @MainActor
     func importDisk(_ plan: InstallPlan, _ config: VMConfig) async {
         guard VZVirtualMachine.isSupported else { show(Self.unsupported); return }
         guard let src = plan.disk else { return }
