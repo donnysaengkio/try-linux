@@ -389,9 +389,10 @@ struct DiskSource: Equatable {
         if disk.lastPathComponent == "disk.img", let c = VMConfig.load(folder) {
             s.name = c.displayName
             s.description = c.description
+            // Manual keeps the system's own numbers (Create fits them to this Mac); a profile gives what it gives here.
             let r = c.resources()
-            s.ramGB = r.ramGB
-            s.cores = r.cores
+            s.ramGB = c.profile == 2 ? c.ramGB : r.ramGB
+            s.cores = c.profile == 2 ? c.cores : r.cores
             s.from = "Try Linux"
         }
         return s
