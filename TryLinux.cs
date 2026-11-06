@@ -185,7 +185,7 @@ static class AppSettings
     public static string LastUpdateCheck = "", LatestVersion = "", LatestWinq = "";
     // Folders of systems created outside VmsDir (Create > Location > Choose a different location).
     public static List<string> VmDirs = new List<string>();
-    // Settings > General > Appearance: the theme (dark, light or blue), or Windows' own light or dark mode.
+    // Settings > General > Appearance: the theme (dark or light), or Windows' own light or dark mode.
     public static string ThemeName = "dark";
     public static bool FollowSystem;
 
@@ -1793,54 +1793,52 @@ static class Theme
     public static float Scale = 1;
     // "Depth": a deep background with surfaces shaded from top to bottom, and a lavender outline on
     // what's selected or open.
-    // Three themes, chosen in settings.ini (theme=dark, light or blue; TRYLINUX_THEME overrides it) and
-    // read once at start:
+    // Two themes, chosen in Settings > General > Appearance (settings.ini: theme=dark or light;
+    // TRYLINUX_THEME overrides it, for previews):
     //   Dark: Firefox's dark Settings page. Neutral grays (page #111113, cards #252429, panel #1C1B22,
     //         borders #39383D) with lavender #B89CFE for what's selected and the main buttons.
-    //   Light: Bitwarden's brand colors, light. Off White #F3F6F9 page, white cards, Light Grey #D8E2EB
-    //         lines, Bitwarden Blue #175DDC for what's selected and the main buttons, Deep Blue #0C3276.
-    //   Blue: Bitwarden's brand colors, dark. Navy from Deep Blue #0C3276, Bitwarden Blue #175DDC buttons,
-    //         Light Teal #A2F4FD for what's selected, Off White #F3F6F9 text, Medium Grey #99A7B5.
+    //   Light: Proton Pass's light settings. A lavender-white page (#FCF9FE), white cards, soft lavender-grey
+    //         lines (#DEDBE8) and Proton's purple #6D4AFF for what's selected and the main buttons.
     public static string Name { get; private set; }
     public static bool Light { get { return Name == "light"; } }
-    public static readonly string[] Names = { "dark", "light", "blue" };
-    public static readonly string[] Titles = { "Dark", "Light", "Blue" };
+    public static readonly string[] Names = { "dark", "light" };
+    public static readonly string[] Titles = { "Dark", "Light" };
     static Theme() { Apply("dark"); }
-    static Color C(string dark, string light, string blue) { return ColorTranslator.FromHtml(Name == "light" ? light : Name == "blue" ? blue : dark); }
+    static Color C(string dark, string light) { return ColorTranslator.FromHtml(Name == "light" ? light : dark); }
 
-    // Sets every color for a theme (dark, light or blue; TRYLINUX_THEME overrides it, for previews).
+    // Sets every color for a theme (dark or light; TRYLINUX_THEME overrides it, for previews).
     // Controls take their colors when they're made, so the window redraws its page afterwards.
     public static void Apply(string name)
     {
         string forced = Environment.GetEnvironmentVariable("TRYLINUX_THEME");
         name = ((string.IsNullOrEmpty(forced) ? name : forced) ?? "").Trim().ToLowerInvariant();
         Name = Names.Contains(name) ? name : "dark";
-        Bg = C("#111113", "#F3F6F9", "#06132B");
-        Card = C("#252429", "#FFFFFF", "#0E2247");
-        CardHover = C("#2E2D33", "#EAF0F6", "#132B57");
-        CardSelected = C("#352E48", "#DCE7FB", "#173874");
-        CardTop = C("#28272C", "#FFFFFF", "#10264E");
-        CardBottom = C("#232227", "#F8FAFC", "#0C1F42");
-        HoverTop = C("#302F35", "#F0F5FA", "#16305E");
-        HoverBottom = C("#2A292F", "#E7EEF5", "#11284F");
-        SelectedTop = C("#372F4D", "#E6EEFD", "#183F82");
-        SelectedBottom = C("#2C263D", "#D9E5FB", "#12326B");
-        Border = C("#39383D", "#C9D5E1", "#22427A");
-        Text = C("#FBFBFE", "#101A27", "#F3F6F9");
-        Muted = C("#BFBFC9", "#56677A", "#99A7B5");
-        Accent = C("#B89CFE", "#175DDC", "#175DDC");
-        AccentHover = C("#C7B1FF", "#2F6FE4", "#2F6FE4");
-        Accent2 = C("#5E4898", "#0C3276", "#0C3276");
-        Highlight = C("#C7B1FF", "#175DDC", "#A2F4FD");
-        Highlight2 = C("#B89CFE", "#0C3276", "#2CDDE9");
-        AccentLight = C("#D6C7FF", "#4A84EC", "#4A84EC");
-        AccentMid = C("#C2A9FF", "#2366E0", "#2366E0");
-        AccentDark = C("#A487F2", "#1250C0", "#1250C0");
-        OnAccent = C("#15141A", "#FFFFFF", "#FFFFFF");
-        Success = C("#7ED68A", "#0E8A4F", "#7BF1A8");
-        Danger = C("#F26D6D", "#D63B25", "#FF6550");
-        Warning = C("#F9D949", "#B38600", "#FDC700");
-        BoxFill = C("#1C1B22", "#EAF0F5", "#0A1A38");
+        Bg = C("#111113", "#FCF9FE");
+        Card = C("#252429", "#FFFFFF");
+        CardHover = C("#2E2D33", "#F6F2FC");
+        CardSelected = C("#352E48", "#EEE8FF");
+        CardTop = C("#28272C", "#FFFFFF");
+        CardBottom = C("#232227", "#FBF9FE");
+        HoverTop = C("#302F35", "#F8F5FD");
+        HoverBottom = C("#2A292F", "#F2EEFA");
+        SelectedTop = C("#372F4D", "#F3EEFF");
+        SelectedBottom = C("#2C263D", "#E9E1FF");
+        Border = C("#39383D", "#DEDBE8");
+        Text = C("#FBFBFE", "#0C0C14");
+        Muted = C("#BFBFC9", "#6B6880");
+        Accent = C("#B89CFE", "#6D4AFF");
+        AccentHover = C("#C7B1FF", "#8466FF");
+        Accent2 = C("#5E4898", "#3A1F99");
+        Highlight = C("#C7B1FF", "#5B2BD1");
+        Highlight2 = C("#B89CFE", "#3A1F99");
+        AccentLight = C("#D6C7FF", "#9A82FF");
+        AccentMid = C("#C2A9FF", "#7A5CFF");
+        AccentDark = C("#A487F2", "#5A37E6");
+        OnAccent = C("#15141A", "#FFFFFF");
+        Success = C("#7ED68A", "#1C8A4E");
+        Danger = C("#F26D6D", "#D6332E");
+        Warning = C("#F9D949", "#B38600");
+        BoxFill = C("#1C1B22", "#F4F1F9");
     }
     public static Color Bg;
     public static Color Card;                  // fields and flat fills
@@ -1859,7 +1857,7 @@ static class Theme
     public static Color Accent2;
     public static Color Highlight;
     public static Color Highlight2;
-    // The primary button: its hover and pressed shades, and its text (dark on Dark's lavender, white on the blues).
+    // The primary button: its hover and pressed shades, and its text (dark on the lavender, white on the purple).
     public static Color AccentLight, AccentMid, AccentDark;
     public static Color OnAccent;
 

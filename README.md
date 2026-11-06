@@ -23,8 +23,10 @@ OpenGL / Vulkan graphics (VirGL and Venus) to the guest.
 | **Settings, Hardware:** graphics, memory and CPU cores, disks | **Disks:** size, location, resize, reclaim free space, compact |
 | ![Settings, Devices tab](docs/images/settings-devices-tab.png) | ![Settings, Recovery tab](docs/images/settings-recovery-tab.png) |
 | **Settings, Devices:** sound, CD/DVD drive, network type, port forwards | **Settings, Recovery:** backups, snapshots, storage, repair, delete |
-| ![The Light theme: Choose a Linux OS](docs/images/theme-light.png) | ![The Blue theme: Settings, Hardware tab](docs/images/theme-blue.png) |
-| **Light theme** (Settings > General > Appearance) | **Blue theme** |
+| ![Search: KDE, with 14 results](docs/images/search.png) | ![Use Your Own Installer, with a VMware disk chosen](docs/images/own-installer.png) |
+| **Search:** over 55 more distributions, editions and atomic versions | **Use Your Own Installer:** an existing virtual disk, an ISO file or a link |
+| ![The Light theme: Choose a Linux OS](docs/images/theme-light.png) | ![Settings, General tab, Appearance section](docs/images/settings-appearance.png) |
+| **Light theme** | **Settings > General > Appearance:** Dark or Light, or follow Windows |
 
 ## Distributions
 
@@ -38,6 +40,8 @@ OpenGL / Vulkan graphics (VirGL and Venus) to the guest.
 
 Try Linux finds the newest release on each distribution's official mirror when
 you install, so it doesn't need updating for new versions.
+
+![Choose a Linux OS, searching for KDE: KDE neon, Kubuntu, Ubuntu Studio, Fedora KDE Plasma Desktop and Fedora Kinoite](docs/images/search.png)
 
 **Search** (above the list) finds more: over 50 other distributions, desktop
 editions and immutable / atomic versions, such as Kubuntu, Xubuntu, Fedora KDE and
@@ -53,6 +57,8 @@ link, or imports an existing virtual disk (qcow2, vmdk, vhd, vhdx, vdi or raw) t
 already has Linux on it. An imported disk is copied, so the original isn't changed,
 and settings saved beside it by Try Linux, VMware (`.vmx`) or VirtualBox (`.vbox`)
 fill in its name, description, memory and cores.
+
+<img src="docs/images/own-installer.png" alt="Use Your Own Installer: An Existing Virtual Disk with Fedora-disk1.vmdk chosen (vmdk, 40 GiB, settings from VMware: 8 GiB, 4 cores), An ISO File On This PC, and URL Link, with Back and Next buttons" width="560">
 
 ## Requirements
 
@@ -210,9 +216,9 @@ Settings.
     Windows folder (read-only unless allowed), **Appearance**, and **About** with
     versions, install and update checks.
   - **Appearance** is for Try Linux as a whole: **Dark** (grays with lavender, after
-    Firefox's dark theme), **Light** or **Blue** (both from Bitwarden's brand colors).
-    **Follow system** uses Light while Windows shows apps in light mode, and Dark
-    otherwise. The theme changes when you save.
+    Firefox's dark theme) or **Light** (white with Proton's purple, after Proton Pass's
+    light theme). **Follow system** uses Light while Windows shows apps in light mode,
+    and Dark otherwise. The theme changes when you save.
   - **Hardware:**
     - **Graphics:** guest displays, GPU / CPU / automatic rendering, Vulkan, and GPU
       memory up to what your graphics card has.
