@@ -38,8 +38,10 @@ download link.
 | **Settings > Hardware:** graphics, memory and CPU cores, disks, Rosetta | **Disks:** size, location, resize, add and remove disks |
 | ![Settings, Devices](docs/images/settings-devices-tab.png) | ![Settings, Recovery](docs/images/settings-recovery-tab.png) |
 | **Settings > Devices:** sound, clipboard, CD/DVD drive, network type | **Settings > Recovery:** backups, snapshots, storage, repair, delete |
-| ![The Light theme](docs/images/theme-light.png) | ![The Blue theme](docs/images/theme-blue.png) |
-| **Light theme** (Settings > General > Appearance) | **Blue theme** |
+| ![Use Your Own Installer](docs/images/own-installer.png) | ![The Light theme](docs/images/theme-light.png) |
+| **Use Your Own Installer:** an existing disk image, an ISO file or a link | **Light theme** |
+| ![Settings, General, Appearance, in the Light theme](docs/images/settings-appearance.png) | |
+| **Settings > General > Appearance:** Dark or Light, or follow macOS | |
 
 ## Requirements
 
@@ -176,9 +178,9 @@ Settings.
   fullscreen, resolution, open at login, a shared Mac folder, **Appearance**, and
   **About** with the version, Install and update checks.
 - **Appearance** is for Try Linux as a whole: **Dark** (grays with lavender, after
-  Firefox's dark theme), **Light** or **Blue** (both from Bitwarden's brand colors).
-  **Follow system** uses Light while macOS is in Light mode, and Dark otherwise. The
-  theme changes when you save.
+  Firefox's dark theme) or **Light** (white with Proton's purple, after Proton Pass's
+  light theme). **Follow system** uses Light while macOS is in Light mode, and Dark
+  otherwise. The theme changes when you save.
 - **Hardware:**
   - **Graphics:** what Linux's display can do.
   - **Resources:** Balanced, Maximum or Manual (memory and CPU cores can be changed
