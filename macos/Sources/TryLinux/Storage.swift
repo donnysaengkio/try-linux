@@ -153,7 +153,7 @@ struct VMConfig: Codable, Identifiable, Equatable {
         switch profile {
         case 1: c = Self.maxCores; r = Self.maxRamGB
         case 2: c = cores; r = ramGB
-        default: c = max(2, n / 2); r = max(2, min(16, total / 2))
+        default: c = max(2, n / 2 - (n / 2) % 2); r = max(2, min(16, total / 2))   // half the cores, rounded down to even
         }
         c = min(max(1, c), Self.maxCores)
         r = min(max(2, r), Self.maxRamGB)

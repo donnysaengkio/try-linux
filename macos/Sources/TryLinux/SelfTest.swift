@@ -38,43 +38,71 @@ enum SelfTest {
         c.distroId = "fedora"
         c.sharedFolder = dir.path
         c.mic = true
+        // Each check runs on its own: CI machines have no virtualization, so validating fails there,
+        // but the disk and backup work below doesn't need it.
+        let iso = storage.appendingPathComponent("test.iso")
         do {
             try Disk.create(c.diskURL, gb: 64)
-            let iso = storage.appendingPathComponent("test.iso")
             FileManager.default.createFile(atPath: iso.path, contents: Data(count: 1 << 20))
             c.iso = iso.path
             c.pendingInstall = true
             c.lastBoot = "2026-11-03 09:12"
             try c.save()
+        } catch {
+            lines.append("setup\tERROR\t\(error.localizedDescription)")
+        }
+        do {
             _ = try VMBuilder.configuration(c, installer: true)
             lines.append("vm configuration\tvalid (disk capacity \(Disk.capacity(c.diskURL) >> 30) GB, used \(Disk.used(c.diskURL)) bytes)")
+        } catch {
+            lines.append("vm configuration\tERROR\t\(error.localizedDescription)")
+        }
+        do {
             try Snapshots.take(c)
             lines.append("snapshot\t\(Snapshots.list(c).count) taken")
+        } catch {
+            lines.append("snapshot\tERROR\t\(error.localizedDescription)")
+        }
 
-            // A second disk, a disc in the CD/DVD drive and no network, as an installed system starts.
-            var more = c
-            let name = more.newDiskName()
-            try Disk.create(more.dir.appendingPathComponent(name), gb: 32)
-            more.extraDisks = [name]
-            more.cd = iso.path
-            more.netType = 1
+        // A second disk, a disc in the CD/DVD drive and no network, as an installed system starts.
+        var more = c
+        let name = more.newDiskName()
+        let disk2 = more.dir.appendingPathComponent(name)
+        more.extraDisks = [name]
+        more.cd = iso.path
+        more.netType = 1
+        do {
+            try Disk.create(disk2, gb: 32)
+            lines.append("add disk\t\(name), \(Disk.capacity(disk2) >> 30) GB; disks: \(more.allDisks.map(\.lastPathComponent).joined(separator: ", "))")
+            try Disk.resize(disk2, gb: 48)
+            let grown = Disk.capacity(disk2) >> 30
+            try Disk.resize(disk2, gb: 40)
+            lines.append("resize\tDisk 2 grew to \(grown) GB, then shrank to \(Disk.capacity(disk2) >> 30) GB")
+        } catch {
+            lines.append("add disk / resize\tERROR\t\(error.localizedDescription)")
+        }
+        do {
             let conf = try VMBuilder.configuration(more, installer: false)
             lines.append("vm configuration (2 disks, CD, no network)\tvalid: \(conf.storageDevices.count) storage devices, \(conf.networkDevices.count) network devices")
-            try Disk.resize(more.dir.appendingPathComponent(name), gb: 48)
-            lines.append("resize\tDisk 2 is now \(Disk.capacity(more.dir.appendingPathComponent(name)) >> 30) GB")
+        } catch {
+            lines.append("vm configuration (2 disks, CD, no network)\tERROR\t\(error.localizedDescription)")
+        }
+        do {
             more.displayName = "Backup test"
             try more.save()
             let backups = storage.appendingPathComponent("backups", isDirectory: true)
             try FileManager.default.createDirectory(at: backups, withIntermediateDirectories: true)
             let saved = try Backups.backup(more, into: backups)
             let restored = try Backups.restore(from: saved)
-            lines.append("backup and restore\t\(restored.allDisks.count) disks restored, all present: \(restored.allDisks.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })")
+            let present = restored.allDisks.allSatisfy { FileManager.default.fileExists(atPath: $0.path) }
+            let sizes = restored.allDisks.map { "\(Disk.capacity($0) >> 30) GB" }.joined(separator: " + ")
+            lines.append("backup and restore\t\(restored.allDisks.count) disks restored (\(sizes)), all present: \(present), cd=\(restored.cd == iso.path), netType=\(restored.netType)")
             try? FileManager.default.removeItem(at: restored.dir)
-            try? FileManager.default.removeItem(at: more.dir.appendingPathComponent(name))
-            try c.save()
         } catch {
-            lines.append("vm configuration\tERROR\t\(error.localizedDescription)")
+            lines.append("backup and restore\tERROR\t\(error.localizedDescription)")
         }
+        try? FileManager.default.removeItem(at: disk2)
+        try? c.save()
 
         // Updates: version comparison, the real release list, and installing / updating a copy of this app.
         for (a, b) in [("1.0.1-preview", "1.0.0"), ("1.0.0", "1.0.0"), ("1.0.0-preview", "1.0.0"), ("0.9.9", "1.0.0"), ("1.1", "1.0.9")] {

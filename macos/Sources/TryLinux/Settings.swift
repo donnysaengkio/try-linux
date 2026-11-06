@@ -592,16 +592,15 @@ struct SettingsView: View {
     private func open(_ s: String) { if let u = URL(string: s) { NSWorkspace.shared.open(u) } }
 }
 
-// A dropdown list styled like the other fields.
+// A dropdown list styled like the other fields. SwiftUI's Menu draws its own macOS pull-down on the
+// Mac whatever its label looks like, so this is a plain button that opens the list as a menu.
 struct DropdownField: View {
     let options: [String]
     @Binding var selection: Int
     var width: CGFloat = 220
 
     var body: some View {
-        Menu {
-            ForEach(options.indices, id: \.self) { i in Button(options[i]) { selection = i } }
-        } label: {
+        Button { ChoiceMenu.show(options, selected: selection) { selection = $0 } } label: {
             HStack(spacing: 0) {
                 Text(options.indices.contains(selection) ? options[selection] : "")
                     .font(Theme.sans(13)).foregroundColor(Theme.text).lineLimit(1)
@@ -616,9 +615,32 @@ struct DropdownField: View {
             .overlay(Rectangle().stroke(Theme.border, lineWidth: 1))
             .contentShape(Rectangle())
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .frame(width: width, height: 26)
+        .buttonStyle(.plain)
+    }
+}
+
+// A list of choices as a menu under the mouse, with the current one checked.
+enum ChoiceMenu {
+    private final class Action: NSObject {
+        let run: () -> Void
+        init(_ run: @escaping () -> Void) { self.run = run }
+        @objc func fire() { run() }
+    }
+
+    @MainActor
+    static func show(_ options: [String], selected: Int, pick: @escaping (Int) -> Void) {
+        let menu = NSMenu()
+        var actions: [Action] = []
+        for (i, title) in options.enumerated() {
+            let a = Action { pick(i) }
+            actions.append(a)
+            let item = NSMenuItem(title: title, action: #selector(Action.fire), keyEquivalent: "")
+            item.target = a
+            item.state = i == selected ? .on : .off
+            menu.addItem(item)
+        }
+        menu.appearance = NSAppearance(named: .darkAqua)
+        withExtendedLifetime(actions) { _ = menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil) }
     }
 }
 
