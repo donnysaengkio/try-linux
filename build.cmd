@@ -5,11 +5,13 @@ cd /d "%~dp0"
 set CSC=%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe
 set REFS=/r:System.Windows.Forms.dll /r:System.Drawing.dll /r:Microsoft.VisualBasic.dll /r:Microsoft.CSharp.dll /r:System.Core.dll /r:System.Web.Extensions.dll /r:System.Management.dll
 set SRC=TryLinux.cs Settings.cs
+rem The interface fonts (Open Font License, see fonts\) are embedded in the exe.
+set RES=/resource:fonts\Prompt-SemiBold.ttf,Prompt-SemiBold.ttf /resource:fonts\WorkSans-SemiBold.ttf,WorkSans-SemiBold.ttf /resource:fonts\NotoSans-Regular.ttf,NotoSans-Regular.ttf /resource:fonts\NotoSans-SemiBold.ttf,NotoSans-SemiBold.ttf
 
 rem First pass builds the icon writer, second pass embeds the icon.
 if not exist TryLinux.ico (
-  "%CSC%" /nologo /target:winexe /optimize /out:TryLinux.exe %REFS% %SRC% || exit /b 1
+  "%CSC%" /nologo /target:winexe /optimize /out:TryLinux.exe %REFS% %RES% %SRC% || exit /b 1
   .\TryLinux.exe --write-icon TryLinux.ico || exit /b 1
 )
-"%CSC%" /nologo /target:winexe /optimize /win32icon:TryLinux.ico /out:TryLinux.exe %REFS% %SRC% || exit /b 1
+"%CSC%" /nologo /target:winexe /optimize /win32icon:TryLinux.ico /out:TryLinux.exe %REFS% %RES% %SRC% || exit /b 1
 echo Built TryLinux.exe

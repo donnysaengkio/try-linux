@@ -110,11 +110,14 @@ class SectionHeader : Control
             using (var p = new Pen(Focused ? Theme.Highlight : Theme.Border)) g.DrawLine(p, 0, h - 1, w, h - 1);
             return;
         }
+        // Several sections can be open at once; only the one last opened is highlighted (like a
+        // multiselectable accordion). The others look like closed bars, with the chevron pointing down.
+        bool lit = Open && Sheet.Selected == Title;
         Theme.Surface(g, ClientRectangle, Theme.Bg,
-            Open ? Theme.SelectedTop : hover ? Theme.HoverTop : Theme.CardTop,
-            Open ? Theme.SelectedBottom : hover ? Theme.HoverBottom : Theme.CardBottom,
-            Open ? Theme.Accent : Focused ? Theme.Highlight : Theme.Border, Open);
-        TextRenderer.DrawText(g, Shown, Theme.Heading, new Rectangle(pad, 0, w, h), Open ? Theme.Highlight : Theme.Text, flags);
+            lit ? Theme.SelectedTop : hover ? Theme.HoverTop : Theme.CardTop,
+            lit ? Theme.SelectedBottom : hover ? Theme.HoverBottom : Theme.CardBottom,
+            lit ? Theme.Accent : Focused ? Theme.Highlight : Theme.Border, lit);
+        TextRenderer.DrawText(g, Shown, Theme.Heading, new Rectangle(pad, 0, w, h), lit ? Theme.Highlight : Theme.Text, flags);
         int chevW = Theme.D(20);
         TextRenderer.DrawText(g, chevron, Glyph, new Rectangle(w - pad - chevW, 0, chevW, h), Theme.Muted, flags | TextFormatFlags.HorizontalCenter);
         // The summary sits between the title and the chevron, shortened with "..." if it doesn't fit.
@@ -161,7 +164,9 @@ class Sheet
     public bool Collapsible;
     public int Style;
     public static int HardwareStyle = 1;   // the Hardware tab uses bars
-    public static readonly HashSet<string> Opened = new HashSet<string>();   // remembered while Try Linux runs
+    public static readonly HashSet<string> Opened = new HashSet<string>();   // remembered while Settings is open
+    public static string Selected;   // the section last opened, the only one highlighted
+    public static void ResetSections() { Opened.Clear(); Selected = null; }   // every section starts closed
 
     class Group
     {
@@ -217,6 +222,8 @@ class Sheet
         if (open && Style == 2) foreach (var o in groups) if (o != g) { o.Header.Open = false; Opened.Remove(o.Header.Title); }
         g.Header.Open = open;
         if (open) Opened.Add(g.Header.Title); else Opened.Remove(g.Header.Title);
+        if (open) Selected = g.Header.Title; else if (Selected == g.Header.Title) Selected = null;
+        foreach (var o in groups) o.Header.Invalidate();
         Layout();
     }
 
@@ -369,8 +376,7 @@ class Sheet
     {
         var c = new DarkList();
         c.Items.AddRange(items);
-        if (items.Length > 0) c.SelectedIndex = 0;
-        Native.DarkScrollbars(c);
+        if (items.Length > 0) c.SelectedIndex = 0;   // (the open list's dark scrollbar: DarkCombo.Unthemed)
         return c;
     }
 
@@ -436,7 +442,7 @@ class TabStrip : Control
 
 partial class MainForm
 {
-    public const string Version = "1.1.8";
+    public const string Version = "1.1.9";
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
     void ShowSettings(VmConfig cfg)
@@ -518,6 +524,21 @@ partial class MainForm
         tabs.Changed += delegate { for (int i = 0; i < sheets.Length; i++) sheets[i].Panel.Visible = i == tabs.SelectedIndex; };
 
         // ---- General
+        // Info: the notes given when it was created (editable), what it runs and where it's kept.
+        general.Section("Info");
+        var description = general.Row("Description", Sheet.Input((cfg.Description ?? "").Replace("\r\n", "\n").Replace("\n", "\r\n"), true), 410, 76);
+        Native.TextMargins(description);
+        Func<string, Label> infoText = text => new Label { Text = text, Font = Theme.Body, ForeColor = Theme.Text, BackColor = Theme.Bg,
+            UseMnemonic = false, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft };
+        general.Row("Operating system", infoText(OsLabel(cfg)), 410);
+        var infoLocation = general.Row("Location", infoText(cfg.Dir), 410);
+        new ToolTip().SetToolTip(infoLocation, cfg.Dir);
+        general.Summary("Info", () =>
+        {
+            string first = description.Text.Trim().Split('\n')[0].Trim();
+            return first.Length > 0 ? first : "No description";
+        });
+
         general.Section("Display and startup");
         var full = general.Check("Open fullscreen", cfg.Fullscreen);
         var screens = System.Windows.Forms.Screen.AllScreens;
@@ -598,7 +619,7 @@ partial class MainForm
         var maxSize = valueRow("Maximum size");
 
         hardware.SubHeading("Disk information");
-        hardware.Note("Disk space is not preallocated: the file grows as Linux uses it, up to the maximum size.", 1);
+        var allocation = hardware.Note("", 1);   // Dynamic or Preallocated, for the chosen disk
         var stored = hardware.Note("", 1);
         var location = hardware.Row("Location", Sheet.Input(""), 410);
         location.ReadOnly = true;
@@ -629,6 +650,10 @@ partial class MainForm
             freeRow.Text = maxSize.Text = "";
             location.Text = path;
             stored.Text = "Stored in " + Path.GetFileName(path) + (index == 0 ? ", the disk " + who + " starts from." : ".");
+            // Only the boot disk can be made with its full size allocated (Create > Allocate the full size now).
+            allocation.Text = index == 0 && cfg.DiskFull
+                ? "Preallocated: its full maximum size was taken on the drive when it was made."
+                : "Dynamic: the file takes space on the drive only as Linux stores data, up to the maximum size.";
             removeBtn.Enabled = index > 0;
             resizeBtn.Enabled = compactBtn.Enabled = false;
             Task.Run(() =>
@@ -738,10 +763,13 @@ partial class MainForm
             long free = -1;
             try { free = new DriveInfo(Path.GetPathRoot(path)).AvailableFreeSpace; } catch { }
             if (free >= 0 && free < disk.Actual) { Error("Compacting needs room for a second copy while it works: " + DiskSize(disk.Actual) + ", but drive " + Path.GetPathRoot(path).TrimEnd('\\') + " has " + DiskSize(free) + " free."); return; }
+            bool preallocated = index == 0 && cfg.DiskFull;
             if (!ThemedDialog.Show(this, "Compact " + diskName(index) + "?",
-                    "Try Linux rewrites the disk file without its unused space. Linux and your files are unchanged.", null,
+                    "Try Linux rewrites the disk file without its unused space. Linux and your files are unchanged." +
+                    (preallocated ? " The disk stops being preallocated: afterwards it takes space only as Linux stores data." : ""), null,
                     "It needs " + DiskSize(disk.Actual) + " free while it works" + (reclaim.Checked ? "." : ". Turn on Reclaim free space and start Linux once first to free the most."),
                     "Compact", "Cancel")) return;
+            if (preallocated) cfg.DiskFull = false;   // saved by store(), before the file is rewritten as a sparse one
             if (!store()) return;
             RunTool(cfg, "Compacting " + diskName(index) + " of " + who, () => CompactDisk(path, diskName(index)));
         };
@@ -877,6 +905,20 @@ partial class MainForm
                 if (dlg.ShowDialog(this) == DialogResult.OK) shared.Text = dlg.SelectedPath;
         };
 
+        // ---- Appearance (on General): Try Linux's theme, for every system. Follow system uses Light while
+        // Windows shows apps in light mode and Dark otherwise; the theme list waits while it's on.
+        general.Section("Appearance");
+        var themePick = general.Row("Theme", Sheet.Combo(Theme.Titles), 160);
+        themePick.SelectedIndex = Math.Max(0, Array.IndexOf(Theme.Names, AppSettings.ThemeName));
+        var follow = general.Check("Follow system", AppSettings.FollowSystem);
+        general.Note("Follow system uses Light while Windows shows apps in light mode, and Dark otherwise.\nThe theme changes when you save.", 2);
+        Action lockTheme = () => themePick.Enabled = !follow.Checked;
+        follow.CheckedChanged += delegate { lockTheme(); };
+        lockTheme();
+        general.Summary("Appearance", () => follow.Checked
+            ? "Follows Windows (" + (AppSettings.WindowsUsesLight() ? "Light" : "Dark") + ")"
+            : Theme.Titles[Math.Max(0, themePick.SelectedIndex)]);
+
         // ---- About (on General)
         general.Section("About");
         general.Note("Try Linux " + Version + "\nWINQ-EMU: " + (Winq.Ready ? (Winq.Version != null ? Winq.Version + ", " : "") + Winq.Bin : "not installed") +
@@ -1003,6 +1045,15 @@ partial class MainForm
             if (sf.Length > 0 && !Directory.Exists(sf)) { tabs.SelectedIndex = 0; Error("The shared folder doesn't exist."); return false; }
             if (sf.Contains(",")) { tabs.SelectedIndex = 0; Error("QEMU can't share a folder whose path contains a comma."); return false; }
 
+            cfg.Description = description.Text.Trim();
+            // Appearance is for Try Linux as a whole, so it's kept in settings.ini.
+            string themeName = Theme.Names[Math.Max(0, themePick.SelectedIndex)];
+            if (themeName != AppSettings.ThemeName || follow.Checked != AppSettings.FollowSystem)
+            {
+                AppSettings.ThemeName = themeName;
+                AppSettings.FollowSystem = follow.Checked;
+                AppSettings.Save();
+            }
             cfg.Fullscreen = full.Checked;
             cfg.FullscreenDisplay = display.SelectedIndex > 0 ? screens[display.SelectedIndex - 1].DeviceName : "";
             cfg.ShortcutDirect = direct.Checked;
@@ -1036,7 +1087,7 @@ partial class MainForm
         };
 
         back.Click += delegate { ShowHome(); };
-        save.Click += delegate { if (store()) ShowHome(); };
+        save.Click += delegate { if (store()) { RefreshTheme(); ShowHome(); } };
         shortcutBtn.Click += delegate
         {
             if (!store()) return;
@@ -1458,6 +1509,8 @@ partial class MainForm
             SetRunAtLogin(cfg, false);
             if (cfg.ShortcutDirect && File.Exists(ShortcutPath(cfg))) File.Delete(ShortcutPath(cfg));
             Directory.Delete(cfg.Dir, true);
+            // A system in a location of its own is no longer looked for there.
+            if (AppSettings.VmDirs.RemoveAll(d => string.Equals(d, cfg.Dir, StringComparison.OrdinalIgnoreCase)) > 0) AppSettings.Save();
         }
         catch (Exception ex) { Error("Couldn't delete it completely: " + ex.Message); }
         ShowHome();

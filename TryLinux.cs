@@ -43,6 +43,7 @@ static class Program
         if (start == null)
         {
             AppSettings.Load();
+            Theme.Apply(AppSettings.EffectiveTheme);
             if (SelfInstall.OfferAtStartup()) return;
         }
         Application.Run(new MainForm(start));
@@ -94,7 +95,76 @@ class Distro
 
     public static Distro Find(string id)
     {
-        return Catalog.FirstOrDefault(d => d.Id == id);
+        return Catalog.FirstOrDefault(d => d.Id == id) ?? MoreDistros.Cached().FirstOrDefault(d => d.Id == id);
+    }
+}
+
+// More distributions, from a list kept in the GitHub repo (catalog/distros.json), so it can grow without
+// a new release of Try Linux. Each entry is found and checked against its official checksum the same way
+// as the built-in ones. The list is fetched at most once a day and cached; offline, the cached copy is used.
+static class MoreDistros
+{
+    public static string Source = "https://raw.githubusercontent.com/donnysaengkio/try-linux/main/catalog/distros.json";
+    static List<Distro> loaded;
+
+    static string CacheFile { get { return Path.Combine(AppSettings.Storage, "catalog", "distros.json"); } }
+
+    // When the cached list was last fetched, or null if there isn't one.
+    public static DateTime? Updated { get { return File.Exists(CacheFile) ? File.GetLastWriteTime(CacheFile) : (DateTime?)null; } }
+
+    public static List<Distro> Cached()
+    {
+        if (loaded == null && File.Exists(CacheFile))
+            try { loaded = Parse(File.ReadAllText(CacheFile)); }
+            catch (Exception) { }
+        return loaded ?? new List<Distro>();
+    }
+
+    // The list, fetched again if the cached one is a day old (or `force`); the cached one if that fails.
+    public static List<Distro> Load(bool force)
+    {
+        var updated = Updated;
+        if (!force && updated != null && (DateTime.Now - updated.Value).TotalHours < 24 && Cached().Count > 0) return Cached();
+        try
+        {
+            string text = Net.GetString(Source);
+            var list = Parse(text);
+            Directory.CreateDirectory(Path.GetDirectoryName(CacheFile));
+            File.WriteAllText(CacheFile, text);
+            loaded = list;
+            return list;
+        }
+        catch (Exception)
+        {
+            if (Cached().Count > 0) return Cached();
+            throw;
+        }
+    }
+
+    // Entries that aren't on an https mirror, or that would replace a built-in one, are left out.
+    static List<Distro> Parse(string json)
+    {
+        var root = (Dictionary<string, object>)new System.Web.Script.Serialization.JavaScriptSerializer().DeserializeObject(json);
+        var list = new List<Distro>();
+        object items;
+        if (!root.TryGetValue("distros", out items) || !(items is object[])) throw new Exception("The list of distributions is empty or damaged.");
+        Func<Dictionary<string, object>, string, string> str = (d, k) => { object v; return d.TryGetValue(k, out v) && v is string ? (string)v : null; };
+        foreach (var o in (object[])items)
+        {
+            var d = o as Dictionary<string, object>;
+            if (d == null) continue;
+            string id = str(d, "id"), name = str(d, "name"), baseUrl = str(d, "base");
+            object steps; d.TryGetValue("steps", out steps);
+            if (id == null || name == null || baseUrl == null || !(steps is object[])) continue;
+            if (!Regex.IsMatch(id, "^[a-z0-9-]{1,40}$") || !baseUrl.StartsWith("https://", StringComparison.Ordinal)) continue;
+            if (Distro.Catalog.Any(c => c.Id == id) || list.Any(c => c.Id == id)) continue;
+            object disk; d.TryGetValue("diskGB", out disk);
+            list.Add(new Distro {
+                Id = id, Name = name, Blurb = str(d, "about") ?? "", Base = baseUrl,
+                Steps = ((object[])steps).OfType<string>().ToArray(), Checksum = str(d, "checksum"),
+                DiskGB = disk is int ? Math.Max(16, Math.Min(2048, (int)disk)) : 64 });
+        }
+        return list;
     }
 }
 
@@ -113,6 +183,24 @@ static class AppSettings
     public static string DeclinedInstall = "";   // the version whose install offer was turned down
     public static bool CheckUpdates = true;       // look for a newer release once a day
     public static string LastUpdateCheck = "", LatestVersion = "", LatestWinq = "";
+    // Folders of systems created outside VmsDir (Create > Location > Choose a different location).
+    public static List<string> VmDirs = new List<string>();
+    // Settings > General > Appearance: the theme (dark, light or blue), or Windows' own light or dark mode.
+    public static string ThemeName = "dark";
+    public static bool FollowSystem;
+
+    // The theme to use now: with Follow system, Light while Windows shows apps light and Dark otherwise.
+    public static string EffectiveTheme { get { return FollowSystem ? (WindowsUsesLight() ? "light" : "dark") : ThemeName; } }
+
+    public static bool WindowsUsesLight()
+    {
+        try
+        {
+            using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"))
+                return k != null && Convert.ToInt32(k.GetValue("AppsUseLightTheme", 0)) == 1;
+        }
+        catch { return false; }
+    }
 
     public static void Load()
     {
@@ -125,6 +213,9 @@ static class AppSettings
             if (line.StartsWith("lastupdatecheck=")) LastUpdateCheck = line.Substring(16).Trim();
             if (line.StartsWith("latestversion=")) LatestVersion = line.Substring(14).Trim();
             if (line.StartsWith("latestwinq=")) LatestWinq = line.Substring(11).Trim();
+            if (line.StartsWith("theme=")) ThemeName = line.Substring(6).Trim().ToLowerInvariant();
+            if (line.StartsWith("followsystem=")) FollowSystem = line.Substring(13).Trim() == "1";
+            if (line.StartsWith("vmdirs=")) VmDirs = line.Substring(7).Split('|').Select(d => d.Trim()).Where(d => d.Length > 0).ToList();
         }
     }
 
@@ -133,7 +224,8 @@ static class AppSettings
         Directory.CreateDirectory(Path.GetDirectoryName(Ini));
         File.WriteAllLines(Ini, new[] { "storage=" + Storage, "declinedinstall=" + DeclinedInstall,
             "checkupdates=" + (CheckUpdates ? "1" : "0"), "lastupdatecheck=" + LastUpdateCheck, "latestversion=" + LatestVersion,
-            "latestwinq=" + LatestWinq });
+            "latestwinq=" + LatestWinq, "vmdirs=" + string.Join("|", VmDirs),
+            "theme=" + ThemeName, "followsystem=" + (FollowSystem ? "1" : "0") });
     }
 }
 
@@ -498,6 +590,8 @@ class VmConfig
     public bool Reclaim = true;         // pass Linux's TRIM through, so deleted files free space in the disk file
     public string Cd = "";              // ISO in the CD/DVD drive; empty when the drive is empty
     public int NetType;                 // 0 shared (NAT), 1 port forwards only, 2 no network
+    public string Description = "";     // the user's notes about this system (may be several lines)
+    public bool DiskFull;               // the boot disk was made with its full size allocated (not sparse)
     public static readonly string[] NetTypeNames = { "Shared with this PC (NAT)", "Port forwards only", "No network" };
 
     public string Disk { get { return Path.Combine(Dir, Name + ".qcow2"); } }
@@ -592,6 +686,8 @@ class VmConfig
                 case "cd": c.Cd = v; break;
                 case "nettype": if (isInt) c.NetType = Math.Max(0, Math.Min(2, n)); break;
                 case "disks": c.ExtraDisks = v.Split('|').Where(d => d.Length > 0).ToList(); break;
+                case "diskfull": c.DiskFull = v == "1"; break;
+                case "description": c.Description = Regex.Replace(v, @"\\(.)", m => m.Groups[1].Value == "n" ? "\n" : m.Groups[1].Value); break;
             }
         }
         return c;
@@ -609,7 +705,10 @@ class VmConfig
             "sharedwrite=" + (SharedWrite ? "1" : "0"), "sound=" + (Sound ? "1" : "0"), "mic=" + (Mic ? "1" : "0"),
             "shortcutdirect=" + (ShortcutDirect ? "1" : "0"), "forwards=" + Forwards,
             "fsdisplay=" + FullscreenDisplay, "lastrender=" + LastRender, "disks=" + string.Join("|", ExtraDisks),
-            "reclaim=" + (Reclaim ? "1" : "0"), "cd=" + Cd, "nettype=" + NetType });
+            "reclaim=" + (Reclaim ? "1" : "0"), "cd=" + Cd, "nettype=" + NetType,
+            "diskfull=" + (DiskFull ? "1" : "0"),
+            // One line: a backslash and a line break are written as \\ and \n.
+            "description=" + (Description ?? "").Replace("\r\n", "\n").Replace("\\", "\\\\").Replace("\n", "\\n") });
     }
 
     public void Resources(out int cores, out int ramGB)
@@ -623,11 +722,20 @@ class VmConfig
     public static List<VmConfig> All()
     {
         var list = new List<VmConfig>();
-        if (!Directory.Exists(AppSettings.VmsDir)) return list;
-        foreach (var dir in Directory.GetDirectories(AppSettings.VmsDir))
+        // Systems in the storage folder, then any created in a location of their own (a drive that's
+        // disconnected just leaves them out until it's back).
+        var dirs = Directory.Exists(AppSettings.VmsDir) ? Directory.GetDirectories(AppSettings.VmsDir).ToList() : new List<string>();
+        foreach (var d in AppSettings.VmDirs)
+            if (!dirs.Any(x => string.Equals(Path.GetFullPath(x), Path.GetFullPath(d), StringComparison.OrdinalIgnoreCase))) dirs.Add(d);
+        foreach (var dir in dirs)
         {
-            var c = Load(dir);
-            if (File.Exists(c.Disk)) list.Add(c);
+            try
+            {
+                if (!Directory.Exists(dir)) continue;
+                var c = Load(dir);
+                if (File.Exists(c.Disk)) list.Add(c);
+            }
+            catch { }
         }
         list.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.CurrentCultureIgnoreCase));
         return list;
@@ -727,8 +835,7 @@ class SizeBox : ComboBox
         DropDownStyle = ComboBoxStyle.DropDown;
         FlatStyle = FlatStyle.Flat;
         BackColor = Theme.Card; ForeColor = Theme.Text; Font = Theme.Body;
-        MaxDropDownItems = 12;
-        Native.DarkScrollbars(this);
+        MaxDropDownItems = 12;   // (the open list's dark scrollbar: DarkCombo.Unthemed)
         Fill();
         this.value = Fit(value);
         Text = this.value.ToString();
@@ -794,7 +901,6 @@ class SizeBox : ComboBox
     // Windows selects an editable dropdown's text whenever it's sized or shown, which looks like
     // a highlight on every field; only a field being typed in should show a selection.
     protected override void OnResize(EventArgs e) { base.OnResize(e); Unselect(); }
-    protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); Unselect(); }
     protected override void OnDropDownClosed(EventArgs e) { base.OnDropDownClosed(e); if (!Focused) Unselect(); }
 
     void Unselect()
@@ -809,7 +915,12 @@ class SizeBox : ComboBox
     public bool Locked
     {
         get { return locked; }
-        set { locked = value; ForeColor = value ? Theme.Muted : Theme.Text; TabStop = !value; Invalidate(); }
+        set
+        {
+            locked = value; ForeColor = value ? Theme.Muted : Theme.Text; TabStop = !value;
+            if (value) { if (DroppedDown) DroppedDown = false; if (Focused && Parent != null) Parent.SelectNextControl(this, true, true, true, true); SelectionLength = 0; }
+            Invalidate();
+        }
     }
 
     protected override void OnDropDown(EventArgs e)
@@ -831,10 +942,40 @@ class SizeBox : ComboBox
         base.OnKeyPress(e);
     }
 
+    // While locked, clicks do nothing at all: no list, no caret, an arrow pointer (on the button part here,
+    // on the text part through the edit control inside the box).
+    static bool Blocked(int msg) { return msg == 0x201 || msg == 0x202 || msg == 0x203 || msg == 0x204 || msg == 0x206 || msg == 0x207 || msg == 0x209 || msg == 0x20A; }
+    const int WM_SETCURSOR = 0x20;
+
     protected override void WndProc(ref Message m)
     {
+        if (locked && Blocked(m.Msg)) return;
+        if (locked && m.Msg == WM_SETCURSOR) { Cursor.Current = Cursors.Default; m.Result = (IntPtr)1; return; }
         base.WndProc(ref m);
         if (m.Msg == DarkCombo.WM_PAINT) DarkCombo.Paint(this, locked || !Enabled);
+    }
+
+    class EditPart : NativeWindow
+    {
+        readonly SizeBox box;
+        public EditPart(SizeBox box, IntPtr edit) { this.box = box; AssignHandle(edit); }
+        protected override void WndProc(ref Message m)
+        {
+            if (box.locked && Blocked(m.Msg)) return;
+            if (box.locked && m.Msg == WM_SETCURSOR) { Cursor.Current = Cursors.Default; m.Result = (IntPtr)1; return; }
+            base.WndProc(ref m);
+        }
+    }
+    EditPart editPart;
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string title);
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        DarkCombo.Unthemed(this);
+        Unselect();
+        var edit = FindWindowEx(Handle, IntPtr.Zero, "Edit", null);
+        if (edit != IntPtr.Zero) editPart = new EditPart(this, edit);
     }
 
     // Snaps whatever was typed to a valid value (or back to the last one if it isn't a number).
@@ -853,6 +994,22 @@ static class DarkCombo
     [StructLayout(LayoutKind.Sequential)] struct RECT { public int L, T, R, B; }
     [StructLayout(LayoutKind.Sequential)] struct COMBOBOXINFO { public int cbSize; public RECT rcItem, rcButton; public int stateButton; public IntPtr hwndCombo, hwndItem, hwndList; }
     [DllImport("user32.dll")] static extern bool GetComboBoxInfo(IntPtr h, ref COMBOBOXINFO info);
+    [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)] static extern int SetWindowTheme(IntPtr h, string app, string idList);
+
+    // The themed Windows combo box animates a highlighted border when the pointer is over it, which
+    // showed for a moment before Paint drew the dark frame over it. Unthemed, it doesn't (Paint draws
+    // everything but the text anyway).
+    // The open list keeps the dark theme, for its scrollbar.
+    public static void Unthemed(ComboBox c)
+    {
+        try
+        {
+            SetWindowTheme(c.Handle, "", "");
+            var info = new COMBOBOXINFO { cbSize = Marshal.SizeOf(typeof(COMBOBOXINFO)) };
+            if (GetComboBoxInfo(c.Handle, ref info) && info.hwndList != IntPtr.Zero) SetWindowTheme(info.hwndList, Native.ScrollbarTheme, null);
+        }
+        catch { }
+    }
 
     public static void Paint(ComboBox c, bool dim)
     {
@@ -908,6 +1065,7 @@ class DarkList : ComboBox
     }
 
     protected override void OnEnabledChanged(EventArgs e) { base.OnEnabledChanged(e); Invalidate(); }
+    protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); DarkCombo.Unthemed(this); }
 
     protected override void WndProc(ref Message m)
     {
@@ -973,11 +1131,52 @@ static class Winq
     }
 }
 
+// The QEMU guest agent protocol: one JSON command per line on the virtio-serial channel
+// "org.qemu.guest_agent.0", which QEMU passes to a local TCP socket.
+static class GuestAgent
+{
+    // The OS's name from /etc/os-release (e.g. "Fedora Linux 45 (Workstation Edition)"), or null when
+    // no agent answers.
+    public static string OsName(int port)
+    {
+        try
+        {
+            using (var c = new TcpClient("127.0.0.1", port))
+            using (var s = c.GetStream())
+            {
+                s.ReadTimeout = 3000;
+                var r = new StreamReader(s);
+                var w = new StreamWriter(s) { AutoFlush = true, NewLine = "\n" };
+                // guest-sync with a fresh id, so a reply left over from an earlier client is skipped.
+                int id = new Random().Next(1, int.MaxValue);
+                w.WriteLine("{\"execute\":\"guest-sync\",\"arguments\":{\"id\":" + id + "}}");
+                string line;
+                while ((line = r.ReadLine()) != null && !line.Contains(id.ToString())) { }
+                if (line == null) return null;
+                w.WriteLine("{\"execute\":\"guest-get-osinfo\"}");
+                line = r.ReadLine();
+                if (line == null) return null;
+                var reply = new System.Web.Script.Serialization.JavaScriptSerializer().DeserializeObject(line) as Dictionary<string, object>;
+                object ret;
+                if (reply == null || !reply.TryGetValue("return", out ret)) return null;
+                var info = ret as Dictionary<string, object>;
+                if (info == null) return null;
+                Func<string, string> get = k => { object v; return info.TryGetValue(k, out v) && v != null ? v.ToString().Trim() : ""; };
+                string name = get("pretty-name");
+                if (name.Length == 0) name = (get("name") + " " + get("version")).Trim();
+                if (name.Length == 0 || name.Length > 100) return null;
+                return Regex.Replace(name, @"[\r\n]+", " ");
+            }
+        }
+        catch { return null; }
+    }
+}
+
 class RunningVm
 {
     public VmConfig Cfg;
     public Process P;
-    public int QmpPort, EventPort;
+    public int QmpPort, EventPort, AgentPort;
     public bool Installer, Cpu;
     // QEMU's window, kept because Process.MainWindowHandle is zero while it's hidden.
     public IntPtr Window;
@@ -993,6 +1192,35 @@ class RunningVm
     // Why QEMU stopped, from its SHUTDOWN event: "guest-shutdown" for a power-off, "guest-reset" for a restart.
     public volatile string ShutdownReason;
     public System.Threading.Thread Watcher;
+
+    // Asks the QEMU guest agent inside Linux (qemu-guest-agent, if installed) which OS is running, and
+    // saves its name to guest-os.txt in the system's folder. Tries every 15 seconds for 15 minutes, as
+    // the agent only answers once Linux has booted; without an agent nothing changes.
+    public void WatchAgent(Action found)
+    {
+        var vm = this;
+        new System.Threading.Thread(() =>
+        {
+            for (int i = 0; i < 60; i++)
+            {
+                System.Threading.Thread.Sleep(15000);
+                try { if (vm.P.HasExited) return; } catch { return; }
+                string name = GuestAgent.OsName(vm.AgentPort);
+                if (name == null) continue;
+                try
+                {
+                    string file = Path.Combine(vm.Cfg.Dir, "guest-os.txt");
+                    if (!File.Exists(file) || File.ReadAllText(file).Trim() != name)
+                    {
+                        File.WriteAllText(file, name + "\r\n");
+                        found();
+                    }
+                }
+                catch { }
+                return;
+            }
+        }) { IsBackground = true, Name = "Guest agent" }.Start();
+    }
 
     // Listens on a second QMP monitor (the first stays free for commands like system_powerdown).
     public void WatchEvents()
@@ -1033,7 +1261,7 @@ class RunningVm
 
 class ResolvedIso
 {
-    public string Url, FileName, Sha256;
+    public string Url, FileName, Sha256;   // Sha256: the official SHA-256, or SHA-512 when that's all a project publishes
     public long Size = -1;
 }
 
@@ -1114,9 +1342,12 @@ static class Net
         }
     }
 
-    public static string Sha256(string file, Func<bool> cancelled, Action<double> report)
+    public static string Sha256(string file, Func<bool> cancelled, Action<double> report) { return Hash(file, false, cancelled, report); }
+
+    // SHA-256, or SHA-512 for projects that only publish that (Mageia, EndeavourOS, openSUSE Leap 16).
+    public static string Hash(string file, bool sha512, Func<bool> cancelled, Action<double> report)
     {
-        using (var sha = SHA256.Create())
+        using (HashAlgorithm sha = sha512 ? (HashAlgorithm)SHA512.Create() : SHA256.Create())
         using (var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20))
         {
             var buf = new byte[1 << 20];
@@ -1274,7 +1505,8 @@ static class Resolver
         }
         else name = spec.Replace("{iso}", isoUrl.Substring(dir.Length));
         string text = Net.GetString(dir + name);
-        var hex = new Regex(@"\b[0-9a-fA-F]{64}\b");
+        // A SHA-256 (64 hex digits) or SHA-512 (128) checksum; the download is checked with whichever it is.
+        var hex = new Regex(@"\b([0-9a-fA-F]{128}|[0-9a-fA-F]{64})\b");
         foreach (var line in text.Split('\n'))
             if (line.Contains(fileName))
             {
@@ -1320,6 +1552,35 @@ static class Resolver
 static class Native
 {
     [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+    [DllImport("gdi32.dll")] public static extern IntPtr AddFontMemResourceEx(IntPtr font, uint size, IntPtr reserved, ref uint fonts);
+    [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, IntPtr l);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool DeviceIoControl(Microsoft.Win32.SafeHandles.SafeFileHandle h, uint code, ref byte input, int inputSize,
+        IntPtr output, int outputSize, out int returned, IntPtr overlapped);
+
+    // Turns a file's NTFS sparse flag off, so Windows allocates its whole length on the drive now
+    // (FSCTL_SET_SPARSE with SetSparse = false). Used for a disk created with its full size allocated.
+    public static void ClearSparse(string file)
+    {
+        using (var fs = new FileStream(file, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            byte setSparse = 0;
+            int returned;
+            if (!DeviceIoControl(fs.SafeFileHandle, 0x000900C4, ref setSparse, 1, IntPtr.Zero, 0, out returned, IntPtr.Zero))
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "Couldn't allocate the disk's full size");
+        }
+    }
+
+    // Space between a text box's border and its text, on both sides (EM_SETMARGINS; set again
+    // once the box has a window, as Windows only keeps it from then on).
+    public static void TextMargins(TextBox t, int designPx = 6)
+    {
+        int px = Theme.D(designPx);
+        Action set = () => SendMessage(t.Handle, 0xD3, (IntPtr)3, (IntPtr)(px | (px << 16)));   // EC_LEFTMARGIN | EC_RIGHTMARGIN
+        if (t.IsHandleCreated) set();
+        t.HandleCreated += delegate { set(); };
+        t.FontChanged += delegate { if (t.IsHandleCreated) set(); };
+    }
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
     [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
@@ -1333,9 +1594,16 @@ static class Native
         SetForegroundWindow(h);
     }
 
+    // Makes Windows draw the title bar again (after DarkTitleBar changes it on a window that's showing).
+    public static void RedrawFrame(IntPtr h)
+    {
+        try { SetWindowPos(h, IntPtr.Zero, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0004 | 0x0010 | 0x0020); } catch { }   // NOSIZE NOMOVE NOZORDER NOACTIVATE FRAMECHANGED
+    }
+
+    // A dark title bar for the dark themes, the usual light one for Light.
     public static void DarkTitleBar(IntPtr h)
     {
-        int on = 1;
+        int on = Theme.Light ? 0 : 1;
         try { DwmSetWindowAttribute(h, 20, ref on, 4); } catch { }
     }
 
@@ -1344,9 +1612,12 @@ static class Native
     [DllImport("user32.dll")] static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
 
     // Windows 10/11 dark scrollbars for a scrollable control.
+    // Scrollbars drawn to match: Windows' dark ones for the dark themes, its usual ones for Light.
+    public static string ScrollbarTheme { get { return Theme.Light ? "Explorer" : "DarkMode_Explorer"; } }
+
     public static void DarkScrollbars(Control c)
     {
-        EventHandler apply = delegate { try { SetWindowTheme(c.Handle, "DarkMode_Explorer", null); } catch { } };
+        EventHandler apply = delegate { try { SetWindowTheme(c.Handle, ScrollbarTheme, null); } catch { } };
         if (c.IsHandleCreated) apply(c, EventArgs.Empty); else c.HandleCreated += apply;
     }
 
@@ -1520,26 +1791,77 @@ static class Virt
 static class Theme
 {
     public static float Scale = 1;
-    // Colors follow Proton's palette (proton.me/blog/new-visual-universe) on a Proton Pass-style dark UI.
-    // "Depth": a deep background with surfaces shaded from top to bottom, and a purple glow on
+    // "Depth": a deep background with surfaces shaded from top to bottom, and a lavender outline on
     // what's selected or open.
-    public static readonly Color Bg = Color.FromArgb(12, 12, 20);             // #0C0C14
-    public static readonly Color Card = Color.FromArgb(26, 23, 38);           // fields and flat fills
-    public static readonly Color CardHover = Color.FromArgb(36, 32, 54);
-    public static readonly Color CardSelected = Color.FromArgb(38, 32, 60);
-    public static readonly Color CardTop = Color.FromArgb(29, 26, 43), CardBottom = Color.FromArgb(22, 20, 31);           // #1D1A2B to #16141F
-    public static readonly Color HoverTop = Color.FromArgb(37, 33, 55), HoverBottom = Color.FromArgb(27, 24, 40);
-    public static readonly Color SelectedTop = Color.FromArgb(42, 35, 66), SelectedBottom = Color.FromArgb(28, 24, 48);   // #2A2342 to #1C1830
-    public static readonly Color Border = Color.FromArgb(42, 37, 64);         // #2A2540
-    public static readonly Color Text = Color.FromArgb(245, 244, 242);        // #F5F4F2
-    public static readonly Color Muted = Color.FromArgb(155, 151, 179);       // #9B97B3
+    // Three themes, chosen in settings.ini (theme=dark, light or blue; TRYLINUX_THEME overrides it) and
+    // read once at start:
+    //   Dark: Firefox's dark Settings page. Neutral grays (page #111113, cards #252429, panel #1C1B22,
+    //         borders #39383D) with lavender #B89CFE for what's selected and the main buttons.
+    //   Light: Bitwarden's brand colors, light. Off White #F3F6F9 page, white cards, Light Grey #D8E2EB
+    //         lines, Bitwarden Blue #175DDC for what's selected and the main buttons, Deep Blue #0C3276.
+    //   Blue: Bitwarden's brand colors, dark. Navy from Deep Blue #0C3276, Bitwarden Blue #175DDC buttons,
+    //         Light Teal #A2F4FD for what's selected, Off White #F3F6F9 text, Medium Grey #99A7B5.
+    public static string Name { get; private set; }
+    public static bool Light { get { return Name == "light"; } }
+    public static readonly string[] Names = { "dark", "light", "blue" };
+    public static readonly string[] Titles = { "Dark", "Light", "Blue" };
+    static Theme() { Apply("dark"); }
+    static Color C(string dark, string light, string blue) { return ColorTranslator.FromHtml(Name == "light" ? light : Name == "blue" ? blue : dark); }
+
+    // Sets every color for a theme (dark, light or blue; TRYLINUX_THEME overrides it, for previews).
+    // Controls take their colors when they're made, so the window redraws its page afterwards.
+    public static void Apply(string name)
+    {
+        string forced = Environment.GetEnvironmentVariable("TRYLINUX_THEME");
+        name = ((string.IsNullOrEmpty(forced) ? name : forced) ?? "").Trim().ToLowerInvariant();
+        Name = Names.Contains(name) ? name : "dark";
+        Bg = C("#111113", "#F3F6F9", "#06132B");
+        Card = C("#252429", "#FFFFFF", "#0E2247");
+        CardHover = C("#2E2D33", "#EAF0F6", "#132B57");
+        CardSelected = C("#352E48", "#DCE7FB", "#173874");
+        CardTop = C("#28272C", "#FFFFFF", "#10264E");
+        CardBottom = C("#232227", "#F8FAFC", "#0C1F42");
+        HoverTop = C("#302F35", "#F0F5FA", "#16305E");
+        HoverBottom = C("#2A292F", "#E7EEF5", "#11284F");
+        SelectedTop = C("#372F4D", "#E6EEFD", "#183F82");
+        SelectedBottom = C("#2C263D", "#D9E5FB", "#12326B");
+        Border = C("#39383D", "#C9D5E1", "#22427A");
+        Text = C("#FBFBFE", "#101A27", "#F3F6F9");
+        Muted = C("#BFBFC9", "#56677A", "#99A7B5");
+        Accent = C("#B89CFE", "#175DDC", "#175DDC");
+        AccentHover = C("#C7B1FF", "#2F6FE4", "#2F6FE4");
+        Accent2 = C("#5E4898", "#0C3276", "#0C3276");
+        Highlight = C("#C7B1FF", "#175DDC", "#A2F4FD");
+        Highlight2 = C("#B89CFE", "#0C3276", "#2CDDE9");
+        AccentLight = C("#D6C7FF", "#4A84EC", "#4A84EC");
+        AccentMid = C("#C2A9FF", "#2366E0", "#2366E0");
+        AccentDark = C("#A487F2", "#1250C0", "#1250C0");
+        OnAccent = C("#15141A", "#FFFFFF", "#FFFFFF");
+        Success = C("#7ED68A", "#0E8A4F", "#7BF1A8");
+        Danger = C("#F26D6D", "#D63B25", "#FF6550");
+        Warning = C("#F9D949", "#B38600", "#FDC700");
+        BoxFill = C("#1C1B22", "#EAF0F5", "#0A1A38");
+    }
+    public static Color Bg;
+    public static Color Card;                  // fields and flat fills
+    public static Color CardHover;
+    public static Color CardSelected;
+    public static Color CardTop, CardBottom;
+    public static Color HoverTop, HoverBottom;
+    public static Color SelectedTop, SelectedBottom;
+    public static Color Border;
+    public static Color Text;
+    public static Color Muted;
     // Accent is the main call to action only (Start, Next, Install). Highlight is the logo and
     // active form elements: selection, tabs, checkboxes, progress, section titles.
-    public static readonly Color Accent = Color.FromArgb(109, 74, 255);       // #6D4AFF
-    public static readonly Color AccentHover = Color.FromArgb(138, 110, 255); // #8A6EFF
-    public static readonly Color Accent2 = Color.FromArgb(56, 37, 128);       // #382580
-    public static readonly Color Highlight = Color.FromArgb(196, 181, 255);   // #C4B5FF
-    public static readonly Color Highlight2 = Color.FromArgb(109, 74, 255);   // #6D4AFF
+    public static Color Accent;
+    public static Color AccentHover;
+    public static Color Accent2;
+    public static Color Highlight;
+    public static Color Highlight2;
+    // The primary button: its hover and pressed shades, and its text (dark on Dark's lavender, white on the blues).
+    public static Color AccentLight, AccentMid, AccentDark;
+    public static Color OnAccent;
 
     // Corner rounding for cards, bars, tabs and buttons, in design units; 0 draws them square.
     public static int Radius = 0;
@@ -1557,8 +1879,8 @@ static class Theme
         return p;
     }
 
-    // A surface: shaded top to bottom, with a border, and when `glow` is set a purple glow just inside
-    // its edge (a control can't paint outside itself, so the glow fades inwards).
+    // A surface: shaded top to bottom, with a border, drawn a little heavier when `glow` (selected or
+    // open) is set. There's no glow inside the edge any more, only the outline.
     public static void Surface(Graphics g, Rectangle bounds, Color behind, Color top, Color bottom, Color border, bool glow)
     {
         if (!behind.IsEmpty) g.Clear(behind);   // Color.Empty: draw over what's there (one of several on a control)
@@ -1570,18 +1892,14 @@ static class Theme
         {
             using (var b = new LinearGradientBrush(new Rectangle(r.X, r.Y - 1, r.Width + 1, r.Height + 2), top, bottom, LinearGradientMode.Vertical))
                 g.FillPath(b, path);
-            if (glow)
-                for (int i = D(9); i >= 1; i--)
-                    using (var inner = Shape(Rectangle.Inflate(r, -i, -i), Math.Max(0, rad - i)))
-                    using (var p = new Pen(Color.FromArgb((int)(70 * Math.Pow(1 - i / (float)(D(9) + 1), 2)), Accent), 1.5f))
-                        g.DrawPath(p, inner);
             using (var p = new Pen(border, glow ? 1.5f : 1f)) g.DrawPath(p, path);
         }
         g.SmoothingMode = mode;
     }
-    public static readonly Color Success = Color.FromArgb(102, 222, 177);     // #66DEB1, a running system
-    public static readonly Color Danger = Color.FromArgb(235, 80, 141);       // #EB508D
-    public static readonly Color Warning = Color.FromArgb(249, 217, 73);      // #F9D949
+    public static Color Success;          // a running system
+    public static Color Danger;           // red, apart from the accent
+    public static Color Warning;
+    public static Color BoxFill;          // containers that group rows
 
     static string family;
     static string Family
@@ -1597,21 +1915,49 @@ static class Theme
         }
     }
 
-    // Headings (page and section titles) use a display serif, standing in for Proton's licensed ABC
-    // Arizona Flare: Sitka ships with Windows 10 and 11, with Georgia as the fallback. Everything else
-    // (descriptions, labels, buttons, tabs, system names) is Segoe UI. The logo stays monospace.
+    // Page and dialog titles are Prompt, section bars and headings Work Sans, everything else (descriptions,
+    // labels, buttons, tabs, system names) Noto Sans. The three are embedded in the exe (Open Font License,
+    // see fonts\); if they can't be loaded the app falls back to Segoe UI. The logo stays pixel art.
     public static Font Mono(float size, FontStyle style = FontStyle.Regular) { return new Font(Family, size, style); }
-    static Font Display(string sitka, float size)
+    static readonly PrivateFontCollection bundled = LoadBundled();
+    static PrivateFontCollection LoadBundled()
     {
-        using (var fonts = new InstalledFontCollection())
-            return fonts.Families.Any(f => f.Name == sitka) ? new Font(sitka, size) : new Font("Georgia", size * 0.95f, FontStyle.Bold);
+        var pfc = new PrivateFontCollection();
+        try
+        {
+            var asm = typeof(Theme).Assembly;
+            foreach (var name in new[] { "Prompt-SemiBold.ttf", "WorkSans-SemiBold.ttf", "NotoSans-Regular.ttf", "NotoSans-SemiBold.ttf" })
+                using (var s = asm.GetManifestResourceStream(name))
+                {
+                    if (s == null) continue;
+                    var data = new byte[s.Length];
+                    s.Read(data, 0, data.Length);
+                    var mem = Marshal.AllocCoTaskMem(data.Length);   // kept for the life of the process, as both APIs need
+                    Marshal.Copy(data, 0, mem, data.Length);
+                    pfc.AddMemoryFont(mem, data.Length);
+                    uint count = 0;
+                    Native.AddFontMemResourceEx(mem, (uint)data.Length, IntPtr.Zero, ref count);   // so GDI text (TextRenderer, native controls) finds it too
+                }
+        }
+        catch { }
+        return pfc;
     }
-    public static readonly Font Title = Display("Sitka Display Semibold", 16f);
-    public static readonly Font Heading = Display("Sitka Heading Semibold", 11.5f);
-    public static readonly Font Body = new Font("Segoe UI", 10f);
-    public static readonly Font Bold = new Font("Segoe UI Semibold", 10f);
-    public static readonly Font Small = new Font("Segoe UI", 9f);
-    public static readonly Font RowTitle = new Font("Segoe UI Semibold", 10.5f);   // a system or distribution name in a list
+    static Font Pick(string family, float size, string fallback, float fallbackSize)
+    {
+        try
+        {
+            var f = bundled.Families.FirstOrDefault(x => x.Name == family);
+            if (f != null && f.IsStyleAvailable(FontStyle.Regular)) return new Font(f, size);
+        }
+        catch { }
+        return new Font(fallback, fallbackSize);
+    }
+    public static readonly Font Title = Pick("Prompt SemiBold", 15f, "Segoe UI Semibold", 16f);
+    public static readonly Font Heading = Pick("Work Sans SemiBold", 11f, "Segoe UI Semibold", 11.5f);
+    public static readonly Font Body = Pick("Noto Sans", 9.5f, "Segoe UI", 10f);
+    public static readonly Font Bold = Pick("Noto Sans SemiBold", 9.5f, "Segoe UI Semibold", 10f);
+    public static readonly Font Small = Pick("Noto Sans", 8.5f, "Segoe UI", 9f);
+    public static readonly Font RowTitle = Pick("Noto Sans SemiBold", 10f, "Segoe UI Semibold", 10.5f);   // a system or distribution name in a list
 
     public static int D(int v) { return (int)Math.Round(v * Scale); }
 
@@ -1880,12 +2226,15 @@ class NoticeBar : Panel
         Visible = false;
     }
 
+    // Redraws the notifications in the current theme's colors.
+    public void Restyle() { BackColor = Theme.Bg; Rebuild(); }
+
     public static Color KindColor(NoticeKind k)
     {
         switch (k)
         {
             case NoticeKind.Success: return Theme.Success;
-            case NoticeKind.Warning: return Color.FromArgb(249, 217, 73);   // #F9D949
+            case NoticeKind.Warning: return Theme.Warning;
             case NoticeKind.Error: return Theme.Danger;
             default: return Theme.Highlight;
         }
@@ -2072,8 +2421,8 @@ class FlatBtn : Button
         if (!Enabled) { top = bottom = Theme.Card; border = Theme.Border; fore = Theme.Muted; }
         else if (primary)
         {
-            top = down ? Theme.Accent : hover ? Color.FromArgb(160, 140, 255) : Theme.AccentHover;
-            bottom = down ? Color.FromArgb(90, 58, 230) : hover ? Color.FromArgb(124, 92, 255) : Theme.Accent;
+            top = down ? Theme.Accent : hover ? Theme.AccentLight : Theme.AccentHover;
+            bottom = down ? Theme.AccentDark : hover ? Theme.AccentMid : Theme.Accent;
             border = bottom;
         }
         else
@@ -2100,7 +2449,7 @@ class FlatBtn : Button
         if (primary)
         {
             BackColor = Theme.Accent;
-            ForeColor = Color.White;
+            ForeColor = Theme.OnAccent;
             FlatAppearance.BorderColor = Theme.Accent;
             FlatAppearance.MouseOverBackColor = Theme.AccentHover;
         }
@@ -2221,6 +2570,14 @@ class OptionList : Panel
         return row;
     }
 
+    public void Clear()
+    {
+        foreach (var r in rows) { Controls.Remove(r); r.Dispose(); }
+        rows.Clear();
+        selectedIndex = -1;
+        LayoutRows();
+    }
+
     protected override void OnResize(EventArgs e) { base.OnResize(e); LayoutRows(); }
 
     void LayoutRows()
@@ -2299,7 +2656,7 @@ class Segmented : Control
 // A bordered container that groups related rows, a shade darker than the rows inside it.
 class BoxPanel : Panel
 {
-    public static readonly Color Fill = Color.FromArgb(29, 28, 45);
+    public static Color Fill { get { return Theme.BoxFill; } }
 
     public BoxPanel()
     {
@@ -2366,7 +2723,19 @@ class Page : Panel
 
     public TextBox Input(string text, int x, int y, int w)
     {
-        return Add(new TextBox { Text = text, Font = Theme.Body, BackColor = Theme.Card, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle }, x, y, w, 26);
+        var t = Add(new TextBox { Text = text, Font = Theme.Body, BackColor = Theme.Card, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle }, x, y, w, 26);
+        Native.TextMargins(t);
+        return t;
+    }
+
+    // A text box of several lines (e.g. a description), with a scrollbar when the text is longer.
+    public TextBox Notes(string text, int x, int y, int w, int h)
+    {
+        var t = Add(new TextBox { Text = text, Font = Theme.Body, BackColor = Theme.Card, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle,
+            Multiline = true, AcceptsReturn = true, ScrollBars = ScrollBars.Vertical, WordWrap = true }, x, y, w, h);
+        Native.DarkScrollbars(t);
+        Native.TextMargins(t);
+        return t;
     }
 
     public CheckBox Check(string text, bool on, int x, int y, int w)
@@ -2429,6 +2798,116 @@ class InstallPlan
 {
     public Distro Distro;
     public string LocalIso, Url, Label;
+    public string Disk;   // an existing virtual disk to import (copied into a new qcow2), instead of an installer
+    public DiskSource Source;   // what was read from that disk and the settings beside it
+    public bool Own;      // chosen on Use Your Own Installer (a step before General)
+}
+
+// What an existing virtual disk tells about itself: its format and size (qemu-img), and the settings saved
+// beside it by Try Linux (vm.ini, or a backup's .ini), VMware (.vmx) or VirtualBox (.vbox), when there are any.
+class DiskSource
+{
+    public string Format = "", Name = "", Description = "", From = "";
+    public long Virtual = -1;
+    public int RamGB, Cores;
+
+    public static DiskSource Read(string disk)
+    {
+        var s = new DiskSource();
+        try
+        {
+            if (Winq.Ready)
+            {
+                var o = (Dictionary<string, object>)new System.Web.Script.Serialization.JavaScriptSerializer()
+                    .DeserializeObject(Winq.Run(Winq.Img, "info --force-share --output=json " + MainForm.Q(disk)));
+                if (o.ContainsKey("format")) s.Format = o["format"].ToString();
+                if (o.ContainsKey("virtual-size")) s.Virtual = Convert.ToInt64(o["virtual-size"]);
+            }
+        }
+        catch { }
+        try { s.ReadSettings(disk); } catch { }
+        return s;
+    }
+
+    void ReadSettings(string disk)
+    {
+        string dir = Path.GetDirectoryName(disk), file = Path.GetFileName(disk);
+        // Try Linux: a backup's settings, or the vm.ini of the system the disk belongs to.
+        string ini = File.Exists(disk + ".ini") ? disk + ".ini" : Path.Combine(dir, "vm.ini");
+        if (File.Exists(ini))
+        {
+            var c = VmConfig.LoadIni(ini);
+            c.Dir = dir;
+            if (File.Exists(disk + ".ini") || string.Equals(Path.GetFileNameWithoutExtension(file), Path.GetFileName(dir), StringComparison.OrdinalIgnoreCase))
+            {
+                Name = c.DisplayName; Description = c.Description ?? "";
+                int n, gb; c.Resources(out n, out gb);
+                RamGB = gb; Cores = n;
+                From = "Try Linux";
+                return;
+            }
+        }
+        // VMware: displayName, memsize (MB) and numvcpus in a .vmx that names this disk.
+        foreach (var vmx in Directory.GetFiles(dir, "*.vmx"))
+        {
+            string text = File.ReadAllText(vmx);
+            if (text.IndexOf(file, StringComparison.OrdinalIgnoreCase) < 0) continue;
+            Func<string, string> get = key =>
+            {
+                var m = Regex.Match(text, "^\\s*" + Regex.Escape(key) + "\\s*=\\s*\"([^\"]*)\"", RegexOptions.Multiline | RegexOptions.IgnoreCase);
+                return m.Success ? m.Groups[1].Value : "";
+            };
+            Name = get("displayName"); Description = get("annotation").Replace("|0A", "\n").Replace("|0D", "");
+            int mb, cpus;
+            if (int.TryParse(get("memsize"), out mb)) RamGB = Math.Max(1, (mb + 1023) / 1024);
+            if (int.TryParse(get("numvcpus"), out cpus)) Cores = cpus;
+            From = "VMware (" + Path.GetFileName(vmx) + ")";
+            return;
+        }
+        // VirtualBox: the machine's name, description, RAMSize (MB) and CPU count, in a .vbox beside it or one folder up.
+        foreach (var folder in new[] { dir, Path.GetDirectoryName(dir) })
+        {
+            if (folder == null) continue;
+            foreach (var vbox in Directory.GetFiles(folder, "*.vbox"))
+            {
+                var x = System.Xml.Linq.XDocument.Load(vbox);
+                if (!x.Descendants().Any(e => e.Name.LocalName == "HardDisk" && ((string)e.Attribute("location") ?? "").EndsWith(file, StringComparison.OrdinalIgnoreCase))) continue;
+                var machine = x.Descendants().FirstOrDefault(e => e.Name.LocalName == "Machine");
+                if (machine == null) continue;
+                Name = (string)machine.Attribute("name") ?? "";
+                var desc = machine.Elements().FirstOrDefault(e => e.Name.LocalName == "Description");
+                if (desc != null) Description = desc.Value.Trim();
+                var memory = x.Descendants().FirstOrDefault(e => e.Name.LocalName == "Memory");
+                int mb, cpus;
+                if (memory != null && int.TryParse((string)memory.Attribute("RAMSize"), out mb)) RamGB = Math.Max(1, (mb + 1023) / 1024);
+                var cpu = x.Descendants().FirstOrDefault(e => e.Name.LocalName == "CPU");
+                Cores = cpu != null && int.TryParse((string)cpu.Attribute("count"), out cpus) ? cpus : 1;
+                From = "VirtualBox (" + Path.GetFileName(vbox) + ")";
+                return;
+            }
+        }
+    }
+
+    // One line for Use Your Own Installer, e.g. "vmdk · 64 GiB · settings from VMware (Fedora.vmx): 8 GiB, 4 cores".
+    public string Summary()
+    {
+        var parts = new List<string>();
+        if (Format.Length > 0) parts.Add(Format);
+        if (Virtual > 0) parts.Add((Virtual / 1073741824.0).ToString("0.#") + " GiB");
+        if (From.Length > 0) parts.Add("settings from " + From + (RamGB > 0 ? ": " + RamGB + " GiB, " + Cores + (Cores == 1 ? " core" : " cores") : ""));
+        else parts.Add("no saved settings found beside it");
+        return string.Join("  ·  ", parts);
+    }
+}
+
+// What the Create steps (General, Resources, Summary) have collected so far, kept across Back and Next.
+class CreateDraft
+{
+    public InstallPlan Plan;
+    public VmConfig Cfg;
+    public string Name = "", Description = "", Location = "";
+    public bool OwnLocation;
+    public int DiskGB = 64;
 }
 
 partial class MainForm : Form
@@ -2460,6 +2939,8 @@ partial class MainForm : Form
     public MainForm(string startVm)
     {
         startArg = startVm;
+        AppSettings.Load();
+        Theme.Apply(AppSettings.EffectiveTheme);
         Text = "Try Linux";
         BackColor = Theme.Bg;
         ForeColor = Theme.Text;
@@ -2477,6 +2958,11 @@ partial class MainForm : Form
 
         AppSettings.Load();
         Winq.Detect();
+        // Follow system: Windows switching between light and dark switches Try Linux too.
+        Microsoft.Win32.SystemEvents.UserPreferenceChanged += (s, e) =>
+        {
+            if (AppSettings.FollowSystem && IsHandleCreated) BeginInvoke((Action)RefreshTheme);
+        };
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -2618,7 +3104,7 @@ partial class MainForm : Form
         };
         console.Click += delegate { var vm = (VmConfig)list.SelectedTag; if (vm != null) OpenConsole(vm); };
         add.Click += delegate { ShowChoose(); };
-        settings.Click += delegate { var vm = (VmConfig)list.SelectedTag; if (vm != null) ShowSettings(vm); };
+        settings.Click += delegate { var vm = (VmConfig)list.SelectedTag; if (vm != null) { Sheet.ResetSections(); ShowSettings(vm); } };   // every section starts closed
         AcceptButton = start;
         SetPage(p);
     }
@@ -2761,9 +3247,20 @@ partial class MainForm : Form
     // "Fedora-Workstation-Live-45-1.4.x86_64.iso" -> "Fedora Workstation 45". A custom ISO shows its file name.
     static string OsLabel(VmConfig vm)
     {
+        // What the guest agent reported the last time the system ran, when it has one.
+        try
+        {
+            string reported = Path.Combine(vm.Dir, "guest-os.txt");
+            if (File.Exists(reported))
+            {
+                string name = File.ReadAllText(reported).Trim();
+                if (name.Length > 0) return name;
+            }
+        }
+        catch { }
         string file = Path.GetFileNameWithoutExtension(vm.Iso ?? "");
         var d = Distro.Find(vm.DistroId);
-        if (d == null) return file.Length > 0 ? file : "Custom ISO";
+        if (d == null) return file.Length > 0 ? file : vm.Iso == "" && !vm.PendingInstall ? "Imported disk" : "Custom ISO";
         var m = Regex.Match(Regex.Replace(file, @"x86_64|amd64|aarch64|arm64|64-?bit", ""), @"(?<![A-Za-z\d])(\d+(?:\.\d+)?)");
         return m.Success ? d.Name + " " + m.Groups[1].Value : d.Name;
     }
@@ -2806,32 +3303,69 @@ partial class MainForm : Form
         return vm.PendingInstall ? "Ready to install" : "";
     }
 
+    void SetCue(TextBox box, string text)
+    {
+        if (box.IsHandleCreated) SendMessage(box.Handle, 0x1501, (IntPtr)1, text);   // EM_SETCUEBANNER
+        else box.HandleCreated += delegate { SendMessage(box.Handle, 0x1501, (IntPtr)1, text); };
+    }
+
     void ShowChoose()
     {
         bool hasVms = VmConfig.All().Count > 0;
-        // Sections are spaced twice as far apart as before.
-        // Two containers: the distributions, then your own installer (an ISO file on this PC or a URL link).
+        // A search field, then two containers: the distributions ("Recommended", or the search results),
+        // then your own installer (an ISO file on this PC or a URL link).
         // One selection across both: choosing in one clears the other.
-        const int padIn = 6;
-        int distroH = Distro.Catalog.Length * 78 - 6, ownH = 72;   // the same row height in both
+        const int padIn = 6, rowH = 70;   // the same row height in both boxes; fits a two-line description
+        int distroH = Distro.Catalog.Length * (rowH + 6) - 6, ownH = rowH;
         int box1 = distroH + padIn * 2, box2 = ownH + padIn * 2;
-        int top = 172;
+        int top = 232;
         var p = new Page(top + box1 + 12 + box2 + 20 + 42);
         p.Caption("Choose a Linux OS", 0, 104, 640, 30, Theme.Title, null, ContentAlignment.MiddleCenter);
         p.Caption("Try Linux downloads the official installer and checks it before use.", 0, 134, 640, 22, Theme.Small, Theme.Muted, ContentAlignment.MiddleCenter);
 
+        var search = p.Input("", 0, 170, 640);
+        search.Height = Theme.D(28);
+        SetCue(search, "Search distributions, e.g. KDE, Xfce or Ubuntu");
+        var heading = p.Caption("Recommended", 0, 206, 640, 22, Theme.Heading, Theme.Text);
+
         var distroBox = p.Add(new BoxPanel(), 0, top, 640, box1);
-        var list = new OptionList { RowHeight = 72, BackColor = BoxPanel.Fill };
+        var list = new OptionList { RowHeight = rowH, BackColor = BoxPanel.Fill };
         list.SetBounds(Theme.D(padIn), Theme.D(padIn), Theme.D(640 - padIn * 2), Theme.D(distroH));
         distroBox.Controls.Add(list);
-        foreach (var d in Distro.Catalog) list.AddItem(d.Name, d.Blurb, d);
+        Native.DarkScrollbars(list);   // results can be longer than the box
+        var hint = new Label { BackColor = BoxPanel.Fill, ForeColor = Theme.Muted, Font = Theme.Body, TextAlign = ContentAlignment.MiddleCenter, UseMnemonic = false };
+        hint.SetBounds(Theme.D(padIn), Theme.D(padIn), Theme.D(640 - padIn * 2), Theme.D(distroH));
+        distroBox.Controls.Add(hint);
+        hint.BringToFront();
+
+        // Recommended: the built-in distributions. A search covers those and the list from the repo
+        // (MoreDistros), by name, description or desktop, names that start with the text first.
+        Func<List<Distro>> all = () => Distro.Catalog.Concat(MoreDistros.Cached()).ToList();
+        Action refresh = () =>
+        {
+            string q = search.Text.Trim();
+            var words = q.ToLowerInvariant().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            var shown = words.Length == 0 ? Distro.Catalog.ToList()
+                : all().Where(d => words.All(w => (d.Name + " " + d.Blurb + " " + d.Id).ToLowerInvariant().Contains(w)))
+                    .OrderByDescending(d => d.Name.StartsWith(q, StringComparison.OrdinalIgnoreCase)).ToList();
+            list.Clear();
+            foreach (var d in shown) list.AddItem(d.Name, d.Blurb, d);
+            if (shown.Count > 0) list.SelectedIndex = 0;
+            heading.Text = words.Length == 0 ? "Recommended" : shown.Count + (shown.Count == 1 ? " result" : " results");
+            hint.Visible = shown.Count == 0;
+            hint.Text = "No distribution matches \"" + q + "\".\nTry another name, or use your own installer below.";
+        };
+        search.TextChanged += delegate { refresh(); };
+        refresh();
+        // A list over a day old is fetched again in the background; results update when it arrives.
+        Task.Run(() => MoreDistros.Load(false)).ContinueWith(t => Ui(() => { if (page == p && !t.IsFaulted && !search.IsDisposed && search.Text.Trim().Length > 0) refresh(); }));
 
         var ownBox = p.Add(new BoxPanel(), 0, top + box1 + 12, 640, box2);
         // One option; Next asks whether the installer is an ISO file on this PC or a URL link.
-        var own = new OptionList { RowHeight = 72, BackColor = BoxPanel.Fill };
+        var own = new OptionList { RowHeight = rowH, BackColor = BoxPanel.Fill };
         own.SetBounds(Theme.D(padIn), Theme.D(padIn), Theme.D(640 - padIn * 2), Theme.D(ownH));
         ownBox.Controls.Add(own);
-        own.AddItem("Use your own installer", "An .iso file already on this PC, or a URL link to download one", "own");
+        own.AddItem("Use Your Own Installer", "An existing virtual disk to import, an .iso file on this PC, or a URL link to one", "own");
 
         bool syncing = false;
         list.SelectionChanged += delegate { if (!syncing && list.SelectedIndex >= 0) { syncing = true; own.SelectedIndex = -1; syncing = false; } };
@@ -2876,12 +3410,7 @@ partial class MainForm : Form
         EventHandler go = delegate
         {
             var tag = list.SelectedTag ?? own.SelectedTag;
-            if ((tag as string) == "own")
-            {
-                var plan = AskOwnInstaller();
-                if (plan != null) ShowOptions(plan);
-                return;
-            }
+            if ((tag as string) == "own") { ShowOwnInstaller(); return; }
             if (tag != null) choose(tag);
         };
         next.Click += go;
@@ -2893,197 +3422,394 @@ partial class MainForm : Form
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, string l);
 
-    // "Use your own installer": choose an ISO file on this PC, or paste a URL link, in one dialog.
-    // Choosing a file clears the link and typing a link clears the file, so Save uses whichever is set.
-    InstallPlan AskOwnInstaller()
+    // ------------------------------------------------------------ create: (Use Your Own Installer,) General, Resources, Summary
+
+    const string DiskFilter = "Virtual disks (*.qcow2;*.vmdk;*.vhd;*.vhdx;*.vdi;*.img;*.raw)|*.qcow2;*.vmdk;*.vhd;*.vhdx;*.vdi;*.img;*.raw|All files|*.*";
+    const int CreateH = 600, CreateButtonsY = 500;
+
+    // A Create page with its title (Use Your Own Installer, General, Resources or Summary).
+    Page CreatePage(string title)
     {
-        Func<int, int> D = Theme.D;
-        int w = D(560), pad = D(24), textX = D(80), textW = w - textX - pad;
-        string iso = null;
-        using (var f = new DialogForm { Text = "Try Linux", StartPosition = FormStartPosition.CenterParent,
-            BackColor = Theme.Bg, ForeColor = Theme.Text, Font = Theme.Body, ShowInTaskbar = false })
+        var p = new Page(CreateH);
+        p.Caption(title, 0, 104, 640, 30, Theme.Title, null, ContentAlignment.MiddleCenter);
+        return p;
+    }
+
+    // "OR", centred on a divider line across the column.
+    Panel OrDivider(Page p, int y)
+    {
+        var or = p.Add(new Panel { BackColor = Theme.Bg }, 0, y, 640, 20);
+        or.Paint += (s, e) =>
         {
-            var icon = new PictureBox { Image = Icons.Draw(D(40)), SizeMode = PictureBoxSizeMode.AutoSize, BackColor = Theme.Bg };
-            icon.Location = new Point(pad, pad);
-            int y = pad;
-            Func<string, Font, Color, int, Label> label = (text, font, color, h) =>
+            var g = e.Graphics;
+            var size = TextRenderer.MeasureText(g, "OR", Theme.Small, Size.Empty, TextFormatFlags.NoPadding);
+            int mid = or.Height / 2, gap = Theme.D(10), left = (or.Width - size.Width) / 2;
+            using (var pen = new Pen(Theme.Border))
             {
-                var l = new Label { Text = text, Font = font, ForeColor = color, BackColor = Theme.Bg, UseMnemonic = false, AutoEllipsis = true };
-                l.SetBounds(textX, y, textW, h);
-                f.Controls.Add(l);
-                y += h;
-                return l;
-            };
-            label("Use your own installer", Theme.Title, Theme.Text, D(30));
-            y += D(14);
+                g.DrawLine(pen, 0, mid, left - gap, mid);
+                g.DrawLine(pen, left + size.Width + gap, mid, or.Width, mid);
+            }
+            TextRenderer.DrawText(g, "OR", Theme.Small, new Rectangle(0, 0, or.Width, or.Height), Theme.Muted,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+        };
+        return or;
+    }
 
-            label("An ISO file on this PC", Theme.Heading, Theme.Text, D(22));
-            y += D(6);
-            var pick = new FlatBtn("Choose an ISO file...");
-            pick.SetBounds(textX, y, D(200), D(34));
-            f.Controls.Add(pick);
-            y += D(34) + D(6);
-            var chosen = label("No file chosen", Theme.Small, Theme.Muted, D(20));
-            y += D(10);
-            // "OR", centred on a divider line across the dialog's text column.
-            var or = new Panel { BackColor = Theme.Bg };
-            or.SetBounds(textX, y, textW, D(20));
-            or.Paint += (s, e) =>
+    // Use Your Own Installer: an existing virtual disk to import, an ISO file on this PC, or a URL link.
+    // Choosing one clears the others. `last` is what was chosen before, when coming Back from General.
+    void ShowOwnInstaller(InstallPlan last = null)
+    {
+        string iso = last != null ? last.LocalIso : null, disk = last != null ? last.Disk : null;
+        DiskSource source = last != null ? last.Source : null;
+        var p = CreatePage("Use Your Own Installer");
+        // Both buttons as wide as the longer label needs, so they line up without much space around the text.
+        int bw = Math.Max(Sheet.SnugWidth("Choose An ISO File"), Sheet.SnugWidth("Choose A Disk File"));
+
+        // A disk that already has Linux installed (from Try Linux, QEMU, VirtualBox, VMware or Hyper-V).
+        p.Caption("An Existing Virtual Disk", 0, 172, 640, 22, Theme.Heading, Theme.Text);
+        var pickDisk = p.Add(new FlatBtn("Choose A Disk File"), 0, 198, bw, 32);
+        var chosenDisk = p.Caption("", bw + 14, 198, 626 - bw, 32);
+        var diskNote = p.Caption("", 0, 234, 640, 22, Theme.Small, Theme.Muted);
+        OrDivider(p, 264);
+
+        p.Caption("An ISO File On This PC", 0, 292, 640, 22, Theme.Heading, Theme.Text);
+        var pick = p.Add(new FlatBtn("Choose An ISO File"), 0, 318, bw, 32);
+        var chosen = p.Caption("", bw + 14, 318, 626 - bw, 32);
+        OrDivider(p, 362);
+
+        p.Caption("URL Link", 0, 390, 640, 22, Theme.Heading, Theme.Text);
+        var url = p.Input(last != null && last.Url != null ? last.Url : "", 0, 416, 640);
+        url.Height = Theme.D(28);
+        SetCue(url, "https://... (address of an .iso file)");
+        var urlNote = p.Caption("Paste the address of an .iso file.", 0, 446, 640, 20, Theme.Small, Theme.Muted);
+
+        var back = p.Add(new FlatBtn("Back"), 0, CreateButtonsY, 120, 42);
+        back.Click += delegate { ShowChoose(); };
+        var next = p.Add(new FlatBtn("Next", true), 500, CreateButtonsY, 140, 42);
+
+        Action refresh = () =>
+        {
+            next.Enabled = iso != null || disk != null || url.Text.Trim().Length > 0;
+            chosen.Text = iso != null ? Path.GetFileName(iso) : "No file chosen";
+            chosen.ForeColor = iso != null ? Theme.Highlight : Theme.Muted;
+            chosenDisk.Text = disk != null ? Path.GetFileName(disk) : "No disk chosen";
+            chosenDisk.ForeColor = disk != null ? Theme.Highlight : Theme.Muted;
+            diskNote.Text = disk != null && source != null ? source.Summary()
+                : "qcow2, vmdk, vhd, vhdx, vdi or raw. It's copied; the original isn't changed.";
+        };
+        pick.Click += delegate
+        {
+            using (var dlg = new OpenFileDialog { Filter = "Disk images (*.iso)|*.iso|All files|*.*", Title = "Choose a Linux installer" })
             {
-                var g = e.Graphics;
-                var size = TextRenderer.MeasureText(g, "OR", Theme.Small, Size.Empty, TextFormatFlags.NoPadding);
-                int mid = or.Height / 2, gap = D(10), left = (or.Width - size.Width) / 2;
-                using (var p = new Pen(Theme.Border))
-                {
-                    g.DrawLine(p, 0, mid, left - gap, mid);
-                    g.DrawLine(p, left + size.Width + gap, mid, or.Width, mid);
-                }
-                TextRenderer.DrawText(g, "OR", Theme.Small, new Rectangle(0, 0, or.Width, or.Height), Theme.Muted,
-                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
-            };
-            f.Controls.Add(or);
-            y += D(20) + D(10);
-
-            label("URL Link", Theme.Heading, Theme.Text, D(22));
-            y += D(6);
-            var url = new TextBox { Font = Theme.Body, BackColor = Theme.Card, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle };
-            url.SetBounds(textX, y, textW, D(28));
-            f.Controls.Add(url);
-            f.HandleCreated += delegate { SendMessage(url.Handle, 0x1501, (IntPtr)1, "https://... (address of an .iso file)"); };   // EM_SETCUEBANNER
-            y += D(28) + D(4);
-            var urlNote = label("Paste the address of an .iso file.", Theme.Small, Theme.Muted, D(20));
-            y += D(20);
-
-            int bw = D(150), bh = D(38);
-            var save = new FlatBtn("Save", true) { Enabled = false };
-            save.SetBounds(w - pad - bw, y, bw, bh);
-            var cancel = new FlatBtn("Cancel") { DialogResult = DialogResult.Cancel };
-            cancel.SetBounds(w - pad - bw * 2 - D(10), y, bw, bh);
-            f.Controls.Add(save);
-            f.Controls.Add(cancel);
-            f.Controls.Add(icon);
-            f.ClientSize = new Size(w, y + bh + pad);
-            foreach (Control c in f.Controls) if (!(c is Button) && !(c is TextBox)) f.DragBy(c);
-
-            Action refresh = () =>
+                if (dlg.ShowDialog(this) != DialogResult.OK) return;
+                iso = dlg.FileName;
+                disk = null; source = null;
+                url.Text = "";
+                refresh();
+            }
+        };
+        pickDisk.Click += delegate
+        {
+            using (var dlg = new OpenFileDialog { Filter = DiskFilter, Title = "Choose a virtual disk to import" })
             {
-                save.Enabled = iso != null || url.Text.Trim().Length > 0;
-                chosen.Text = iso != null ? Path.GetFileName(iso) : "No file chosen";
-                chosen.ForeColor = iso != null ? Theme.Highlight : Theme.Muted;
-            };
-            pick.Click += delegate
-            {
-                using (var dlg = new OpenFileDialog { Filter = "Disk images (*.iso)|*.iso|All files|*.*", Title = "Choose a Linux installer" })
-                {
-                    if (dlg.ShowDialog(f) != DialogResult.OK) return;
-                    iso = dlg.FileName;
-                    url.Text = "";
-                    refresh();
-                }
-            };
-            url.TextChanged += delegate { if (url.Text.Length > 0) iso = null; refresh(); };
-            save.Click += delegate
-            {
-                if (iso == null)
-                {
-                    Uri u;
-                    if (!Uri.TryCreate(url.Text.Trim(), UriKind.Absolute, out u) || (u.Scheme != "https" && u.Scheme != "http"))
-                    {
-                        urlNote.Text = "That isn't a web address. It should start with https://";
-                        urlNote.ForeColor = Theme.Danger;
-                        return;
-                    }
-                }
-                f.DialogResult = DialogResult.OK;
-            };
-            f.CancelButton = cancel;
-            f.AcceptButton = save;
-            if (f.ShowDialog(this) != DialogResult.OK) return null;
-
-            var plan = new InstallPlan();
+                if (dlg.ShowDialog(this) != DialogResult.OK) return;
+                disk = dlg.FileName;
+                iso = null;
+                url.Text = "";
+                // Its format and size, and any settings saved beside it, fill in the next steps.
+                Cursor = Cursors.WaitCursor;
+                try { source = DiskSource.Read(disk); } finally { Cursor = Cursors.Default; }
+                refresh();
+            }
+        };
+        url.TextChanged += delegate
+        {
+            if (url.Text.Length > 0) { iso = null; disk = null; source = null; }
+            urlNote.Text = "Paste the address of an .iso file.";
+            urlNote.ForeColor = Theme.Muted;
+            refresh();
+        };
+        next.Click += delegate
+        {
+            var plan = new InstallPlan { Own = true };
             if (iso != null) { plan.LocalIso = iso; plan.Label = Path.GetFileNameWithoutExtension(iso); }
+            else if (disk != null) { plan.Disk = disk; plan.Source = source; plan.Label = Path.GetFileNameWithoutExtension(disk); }
             else
             {
-                var u = new Uri(url.Text.Trim());
+                Uri u;
+                if (!Uri.TryCreate(url.Text.Trim(), UriKind.Absolute, out u) || (u.Scheme != "https" && u.Scheme != "http"))
+                {
+                    urlNote.Text = "That isn't a web address. It should start with https://";
+                    urlNote.ForeColor = Theme.Danger;
+                    return;
+                }
                 plan.Url = u.ToString();
                 plan.Label = Path.GetFileNameWithoutExtension(u.AbsolutePath);
             }
-            return plan;
-        }
+            // Coming back to the same choice keeps what was entered on the next steps.
+            if (lastDraft != null && SamePlan(lastDraft.Plan, plan)) { lastDraft.Plan = plan; ShowCreateGeneral(lastDraft); }
+            else ShowOptions(plan);
+        };
+        refresh();
+        AcceptButton = next;
+        SetPage(p);
+    }
+
+    CreateDraft lastDraft;   // the Create steps' answers, kept when going Back to Use Your Own Installer
+    static bool SamePlan(InstallPlan a, InstallPlan b)
+    {
+        return a != null && b != null && a.LocalIso == b.LocalIso && a.Url == b.Url && a.Disk == b.Disk && a.Distro == b.Distro;
     }
 
     void ShowOptions(InstallPlan plan)
     {
         var existing = VmConfig.All();
-        var cfg = new VmConfig { Profile = 0, RamGB = 8, Cores = Math.Max(2, Environment.ProcessorCount / 2) };
-        cfg.SshPort = existing.Count == 0 ? 2223 : Math.Max(2222, existing.Max(v => v.SshHostPort)) + 1;
-
-        var p = new Page(542);
-        p.Caption("Name", 0, 120, 180, 26);
-        // The name shown on Virtual Machines; the folder name is made from it.
-        string suggested = plan.Distro != null ? plan.Distro.Name : plan.Label;
-        for (int i = 2; existing.Any(v => string.Equals(v.DisplayName, suggested, StringComparison.CurrentCultureIgnoreCase)); i++)
-            suggested = (plan.Distro != null ? plan.Distro.Name : plan.Label) + " " + i;
-        var name = p.Input(suggested, 190, 120, 250);
-
-        var res = new ResourcePicker();
-        res.Attach(p, 162, cfg);
-
-        p.Caption("Disk size (GiB)", 0, 282, 180, 26);
-        var disk = p.Add(Sys.DiskBox(16, 2048, plan.Distro != null ? plan.Distro.DiskGB : 64), 190, 282, 100, 26);
-
-        p.Caption("Storage", 0, 324, 180, 26);
-        TextBox storage = null;
-        if (existing.Count == 0)
+        var d = new CreateDraft { Plan = plan, Location = AppSettings.VmsDir };
+        d.Cfg = new VmConfig { Profile = 0, RamGB = 8, Cores = Math.Max(2, Environment.ProcessorCount / 2) };
+        d.Cfg.SshPort = existing.Count == 0 ? 2223 : Math.Max(2222, existing.Max(v => v.SshHostPort)) + 1;
+        // A disk's own settings (beside it, from Try Linux, VMware or VirtualBox) fill in what they can.
+        var src = plan.Source;
+        string seed = src != null && src.Name.Length > 0 ? src.Name : plan.Distro != null ? plan.Distro.Name : plan.Label;
+        if (src != null)
         {
-            storage = p.Input(AppSettings.Storage, 190, 324, 330);
-            var change = p.Add(new FlatBtn("Change"), 530, 322, 110, 30);
-            change.Click += delegate
+            d.Description = src.Description;
+            if (src.RamGB > 0 || src.Cores > 0)
             {
-                using (var dlg = new FolderBrowserDialog { Description = "Where should Try Linux keep its systems and downloads?" })
-                    if (dlg.ShowDialog(this) == DialogResult.OK) storage.Text = Path.Combine(dlg.SelectedPath, "TryLinux");
-            };
-        }
-        else p.Caption(AppSettings.Storage, 190, 324, 450, 26, Theme.Small, Theme.Muted);
-
-        p.Caption("The installer only sees a virtual disk. Your Windows drive is never touched.", 0, 374, 640, 40, Theme.Small, Theme.Muted);
-
-        var back = p.Add(new FlatBtn("Back"), 0, 452, 120, 42);
-        back.Click += delegate { ShowChoose(); };
-        var install = p.Add(new FlatBtn("Install", true), 500, 452, 140, 42);
-        install.Click += delegate
-        {
-            string display = name.Text.Trim();
-            if (display.Length == 0 || display.Length > 60) { Error("Give the system a name of up to 60 characters."); return; }
-            if (existing.Any(v => string.Equals(v.DisplayName, display, StringComparison.CurrentCultureIgnoreCase)))
-            { Error("You already have a system named \"" + display + "\". Choose another name."); return; }
-            if (storage != null)
-            {
-                string s = storage.Text.Trim();
-                if (s.Length < 3 || !Path.IsPathRooted(s)) { Error("Choose a full folder path for storage."); return; }
-                AppSettings.Storage = s;
-                AppSettings.Save();
+                d.Cfg.Profile = 2;   // Manual, starting from the disk's own memory and cores
+                if (src.RamGB > 0) d.Cfg.RamGB = Math.Max(1, Math.Min(Sys.MaxRamGB, src.RamGB));
+                if (src.Cores > 0) d.Cfg.Cores = Math.Max(1, Math.Min(Sys.MaxCores, src.Cores));
             }
-            // The folder is made from the name after storage is chosen, so it's unique where it's created.
-            string id = UniqueName(display);
-            cfg.Name = id;
-            cfg.Dir = Path.Combine(AppSettings.VmsDir, id);
-            cfg.DisplayName = display;
-            cfg.DistroId = plan.Distro != null ? plan.Distro.Id : "";
-            res.Store(cfg);
-            Install(plan, cfg, (int)disk.Value);
+        }
+        // The name shown on Virtual Machines; the folder name is made from it.
+        d.Name = seed;
+        for (int i = 2; existing.Any(v => string.Equals(v.DisplayName, d.Name, StringComparison.CurrentCultureIgnoreCase)); i++) d.Name = seed + " " + i;
+        d.DiskGB = plan.Distro != null ? plan.Distro.DiskGB : 64;
+        lastDraft = d;
+        ShowCreateGeneral(d);
+    }
+
+    void ShowCreateGeneral(CreateDraft d)
+    {
+        var p = CreatePage("General");
+        p.Caption("Name", 0, 180, 180, 26);
+        var name = p.Input(d.Name, 190, 180, 450);
+
+        p.Caption("Description", 0, 218, 180, 26);
+        var notes = p.Notes(d.Description.Replace("\r\n", "\n").Replace("\n", "\r\n"), 190, 218, 450, 76);
+        // Lined up with the text inside the box above it.
+        p.Caption("(Optional): Shown in Settings > General > Info.", 193, 298, 447, 22, Theme.Small, Theme.Muted);
+
+        // The default is the storage folder; a different one is used only while the box is ticked.
+        p.Caption("Location", 0, 336, 180, 26);
+        var location = p.Input(d.OwnLocation ? d.Location : AppSettings.VmsDir, 190, 336, 330);
+        var browse = p.Add(new FlatBtn("Browse"), 530, 334, 110, 30);
+        var own = p.Check("Choose a different location", d.OwnLocation, 190, 370, 450);
+        var where = p.Caption("", 190, 400, 450, 22, Theme.Small, Theme.Muted);
+        Action lockLocation = () =>
+        {
+            bool on = own.Checked;
+            location.ReadOnly = !on;
+            location.TabStop = on;
+            location.BackColor = on ? Theme.Card : Theme.Bg;
+            location.ForeColor = on ? Theme.Text : Theme.Muted;
+            browse.Enabled = on;
+            if (!on) location.Text = AppSettings.VmsDir;
+            where.Text = on ? "Try Linux makes a folder for this system inside it." : "The default: where Try Linux keeps its systems.";
         };
-        AcceptButton = install;
+        own.CheckedChanged += delegate { lockLocation(); if (own.Checked) location.Focus(); };
+        browse.Click += delegate
+        {
+            using (var dlg = new FolderBrowserDialog { Description = "Where should Try Linux keep this system?", ShowNewFolderButton = true })
+            {
+                if (Directory.Exists(location.Text.Trim())) dlg.SelectedPath = location.Text.Trim();
+                if (dlg.ShowDialog(this) == DialogResult.OK) location.Text = dlg.SelectedPath;
+            }
+        };
+        lockLocation();
+
+        Action keep = () =>
+        {
+            d.Name = name.Text.Trim();
+            d.Description = notes.Text.Trim();
+            d.OwnLocation = own.Checked;
+            d.Location = own.Checked ? location.Text.Trim() : AppSettings.VmsDir;
+        };
+        var back = p.Add(new FlatBtn("Back"), 0, CreateButtonsY, 120, 42);
+        back.Click += delegate { keep(); if (d.Plan.Own) ShowOwnInstaller(d.Plan); else ShowChoose(); };
+        var next = p.Add(new FlatBtn("Next", true), 500, CreateButtonsY, 140, 42);
+        next.Click += delegate
+        {
+            keep();
+            if (d.Name.Length == 0 || d.Name.Length > 60) { Error("Give the system a name of up to 60 characters."); return; }
+            if (VmConfig.All().Any(v => string.Equals(v.DisplayName, d.Name, StringComparison.CurrentCultureIgnoreCase)))
+            { Error("You already have a system named \"" + d.Name + "\". Choose another name."); return; }
+            if (d.OwnLocation)
+            {
+                if (d.Location.Length < 3 || !Path.IsPathRooted(d.Location)) { Error("Choose a full folder path for the location, or untick \"Choose a different location\"."); return; }
+                if (d.Location.Contains(",")) { Error("QEMU can't use a folder whose path contains a comma. Choose another location."); return; }
+            }
+            ShowCreateResources(d);
+        };
+        AcceptButton = next;
+        SetPage(p);
+        name.Focus();
+        name.SelectionStart = name.Text.Length;   // the cursor at the end; a selection would show in Windows' blue
+    }
+
+    void ShowCreateResources(CreateDraft d)
+    {
+        var p = CreatePage("Resources");
+        var res = new ResourcePicker();
+        res.Attach(p, 180, d.Cfg);
+        SizeBox disk = null;
+        CheckBox full = null;
+        if (d.Plan.Disk == null)
+        {
+            p.Caption("Disk size (GiB)", 0, 300, 180, 26);
+            disk = p.Add(Sys.DiskBox(16, 2048, d.DiskGB), 190, 300, 100, 26);
+            // Like Memory and CPU cores: how much the location's drive has free for the disk to grow into.
+            p.Caption(FreeOn(d.Location), 300, 300, 340, 26, Theme.Small, Theme.Muted);
+            full = p.Check("Allocate the full size now", d.Cfg.DiskFull, 190, 334, 240);
+            // The size is fixed while it's to be allocated in full; untick to change it.
+            full.CheckedChanged += delegate { disk.Commit(); disk.Locked = full.Checked; };
+            disk.Locked = full.Checked;
+        }
+        else
+        {
+            var src = d.Plan.Source;
+            p.Caption("Disk", 0, 300, 180, 26);
+            p.Caption(Path.GetFileName(d.Plan.Disk) + (src != null && src.Virtual > 0 ? "  ·  " + GibText(src.Virtual) + " GiB" : "  ·  " + FileSize(d.Plan.Disk)), 190, 300, 450, 26, Theme.Body, Theme.Text);
+            p.Caption("Keeps its own size  ·  " + FreeOn(d.Location), 190, 326, 450, 22, Theme.Small, Theme.Muted);
+        }
+
+        Action keep = () =>
+        {
+            res.Store(d.Cfg);
+            if (disk != null) { d.DiskGB = (int)disk.Value; d.Cfg.DiskFull = full.Checked; }
+        };
+        var back = p.Add(new FlatBtn("Back"), 0, CreateButtonsY, 120, 42);
+        back.Click += delegate { keep(); ShowCreateGeneral(d); };
+        var next = p.Add(new FlatBtn("Next", true), 500, CreateButtonsY, 140, 42);
+        next.Click += delegate
+        {
+            keep();
+            if (d.Cfg.DiskFull && d.Plan.Disk == null)
+            {
+                long free = FreeBytes(d.Location);
+                if (free >= 0 && free < ((long)d.DiskGB << 30) + (1L << 30))
+                { Error("The drive doesn't have " + d.DiskGB + " GiB free to allocate now. Choose a smaller size, or untick \"Allocate the full size now\"."); return; }
+            }
+            ShowCreateSummary(d);
+        };
+        AcceptButton = next;
         SetPage(p);
     }
 
-    string UniqueName(string seed)
+    void ShowCreateSummary(CreateDraft d)
     {
+        var p = CreatePage("Summary");
+        var plan = d.Plan;
+        int cores, ram;
+        d.Cfg.Resources(out cores, out ram);
+        string id = UniqueName(d.Name, d.Location);
+        string source = plan.Disk != null ? "Import " + plan.Disk
+            : plan.LocalIso != null ? plan.LocalIso
+            : plan.Url != null ? "Download " + plan.Url
+            : "Download from " + new Uri(plan.Distro.Base).Host + ", checksum verified";
+        string firstLine = d.Description.Split('\n')[0].Trim();
+        Func<bool, string> how = on => on ? " (Preallocated)" : " (Dynamic)";
+        string diskSize = plan.Disk == null ? d.DiskGB + " GiB" + how(d.Cfg.DiskFull)
+            : (plan.Source != null && plan.Source.Virtual > 0 ? GibText(plan.Source.Virtual) + " GiB" : "As imported") + how(false);
+        var rows = new List<Tuple<string, string>> {
+            Tuple.Create("Name", d.Name),
+            Tuple.Create("Description", d.Description.Length == 0 ? "None" : firstLine + (d.Description.Contains("\n") ? " ..." : "")),
+            Tuple.Create("Operating system", plan.Distro != null ? plan.Distro.Name : plan.Disk != null ? "From the imported disk" : plan.Label),
+            Tuple.Create(plan.Disk != null ? "Disk" : "Installer", source),
+            Tuple.Create("Location", Path.Combine(d.Location, id)),
+            Tuple.Create("Resource profile", VmConfig.ProfileNames[Math.Max(0, Math.Min(2, d.Cfg.Profile))]),
+            Tuple.Create("Memory", ram + " GiB"),
+            Tuple.Create("CPU cores", cores.ToString()),
+            Tuple.Create("Disk size", diskSize),
+        };
+        // The details in a bordered box, like the lists on Choose a Linux OS.
+        const int rowH = 28, pad = 10;
+        var details = p.Add(new BoxPanel(), 0, 162, 640, rows.Count * rowH + pad * 2);
+        int y = pad;
+        foreach (var r in rows)
+        {
+            foreach (var cell in new[] {
+                new Label { Text = r.Item1, ForeColor = Theme.Muted },
+                new Label { Text = r.Item2, ForeColor = Theme.Text } })
+            {
+                cell.Font = Theme.Body; cell.BackColor = BoxPanel.Fill; cell.TextAlign = ContentAlignment.MiddleLeft;
+                cell.AutoEllipsis = true; cell.UseMnemonic = false;
+                bool label = cell.ForeColor == Theme.Muted;
+                cell.SetBounds(Theme.D(label ? 16 : 196), Theme.D(y), Theme.D(label ? 170 : 428), Theme.D(rowH - 2));
+                details.Controls.Add(cell);
+            }
+            y += rowH;
+        }
+
+        var back = p.Add(new FlatBtn("Back"), 0, CreateButtonsY, 120, 42);
+        back.Click += delegate { ShowCreateResources(d); };
+        var go = p.Add(new FlatBtn(plan.Disk != null ? "Import" : "Install", true), 500, CreateButtonsY, 140, 42);
+        go.Click += delegate
+        {
+            var cfg = d.Cfg;
+            // The folder is made from the name now, so it's unique where it's created.
+            cfg.Name = UniqueName(d.Name, d.Location);
+            cfg.Dir = Path.Combine(d.Location, cfg.Name);
+            cfg.DisplayName = d.Name;
+            cfg.Description = d.Description;
+            cfg.DistroId = plan.Distro != null ? plan.Distro.Id : "";
+            if (plan.Disk != null) { cfg.DiskFull = false; Import(plan, cfg); } else Install(plan, cfg, d.DiskGB);
+        };
+        AcceptButton = go;
+        SetPage(p);
+    }
+
+    static string GibText(long bytes) { double g = bytes / 1073741824.0; return g == Math.Floor(g) ? g.ToString("0") : g.ToString("0.0"); }
+
+    static long FreeBytes(string folder)
+    {
+        try { return new DriveInfo(Path.GetPathRoot(Path.GetFullPath(folder))).AvailableFreeSpace; } catch { return -1; }
+    }
+
+    static string FreeOn(string folder)
+    {
+        try
+        {
+            var drive = new DriveInfo(Path.GetPathRoot(Path.GetFullPath(folder)));
+            return "up to " + drive.AvailableFreeSpace / 1073741824 + " GiB free on drive " + drive.Name.TrimEnd('\\');
+        }
+        catch { return ""; }
+    }
+
+    static string FileSize(string file)
+    {
+        try { return FormatBytes(new FileInfo(file).Length); } catch { return "?"; }
+    }
+
+    // A system made outside the storage folder is remembered, so Virtual Machines finds it.
+    static void Remember(VmConfig cfg)
+    {
+        if (string.Equals(Path.GetFullPath(Path.GetDirectoryName(cfg.Dir)), Path.GetFullPath(AppSettings.VmsDir), StringComparison.OrdinalIgnoreCase)) return;
+        if (AppSettings.VmDirs.Any(x => string.Equals(x, cfg.Dir, StringComparison.OrdinalIgnoreCase))) return;
+        AppSettings.VmDirs.Add(cfg.Dir);
+        AppSettings.Save();
+    }
+
+    // The folder and internal name for a new system: made from its name, unique among your systems and
+    // in the folder it goes in (`parent`, the storage folder unless the system has a location of its own).
+    string UniqueName(string seed, string parent = null)
+    {
+        parent = parent ?? AppSettings.VmsDir;
         string baseName = Regex.Replace(seed.ToLowerInvariant(), "[^a-z0-9_-]+", "-").Trim('-');
         if (baseName.Length == 0) baseName = "linux";
         if (baseName.Length > 32) baseName = baseName.Substring(0, 32);
+        var taken = new HashSet<string>(VmConfig.All().Select(v => v.Name), StringComparer.OrdinalIgnoreCase);
         string n = baseName;
-        for (int i = 2; File.Exists(Path.Combine(AppSettings.VmsDir, n, n + ".qcow2")); i++) n = baseName + "-" + i;
+        for (int i = 2; taken.Contains(n) || File.Exists(Path.Combine(parent, n, n + ".qcow2")); i++) n = baseName + "-" + i;
         return n;
     }
 
@@ -3161,9 +3887,11 @@ partial class MainForm : Form
                         (got, total, rate) => Ui(() => SetProgress(what, total > 0 ? (double)got / total : -1, Transfer(got, total, rate)))));
                     if (r.Sha256 != null)
                     {
-                        SetProgress("Verifying the download", 0, "Comparing with the official SHA-256 checksum");
-                        string hash = await Task.Run(() => Net.Sha256(part, cancelled,
-                            f => Ui(() => SetProgress("Verifying the download", f, "Comparing with the official SHA-256 checksum"))));
+                        bool sha512 = r.Sha256.Length == 128;
+                        string against = "Comparing with the official " + (sha512 ? "SHA-512" : "SHA-256") + " checksum";
+                        SetProgress("Verifying the download", 0, against);
+                        string hash = await Task.Run(() => Net.Hash(part, sha512, cancelled,
+                            f => Ui(() => SetProgress("Verifying the download", f, against))));
                         if (hash != r.Sha256)
                         {
                             File.Delete(part);
@@ -3175,12 +3903,19 @@ partial class MainForm : Form
                 }
             }
 
-            SetProgress("Creating the virtual disk", -1, diskGB + " GB, grows only as you use it");
+            SetProgress("Creating the virtual disk", -1, diskGB + " GiB" + (cfg.DiskFull ? ", allocating its full size" : ""));
             Directory.CreateDirectory(cfg.Dir);
-            await Task.Run(() => Winq.Run(Winq.Img, "create -f qcow2 " + Q(cfg.Disk) + " " + diskGB + "G"));
+            // Allocate the full size now: qcow2 metadata for every cluster, then the file stops being sparse,
+            // so the whole size is taken on the drive (WINQ-EMU's qemu-img can't do full preallocation on Windows).
+            await Task.Run(() =>
+            {
+                Winq.Run(Winq.Img, "create -f qcow2 " + (cfg.DiskFull ? "-o preallocation=metadata " : "") + Q(cfg.Disk) + " " + diskGB + "G");
+                if (cfg.DiskFull) Native.ClearSparse(cfg.Disk);
+            });
             cfg.Iso = iso;
             cfg.PendingInstall = true;
             cfg.Save();
+            Remember(cfg);
             busy = false;
 
             var state = Virt.Check();
@@ -3192,6 +3927,48 @@ partial class MainForm : Form
                         ? "Restart Windows to finish turning on Windows Hypervisor Platform."
                           + (state == VirtState.NotRunning ? "\n\nIf Try Linux still can't start it after restarting, hardware virtualization is probably turned off in your PC's BIOS/UEFI settings.\n\n" + Virt.BiosSteps : "")
                         : Virt.Message(state)));
+                return;
+            }
+            Boot(cfg);
+        }
+        catch (OperationCanceledException) { busy = false; ShowHome(); }
+        catch (Exception ex) { busy = false; ShowHome(); Error(ex.Message); }
+    }
+
+    // Use Your Own Installer > An Existing Virtual Disk: copies the disk into a new system's qcow2 (any
+    // format qemu-img reads), then starts it. Nothing is installed; the original file isn't changed.
+    async void Import(InstallPlan plan, VmConfig cfg)
+    {
+        var virt = Virt.Check();
+        if (virt == VirtState.NoCpuSupport) { Error(Virt.Message(virt)); return; }
+        else if (virt == VirtState.FeatureOff && !restartPending && !await EnableHypervisor()) return;
+        else if (virt == VirtState.NotRunning) restartPending = true;
+
+        busy = true;
+        cancelRequested = false;
+        ShowProgress("Getting ready", true);
+        Func<bool> cancelled = () => cancelRequested;
+        try
+        {
+            if (!Winq.Ready) await InstallWinq(cancelled);
+            if (cancelRequested) throw new OperationCanceledException();
+            SetProgress("Importing " + Path.GetFileName(plan.Disk), -1, FileSize(plan.Disk) + ", copied into a new disk for " + cfg.DisplayName);
+            Directory.CreateDirectory(cfg.Dir);
+            try { await Task.Run(() => Winq.Run(Winq.Img, "convert -O qcow2 " + Q(plan.Disk) + " " + Q(cfg.Disk))); }
+            catch (Exception ex)
+            {
+                try { if (File.Exists(cfg.Disk)) File.Delete(cfg.Disk); Directory.Delete(cfg.Dir); } catch { }
+                throw new Exception("Couldn't import " + Path.GetFileName(plan.Disk) + ". qemu-img said:\n\n" + ex.Message);
+            }
+            cfg.Iso = "";
+            cfg.PendingInstall = false;
+            cfg.Save();
+            Remember(cfg);
+            busy = false;
+            if (Virt.Check() != VirtState.Ready)
+            {
+                ShowHome();
+                Info(cfg.DisplayName + " is imported. Start it once Linux can run on this PC.\n\n" + Virt.Message(Virt.Check()));
                 return;
             }
             Boot(cfg);
@@ -3378,6 +4155,7 @@ partial class MainForm : Form
         cfg.Resources(out cores, out ram);
         var vm = new RunningVm { Cfg = cfg, Installer = installer, Cpu = cpu, Held = held, QmpPort = Net.FreePort() };
         do vm.EventPort = Net.FreePort(); while (vm.EventPort == vm.QmpPort);
+        do vm.AgentPort = Net.FreePort(); while (vm.AgentPort == vm.QmpPort || vm.AgentPort == vm.EventPort);
         string outputs = cfg.Displays > 1 ? ",max_outputs=" + cfg.Displays : "";
         string gpu = cpu ? "virtio-vga" + outputs
             : (cfg.Venus ? "virtio-vga-gl,blob=on,hostmem=" + Math.Max(1, Math.Min(Sys.MaxGpuMemGB, cfg.GpuMemGB)) + "G,venus=on" : "virtio-vga-gl") + outputs;
@@ -3392,6 +4170,10 @@ partial class MainForm : Form
             "-name " + Q(cfg.DisplayName),
             "-qmp tcp:127.0.0.1:" + vm.QmpPort + ",server=on,wait=off",
             "-qmp tcp:127.0.0.1:" + vm.EventPort + ",server=on,wait=off",
+            // A channel for the QEMU guest agent, if Linux has one, which tells Try Linux the installed OS.
+            "-device virtio-serial",
+            "-chardev socket,id=qga0,host=127.0.0.1,port=" + vm.AgentPort + ",server=on,wait=off",
+            "-device virtserialport,chardev=qga0,name=org.qemu.guest_agent.0",
             // Restarting Linux ends QEMU (with a "guest-reset" SHUTDOWN event) and Try Linux starts it
             // again. Resetting in place could leave QEMU's GPU state behind and stop it from coming back.
             "-action reboot=shutdown"
@@ -3437,6 +4219,7 @@ partial class MainForm : Form
             vm.P.Start();
             vm.P.BeginErrorReadLine();
             vm.WatchEvents();
+            vm.WatchAgent(() => Ui(RefreshHome));
         }
         catch (Exception ex) { Error("Couldn't start QEMU: " + ex.Message); return null; }
         running[cfg.Name] = vm;
@@ -3620,6 +4403,21 @@ partial class MainForm : Form
     }
 
     void RefreshHome() { if (Visible && !busy && page != null && page.Tag as string == "home") ShowHome(); }
+
+    // Applies the theme chosen in Settings > General > Appearance (or Windows' light or dark mode, with
+    // Follow system) and redraws the window in it. Pages take their colors when they're made, so the
+    // page on screen is made again; any other page picks the theme up the next time it opens.
+    void RefreshTheme()
+    {
+        string want = AppSettings.EffectiveTheme;
+        if (want == Theme.Name) return;
+        Theme.Apply(want);
+        BackColor = Theme.Bg;
+        ForeColor = Theme.Text;
+        if (IsHandleCreated) { Native.DarkTitleBar(Handle); Native.RedrawFrame(Handle); }
+        notices.Restyle();
+        RefreshHome();
+    }
 
     // The power commands for a running system, for the home page's Power menu and the tray menu.
     ToolStripItem[] PowerItems(RunningVm v)

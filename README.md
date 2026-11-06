@@ -15,14 +15,16 @@ OpenGL / Vulkan graphics (VirGL and Venus) to the guest.
 
 | | |
 |---|---|
-| ![Set up a system: name, resources, disk size](docs/images/set-up.png) | ![Downloading and verifying the installer](docs/images/download.png) |
-| **Set up:** name, resource profile and disk size | **Download:** the official ISO, checked against its SHA-256 |
+| ![Create a system: resources and disk size](docs/images/set-up.png) | ![Downloading and verifying the installer](docs/images/download.png) |
+| **Create:** name, description and location, then resources and disk size, then a summary | **Download:** the official ISO, checked against its SHA-256 or SHA-512 |
 | ![Virtual Machines](docs/images/your-systems.png) | ![Settings, General tab](docs/images/settings-general-tab.png) |
-| **Virtual Machines:** status, CPU, memory and disk use, start or power commands | **Settings, General:** display, startup, shared folder, about and updates |
+| **Virtual Machines:** status, CPU, memory and disk use, start or power commands | **Settings, General:** info and description, display, startup, shared folder, about and updates |
 | ![Settings, Hardware tab](docs/images/settings-hardware-tab.png) | ![Settings, Hardware tab, Disks section](docs/images/settings-disks.png) |
 | **Settings, Hardware:** graphics, memory and CPU cores, disks | **Disks:** size, location, resize, reclaim free space, compact |
 | ![Settings, Devices tab](docs/images/settings-devices-tab.png) | ![Settings, Recovery tab](docs/images/settings-recovery-tab.png) |
 | **Settings, Devices:** sound, CD/DVD drive, network type, port forwards | **Settings, Recovery:** backups, snapshots, storage, repair, delete |
+| ![The Light theme: Choose a Linux OS](docs/images/theme-light.png) | ![The Blue theme: Settings, Hardware tab](docs/images/theme-blue.png) |
+| **Light theme** (Settings > General > Appearance) | **Blue theme** |
 
 ## Distributions
 
@@ -35,8 +37,22 @@ OpenGL / Vulkan graphics (VirGL and Venus) to the guest.
 | [Zorin&nbsp;OS](https://zorin.com/os/) | A polished distribution based on Ubuntu, designed to feel familiar to people moving from Windows |
 
 Try Linux finds the newest release on each distribution's official mirror when
-you install, so it doesn't need updating for new versions. You can also install
-from any `.iso` file on your PC or from a download link.
+you install, so it doesn't need updating for new versions.
+
+**Search** (above the list) finds more: over 50 other distributions, desktop
+editions and immutable / atomic versions, such as Kubuntu, Xubuntu, Fedora KDE and
+Silverblue, Linux Mint Xfce, Debian KDE, openSUSE Tumbleweed, AlmaLinux, Rocky
+Linux, Bazzite, Bluefin, NixOS, Kali, Solus, Mageia, EndeavourOS and KDE neon.
+Search by name, desktop or description, e.g. `KDE`, `Xfce` or `atomic`. The list
+comes from [`catalog/distros.json`](catalog/distros.json) in this repository and is
+refreshed at most once a day, so it grows without a new release. Each download is
+checked against the distribution's official SHA-256 or SHA-512 checksum.
+
+**Use Your Own Installer** installs from an `.iso` file on your PC or a download
+link, or imports an existing virtual disk (qcow2, vmdk, vhd, vhdx, vdi or raw) that
+already has Linux on it. An imported disk is copied, so the original isn't changed,
+and settings saved beside it by Try Linux, VMware (`.vmx`) or VirtualBox (`.vbox`)
+fill in its name, description, memory and cores.
 
 ## Requirements
 
@@ -97,11 +113,11 @@ Once a day, Try Linux checks GitHub for a new release of Try Linux and of
 When one is available, a notice at the top of the home screen says so, with an
 **Update** button. Try Linux and WINQ-EMU updates each get their own notice.
 
-<img src="docs/images/update-button-home.png" alt="Virtual Machines screen with a notice above the list: Try Linux 1.1.9 is available. You have 1.1.8. Update button" width="560">
+<img src="docs/images/update-button-home.png" alt="Virtual Machines screen with a notice above the list: Try Linux 1.2.0 is available. You have 1.1.9. Update button" width="560">
 
 **Try Linux updates**
 
-<img src="docs/images/update-prompt-window.png" alt="Update to Try Linux 1.1.9? prompt, with What's New and Update buttons" width="420">
+<img src="docs/images/update-prompt-window.png" alt="Update to Try Linux 1.2.0? prompt, with What's New and Update buttons" width="420">
 
 1. **What's New** opens the release notes; **Update** downloads the new `TryLinux.exe`.
 2. Try Linux checks the download against the release's published SHA-256 checksum.
@@ -128,9 +144,22 @@ daily check off.
 
 ## Using it
 
-Click **Create**, choose a Linux OS, then **Next** and **Install**. Setup downloads and
-verifies the installer, creates the disk and opens the VM window. Install Linux onto
-the virtual disk; your Windows drive is never touched.
+Click **Create** and choose a Linux OS (or **Use Your Own Installer**), then:
+
+1. **General:** the system's name, an optional description, and its location (the
+   storage folder, or tick **Choose a different location** and browse to another).
+2. **Resources:** Balanced, Maximum or Manual memory and CPU cores, and the disk size,
+   with the free space on that drive. **Allocate the full size now** takes the disk's
+   whole size on the drive straight away instead of as Linux stores data.
+3. **Summary:** everything you chose. **Install** downloads and verifies the installer,
+   creates the disk and opens the VM window (**Import** copies an existing disk and
+   starts it).
+
+Install Linux onto the virtual disk; your Windows drive is never touched.
+
+If Linux runs the QEMU guest agent (`sudo dnf install qemu-guest-agent` on Fedora,
+`sudo apt install qemu-guest-agent` on Ubuntu, Debian and Mint), Try Linux shows the
+installed OS's own name and version, e.g. *Fedora Linux 45 (Workstation Edition)*.
 
 **Virtual Machines** lists each system with its status (**Running**, **Paused**,
 **Off, console open**, or **Ready to install**) and the CPU cores, memory and disk
@@ -172,19 +201,27 @@ Power menu. Each one uses the memory its resource profile gives it: two **Balanc
 systems fit, but two **Maximum** ones need more memory than your PC has. New systems
 get their own SSH port (2223, 2224, ...), so their port forwards don't clash.
 
-**Settings** (per system). Each tab is a list of sections; click one to open it. A
-closed section shows a summary of its settings.
-  - **General:** fullscreen and which display, start at Windows sign-in, desktop
-    shortcut, shared Windows folder (read-only unless allowed), and **About** with
+**Settings** (per system). Each tab is a list of sections; click one to open it.
+Several can be open at once, and the one you opened last is highlighted. A closed
+section shows a summary of its settings; every section starts closed when you open
+Settings.
+  - **General:** **Info** (the description, the OS and where the system is kept),
+    fullscreen and which display, start at Windows sign-in, desktop shortcut, shared
+    Windows folder (read-only unless allowed), **Appearance**, and **About** with
     versions, install and update checks.
+  - **Appearance** is for Try Linux as a whole: **Dark** (grays with lavender, after
+    Firefox's dark theme), **Light** or **Blue** (both from Bitwarden's brand colors).
+    **Follow system** uses Light while Windows shows apps in light mode, and Dark
+    otherwise. The theme changes when you save.
   - **Hardware:**
     - **Graphics:** guest displays, GPU / CPU / automatic rendering, Vulkan, and GPU
       memory up to what your graphics card has.
-    - **Resources:** Balanced, Maximum or Manual. Memory and CPU cores (in steps of 2)
-      only go up to what's free: Windows keeps 2 cores and a quarter of the memory,
-      and other running systems keep theirs.
-    - **Disks:** each disk's current size, free space on its drive, maximum size and
-      location. **Resize** grows or shrinks a disk. **Reclaim free space when Linux
+    - **Resources:** Balanced, Maximum or Manual (memory and CPU cores can be changed
+      with Manual). They only go up to what's free: Windows keeps 2 cores and a quarter
+      of the memory, and other running systems keep theirs.
+    - **Disks:** each disk's current size, free space on its drive, maximum size,
+      location and whether it's dynamic or preallocated. **Resize** grows or shrinks a
+      disk. **Reclaim free space when Linux
       deletes files** passes Linux's TRIM through, so deleted files' space is reused
       instead of growing the disk file. **Compact** gives a disk's unused space back to
       Windows.
@@ -216,7 +253,8 @@ sudo mkdir -p /mnt/host
 sudo mount -t 9p -o trans=virtio,version=9p2000.L host /mnt/host
 ```
 
-Systems, downloads and settings live in `%LOCALAPPDATA%\TryLinux` (movable from
+Systems, downloads and settings live in `%LOCALAPPDATA%\TryLinux` (or a system's own
+location, chosen when you create it; the storage folder is movable from
 Settings > Recovery > Storage).
 
 ## Troubleshooting
@@ -284,7 +322,7 @@ Try Linux uses the C# compiler that ships with Windows, so nothing needs install
 build.cmd
 ```
 
-This produces `TryLinux.exe` from `TryLinux.cs` and `Settings.cs`.
+This produces `TryLinux.exe` from `TryLinux.cs` and `Settings.cs`, with the fonts in `fonts/` embedded.
 
 `try-linux-vm.ps1` is a standalone PowerShell script that does the same VM setup
 from the command line.
@@ -295,6 +333,10 @@ from the command line.
   virglrenderer (MIT), launcher (MIT). Downloaded by Try Linux, not redistributed.
 - Inspired by [Try Omarchy for Windows](https://github.com/omacom/try-omarchy-windows).
 - Linux distributions are downloaded from their official mirrors and carry their own licenses.
+- Fonts, embedded in the app under the [SIL Open Font License 1.1](fonts/):
+  [Prompt](https://github.com/cadsondemak/Prompt) by Cadson Demak,
+  [Work Sans](https://github.com/weiweihuanghuang/Work-Sans) by Wei Huang and
+  [Noto Sans](https://github.com/notofonts/latin-greek-cyrillic) by the Noto Project Authors.
 
 ## License
 

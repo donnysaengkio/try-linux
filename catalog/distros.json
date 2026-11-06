@@ -1,0 +1,391 @@
+{
+  "about": "More distributions for Try Linux (Windows). Each entry is found and checked the same way as the built-in ones: 'base' is an official mirror folder, each step is added to it (a step starting with ~ is a regex matched against the folder's links, newest first), and 'checksum' names the official checksum file next to the ISO ({iso} is the ISO's file name; a leading ~ is a regex). SHA-256 and SHA-512 checksums are both checked. Only https mirrors are used.",
+  "version": 2,
+  "distros": [
+    {
+      "id": "kubuntu", "name": "Kubuntu",
+      "about": "Ubuntu with the KDE Plasma desktop, which is highly customizable and familiar to Windows users",
+      "base": "https://cdimage.ubuntu.com/kubuntu/releases/",
+      "steps": ["~^\\d\\d\\.\\d\\d(\\.\\d+)?/$", "release/", "~^kubuntu-.*-desktop-amd64\\.iso$"],
+      "checksum": "SHA256SUMS"
+    },
+    {
+      "id": "xubuntu", "name": "Xubuntu",
+      "about": "Ubuntu with the light, traditional Xfce desktop, good for older or slower PCs",
+      "base": "https://cdimage.ubuntu.com/xubuntu/releases/",
+      "steps": ["~^\\d\\d\\.\\d\\d(\\.\\d+)?/$", "release/", "~^xubuntu-.*-desktop-amd64\\.iso$"],
+      "checksum": "SHA256SUMS"
+    },
+    {
+      "id": "lubuntu", "name": "Lubuntu",
+      "about": "Ubuntu with the lightweight LXQt desktop, made to run well on modest hardware",
+      "base": "https://cdimage.ubuntu.com/lubuntu/releases/",
+      "steps": ["~^\\d\\d\\.\\d\\d(\\.\\d+)?/$", "release/", "~^lubuntu-.*-desktop-amd64\\.iso$"],
+      "checksum": "SHA256SUMS"
+    },
+    {
+      "id": "ubuntu-mate", "name": "Ubuntu MATE",
+      "about": "Ubuntu with the MATE desktop, a classic layout with a menu, panels and a taskbar",
+      "base": "https://cdimage.ubuntu.com/ubuntu-mate/releases/",
+      "steps": ["~^\\d\\d\\.\\d\\d(\\.\\d+)?/$", "release/", "~^ubuntu-mate-.*-desktop-amd64\\.iso$"],
+      "checksum": "SHA256SUMS"
+    },
+    {
+      "id": "ubuntu-budgie", "name": "Ubuntu Budgie",
+      "about": "Ubuntu with the Budgie desktop, simple and modern with a sidebar for notifications and widgets",
+      "base": "https://cdimage.ubuntu.com/ubuntu-budgie/releases/",
+      "steps": ["~^\\d\\d\\.\\d\\d(\\.\\d+)?/$", "release/", "~^ubuntu-budgie-.*-desktop-amd64\\.iso$"],
+      "checksum": "SHA256SUMS"
+    },
+    {
+      "id": "ubuntu-cinnamon", "name": "Ubuntu Cinnamon",
+      "about": "Ubuntu with the Cinnamon desktop from Linux Mint, a traditional layout with a start menu and taskbar",
+      "base": "https://cdimage.ubuntu.com/ubuntucinnamon/releases/",
+      "steps": ["~^\\d\\d\\.\\d\\d(\\.\\d+)?/$", "release/", "~^ubuntucinnamon-.*-desktop-amd64\\.iso$"],
+      "checksum": "SHA256SUMS"
+    },
+    {
+      "id": "ubuntu-studio", "name": "Ubuntu Studio",
+      "about": "Ubuntu with KDE Plasma and a full set of apps for audio, video, graphics and photography",
+      "base": "https://cdimage.ubuntu.com/ubuntustudio/releases/",
+      "steps": ["~^\\d\\d\\.\\d\\d(\\.\\d+)?/$", "release/", "~^ubuntustudio-.*-desktop-amd64\\.iso$"],
+      "checksum": "SHA256SUMS"
+    },
+    {
+      "id": "ubuntu-unity", "name": "Ubuntu Unity",
+      "about": "Ubuntu with the Unity desktop, with its launcher on the left and a searchable dash",
+      "base": "https://cdimage.ubuntu.com/ubuntu-unity/releases/",
+      "steps": ["~^\\d\\d\\.\\d\\d(\\.\\d+)?/$", "release/", "~^ubuntu-unity-.*-desktop-amd64\\.iso$"],
+      "checksum": "SHA256SUMS"
+    },
+    {
+      "id": "edubuntu", "name": "Edubuntu",
+      "about": "Ubuntu for schools and families, with GNOME and educational apps for every age",
+      "base": "https://cdimage.ubuntu.com/edubuntu/releases/",
+      "steps": ["~^\\d\\d\\.\\d\\d(\\.\\d+)?/$", "release/", "~^edubuntu-.*-desktop-amd64\\.iso$"],
+      "checksum": "SHA256SUMS"
+    },
+    {
+      "id": "ubuntu-kylin", "name": "Ubuntu Kylin",
+      "about": "Ubuntu made for Chinese users, with the UKUI desktop and Chinese language support built in",
+      "base": "https://cdimage.ubuntu.com/ubuntukylin/releases/",
+      "steps": ["~^\\d\\d\\.\\d\\d(\\.\\d+)?/$", "release/", "~^ubuntukylin-.*-desktop-amd64\\.iso$"],
+      "checksum": "SHA256SUMS"
+    },
+    {
+      "id": "fedora-kde", "name": "Fedora KDE Plasma Desktop",
+      "about": "Fedora with the KDE Plasma desktop instead of GNOME, with the same new kernel and Mesa releases",
+      "base": "https://mirrors.kernel.org/fedora/releases/",
+      "steps": ["~^\\d+/$", "KDE/x86_64/iso/", "~^Fedora-KDE-Desktop-Live-.*\\.iso$"],
+      "checksum": "~CHECKSUM$"
+    },
+    {
+      "id": "fedora-xfce", "name": "Fedora Xfce",
+      "about": "A Fedora spin with the light, traditional Xfce desktop",
+      "base": "https://mirrors.kernel.org/fedora/releases/",
+      "steps": ["~^\\d+/$", "Spins/x86_64/iso/", "~^Fedora-Xfce-Live-.*\\.iso$"],
+      "checksum": "~CHECKSUM$"
+    },
+    {
+      "id": "fedora-cinnamon", "name": "Fedora Cinnamon",
+      "about": "A Fedora spin with the Cinnamon desktop, a traditional layout with a start menu and taskbar",
+      "base": "https://mirrors.kernel.org/fedora/releases/",
+      "steps": ["~^\\d+/$", "Spins/x86_64/iso/", "~^Fedora-Cinnamon-Live-.*\\.iso$"],
+      "checksum": "~CHECKSUM$"
+    },
+    {
+      "id": "fedora-mate", "name": "Fedora MATE",
+      "about": "A Fedora spin with the MATE desktop and Compiz window effects",
+      "base": "https://mirrors.kernel.org/fedora/releases/",
+      "steps": ["~^\\d+/$", "Spins/x86_64/iso/", "~^Fedora-MATE_Compiz-Live-.*\\.iso$"],
+      "checksum": "~CHECKSUM$"
+    },
+    {
+      "id": "fedora-lxqt", "name": "Fedora LXQt",
+      "about": "A Fedora spin with the lightweight LXQt desktop",
+      "base": "https://mirrors.kernel.org/fedora/releases/",
+      "steps": ["~^\\d+/$", "Spins/x86_64/iso/", "~^Fedora-LXQt-Live-.*\\.iso$"],
+      "checksum": "~CHECKSUM$"
+    },
+    {
+      "id": "fedora-lxde", "name": "Fedora LXDE",
+      "about": "A Fedora spin with the very light LXDE desktop, for older PCs",
+      "base": "https://mirrors.kernel.org/fedora/releases/",
+      "steps": ["~^\\d+/$", "Spins/x86_64/iso/", "~^Fedora-LXDE-Live-.*\\.iso$"],
+      "checksum": "~CHECKSUM$"
+    },
+    {
+      "id": "fedora-budgie", "name": "Fedora Budgie",
+      "about": "A Fedora spin with the simple, modern Budgie desktop",
+      "base": "https://mirrors.kernel.org/fedora/releases/",
+      "steps": ["~^\\d+/$", "Spins/x86_64/iso/", "~^Fedora-Budgie-Live-.*\\.iso$"],
+      "checksum": "~CHECKSUM$"
+    },
+    {
+      "id": "fedora-cosmic", "name": "Fedora COSMIC",
+      "about": "A Fedora spin with COSMIC, the new desktop from System76 with built-in window tiling",
+      "base": "https://mirrors.kernel.org/fedora/releases/",
+      "steps": ["~^\\d+/$", "Spins/x86_64/iso/", "~^Fedora-COSMIC-Live-.*\\.iso$"],
+      "checksum": "~CHECKSUM$"
+    },
+    {
+      "id": "fedora-sway", "name": "Fedora Sway",
+      "about": "A Fedora spin with Sway, a keyboard-driven tiling window manager",
+      "base": "https://mirrors.kernel.org/fedora/releases/",
+      "steps": ["~^\\d+/$", "Spins/x86_64/iso/", "~^Fedora-Sway-Live-.*\\.iso$"],
+      "checksum": "~CHECKSUM$"
+    },
+    {
+      "id": "fedora-i3", "name": "Fedora i3",
+      "about": "A Fedora spin with i3, a keyboard-driven tiling window manager",
+      "base": "https://mirrors.kernel.org/fedora/releases/",
+      "steps": ["~^\\d+/$", "Spins/x86_64/iso/", "~^Fedora-i3-Live-.*\\.iso$"],
+      "checksum": "~CHECKSUM$"
+    },
+    {
+      "id": "fedora-silverblue", "name": "Fedora Silverblue",
+      "about": "An atomic (immutable) Fedora with GNOME: the system updates as a whole and can roll back, and apps come as Flatpaks",
+      "base": "https://mirrors.kernel.org/fedora/releases/",
+      "steps": ["~^\\d+/$", "Silverblue/x86_64/iso/", "~^Fedora-Silverblue-Installer-.*\\.iso$"],
+      "checksum": "~CHECKSUM$"
+    },
+    {
+      "id": "fedora-kinoite", "name": "Fedora Kinoite",
+      "about": "An atomic (immutable) Fedora with KDE Plasma: the system updates as a whole and can roll back",
+      "base": "https://mirrors.kernel.org/fedora/releases/",
+      "steps": ["~^\\d+/$", "Kinoite/x86_64/iso/", "~^Fedora-Kinoite-Installer-.*\\.iso$"],
+      "checksum": "~CHECKSUM$"
+    },
+    {
+      "id": "fedora-cosmic-atomic", "name": "Fedora COSMIC Atomic",
+      "about": "An atomic (immutable) Fedora with the COSMIC desktop: the system updates as a whole and can roll back",
+      "base": "https://mirrors.kernel.org/fedora/releases/",
+      "steps": ["~^\\d+/$", "COSMIC-Atomic/x86_64/iso/", "~^Fedora-CosmicAtomic-Installer-.*\\.iso$"],
+      "checksum": "~CHECKSUM$"
+    },
+    {
+      "id": "mint-xfce", "name": "Linux Mint (Xfce)",
+      "about": "Linux Mint with the lighter Xfce desktop, for older PCs or a simpler look",
+      "base": "https://mirrors.edge.kernel.org/linuxmint/stable/",
+      "steps": ["~^\\d+(\\.\\d+)?/$", "~^linuxmint-.*-xfce-64bit\\.iso$"],
+      "checksum": "sha256sum.txt"
+    },
+    {
+      "id": "mint-mate", "name": "Linux Mint (MATE)",
+      "about": "Linux Mint with the MATE desktop, a classic layout that's light on resources",
+      "base": "https://mirrors.edge.kernel.org/linuxmint/stable/",
+      "steps": ["~^\\d+(\\.\\d+)?/$", "~^linuxmint-.*-mate-64bit\\.iso$"],
+      "checksum": "sha256sum.txt"
+    },
+    {
+      "id": "lmde", "name": "LMDE (Linux Mint Debian Edition)",
+      "about": "Linux Mint with the Cinnamon desktop, built on Debian instead of Ubuntu",
+      "base": "https://mirrors.edge.kernel.org/linuxmint/debian/",
+      "steps": ["~^lmde-.*-cinnamon-64bit\\.iso$"],
+      "checksum": "sha256sum.txt"
+    },
+    {
+      "id": "debian-kde", "name": "Debian (KDE Plasma)",
+      "about": "Debian's stable release with the KDE Plasma desktop",
+      "base": "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/",
+      "steps": ["~^debian-live-.*-amd64-kde\\.iso$"],
+      "checksum": "SHA256SUMS"
+    },
+    {
+      "id": "debian-xfce", "name": "Debian (Xfce)",
+      "about": "Debian's stable release with the light Xfce desktop",
+      "base": "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/",
+      "steps": ["~^debian-live-.*-amd64-xfce\\.iso$"],
+      "checksum": "SHA256SUMS"
+    },
+    {
+      "id": "debian-cinnamon", "name": "Debian (Cinnamon)",
+      "about": "Debian's stable release with the Cinnamon desktop",
+      "base": "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/",
+      "steps": ["~^debian-live-.*-amd64-cinnamon\\.iso$"],
+      "checksum": "SHA256SUMS"
+    },
+    {
+      "id": "debian-mate", "name": "Debian (MATE)",
+      "about": "Debian's stable release with the classic MATE desktop",
+      "base": "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/",
+      "steps": ["~^debian-live-.*-amd64-mate\\.iso$"],
+      "checksum": "SHA256SUMS"
+    },
+    {
+      "id": "debian-lxqt", "name": "Debian (LXQt)",
+      "about": "Debian's stable release with the lightweight LXQt desktop",
+      "base": "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/",
+      "steps": ["~^debian-live-.*-amd64-lxqt\\.iso$"],
+      "checksum": "SHA256SUMS"
+    },
+    {
+      "id": "debian-lxde", "name": "Debian (LXDE)",
+      "about": "Debian's stable release with the very light LXDE desktop, for older PCs",
+      "base": "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/",
+      "steps": ["~^debian-live-.*-amd64-lxde\\.iso$"],
+      "checksum": "SHA256SUMS"
+    },
+    {
+      "id": "opensuse-tumbleweed", "name": "openSUSE Tumbleweed (KDE)",
+      "about": "A rolling-release distribution from the openSUSE community that always has the newest KDE Plasma and kernel",
+      "base": "https://download.opensuse.org/tumbleweed/iso/",
+      "steps": ["openSUSE-Tumbleweed-KDE-Live-x86_64-Current.iso"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "opensuse-tumbleweed-gnome", "name": "openSUSE Tumbleweed (GNOME)",
+      "about": "openSUSE's rolling release with the newest GNOME desktop",
+      "base": "https://download.opensuse.org/tumbleweed/iso/",
+      "steps": ["openSUSE-Tumbleweed-GNOME-Live-x86_64-Current.iso"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "opensuse-tumbleweed-xfce", "name": "openSUSE Tumbleweed (Xfce)",
+      "about": "openSUSE's rolling release with the light Xfce desktop",
+      "base": "https://download.opensuse.org/tumbleweed/iso/",
+      "steps": ["openSUSE-Tumbleweed-XFCE-Live-x86_64-Current.iso"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "opensuse-leap", "name": "openSUSE Leap",
+      "about": "openSUSE's stable release, based on SUSE Linux Enterprise; the installer lets you choose KDE Plasma or GNOME",
+      "base": "https://download.opensuse.org/distribution/leap/16.0/offline/",
+      "steps": ["Leap-16.0-offline-installer-x86_64.install.iso"],
+      "checksum": "{iso}.sha512"
+    },
+    {
+      "id": "almalinux-gnome", "name": "AlmaLinux (GNOME)",
+      "about": "A free, community-run rebuild of Red Hat Enterprise Linux, supported for ten years, with GNOME",
+      "base": "https://repo.almalinux.org/almalinux/",
+      "steps": ["~^\\d+/$", "live/x86_64/", "~^AlmaLinux-\\d+-latest-x86_64-Live-GNOME\\.iso$"],
+      "checksum": "CHECKSUM"
+    },
+    {
+      "id": "almalinux-kde", "name": "AlmaLinux (KDE Plasma)",
+      "about": "A free, community-run rebuild of Red Hat Enterprise Linux, supported for ten years, with KDE Plasma",
+      "base": "https://repo.almalinux.org/almalinux/",
+      "steps": ["~^\\d+/$", "live/x86_64/", "~^AlmaLinux-\\d+-latest-x86_64-Live-KDE\\.iso$"],
+      "checksum": "CHECKSUM"
+    },
+    {
+      "id": "rocky", "name": "Rocky Linux (GNOME)",
+      "about": "A free enterprise distribution compatible with Red Hat Enterprise Linux, with the GNOME workstation",
+      "base": "https://download.rockylinux.org/pub/rocky/",
+      "steps": ["~^\\d+/$", "live/x86_64/", "~^Rocky-\\d+-Workstation-x86_64-latest\\.iso$"],
+      "checksum": "{iso}.CHECKSUM"
+    },
+    {
+      "id": "rocky-kde", "name": "Rocky Linux (KDE Plasma)",
+      "about": "A free enterprise distribution compatible with Red Hat Enterprise Linux, with KDE Plasma",
+      "base": "https://download.rockylinux.org/pub/rocky/",
+      "steps": ["~^\\d+/$", "live/x86_64/", "~^Rocky-\\d+-KDE-x86_64-latest\\.iso$"],
+      "checksum": "{iso}.CHECKSUM"
+    },
+    {
+      "id": "bazzite", "name": "Bazzite",
+      "about": "An atomic (immutable) Fedora made for gaming, with Steam, KDE Plasma and graphics drivers ready to go",
+      "base": "https://download.bazzite.gg/",
+      "steps": ["bazzite-stable-amd64.iso"],
+      "checksum": "{iso}-CHECKSUM"
+    },
+    {
+      "id": "bluefin", "name": "Bluefin",
+      "about": "An atomic (immutable) Fedora with GNOME, made for developers, that updates itself in the background",
+      "base": "https://download.projectbluefin.io/",
+      "steps": ["bluefin-stable-x86_64.iso"],
+      "checksum": "{iso}-CHECKSUM"
+    },
+    {
+      "id": "nixos", "name": "NixOS",
+      "about": "A distribution configured from a single file, so the whole system can be rebuilt or rolled back exactly; with GNOME or KDE",
+      "base": "https://channels.nixos.org/nixos-26.05/",
+      "steps": ["latest-nixos-graphical-x86_64-linux.iso"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "void-xfce", "name": "Void Linux (Xfce)",
+      "about": "An independent rolling-release distribution with its own package manager and runit, with Xfce",
+      "base": "https://repo-default.voidlinux.org/live/current/",
+      "steps": ["~^void-live-x86_64-\\d+-xfce\\.iso$"],
+      "checksum": "sha256sum.txt"
+    },
+    {
+      "id": "kali", "name": "Kali Linux",
+      "about": "A Debian-based distribution for security testing, with hundreds of penetration-testing tools",
+      "base": "https://cdimage.kali.org/current/",
+      "steps": ["~^kali-linux-.*-installer-amd64\\.iso$"],
+      "checksum": "SHA256SUMS"
+    },
+    {
+      "id": "devuan", "name": "Devuan",
+      "about": "Debian without systemd, using SysVinit and other init systems, with a desktop live image",
+      "base": "https://files.devuan.org/devuan_excalibur/desktop-live/",
+      "steps": ["~^devuan_excalibur_.*_amd64_desktop-live\\.iso$"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "solus-budgie", "name": "Solus (Budgie)",
+      "about": "An independent distribution made for home computers, with its own Budgie desktop",
+      "base": "https://downloads.getsol.us/isos/",
+      "steps": ["~^\\d{4}-\\d\\d-\\d\\d/$", "~^Solus-Budgie-Release-.*\\.iso$"],
+      "checksum": "{iso}.sha256sum"
+    },
+    {
+      "id": "solus-plasma", "name": "Solus (KDE Plasma)",
+      "about": "An independent distribution made for home computers, with KDE Plasma",
+      "base": "https://downloads.getsol.us/isos/",
+      "steps": ["~^\\d{4}-\\d\\d-\\d\\d/$", "~^Solus-Plasma-Release-.*\\.iso$"],
+      "checksum": "{iso}.sha256sum"
+    },
+    {
+      "id": "solus-gnome", "name": "Solus (GNOME)",
+      "about": "An independent distribution made for home computers, with GNOME",
+      "base": "https://downloads.getsol.us/isos/",
+      "steps": ["~^\\d{4}-\\d\\d-\\d\\d/$", "~^Solus-GNOME-Release-.*\\.iso$"],
+      "checksum": "{iso}.sha256sum"
+    },
+    {
+      "id": "solus-xfce", "name": "Solus (Xfce)",
+      "about": "An independent distribution made for home computers, with Xfce",
+      "base": "https://downloads.getsol.us/isos/",
+      "steps": ["~^\\d{4}-\\d\\d-\\d\\d/$", "~^Solus-Xfce-Release-.*\\.iso$"],
+      "checksum": "{iso}.sha256sum"
+    },
+    {
+      "id": "mageia-plasma", "name": "Mageia (KDE Plasma)",
+      "about": "A community distribution descended from Mandriva, with friendly setup tools and KDE Plasma",
+      "base": "https://mirrors.kernel.org/mageia/iso/",
+      "steps": ["~^\\d+/$", "~^Mageia-\\d+-Live-Plasma-x86_64/$", "~^Mageia-.*-Live-Plasma-x86_64\\.iso$"],
+      "checksum": "{iso}.sha512"
+    },
+    {
+      "id": "mageia-gnome", "name": "Mageia (GNOME)",
+      "about": "A community distribution descended from Mandriva, with friendly setup tools and GNOME",
+      "base": "https://mirrors.kernel.org/mageia/iso/",
+      "steps": ["~^\\d+/$", "~^Mageia-\\d+-Live-GNOME-x86_64/$", "~^Mageia-.*-Live-GNOME-x86_64\\.iso$"],
+      "checksum": "{iso}.sha512"
+    },
+    {
+      "id": "mageia-xfce", "name": "Mageia (Xfce)",
+      "about": "A community distribution descended from Mandriva, with friendly setup tools and Xfce",
+      "base": "https://mirrors.kernel.org/mageia/iso/",
+      "steps": ["~^\\d+/$", "~^Mageia-\\d+-Live-Xfce-x86_64/$", "~^Mageia-.*-Live-Xfce-x86_64\\.iso$"],
+      "checksum": "{iso}.sha512"
+    },
+    {
+      "id": "endeavouros", "name": "EndeavourOS",
+      "about": "A friendly way into Arch Linux: a graphical installer, a choice of desktops, and Arch's rolling updates",
+      "base": "https://mirror.accum.se/mirror/endeavouros/iso/",
+      "steps": ["~^EndeavourOS_.*\\.iso$"],
+      "checksum": "{iso}.sha512sum"
+    },
+    {
+      "id": "kde-neon", "name": "KDE neon",
+      "about": "The KDE community's own system, with the newest KDE Plasma on an Ubuntu long-term support base",
+      "base": "https://files.kde.org/neon/images/desktop/user/current/",
+      "steps": ["~^neon-user-desk-.*\\.iso$"],
+      "checksum": "{iso}.sha256"
+    }
+  ]
+}
