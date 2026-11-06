@@ -17,12 +17,12 @@ OpenGL / Vulkan graphics (VirGL and Venus) to the guest.
 |---|---|
 | ![Set up a system: name, resources, disk size](docs/images/set-up.png) | ![Downloading and verifying the installer](docs/images/download.png) |
 | **Set up:** name, resource profile and disk size | **Download:** the official ISO, checked against its SHA-256 |
-| ![Your systems](docs/images/your-systems.png) | ![Settings, General tab](docs/images/settings-general-tab.png) |
-| **Your systems:** status, console, start or power commands | **Settings, General:** display, startup, resources, storage |
-| ![Settings, Devices tab](docs/images/settings-devices-tab.png) | ![Settings, Advanced tab](docs/images/settings-advanced-tab.png) |
-| **Settings, Devices:** sound and microphone | **Settings, Advanced:** displays, rendering, port forwards, updates |
-| ![Settings, Recovery tab](docs/images/settings-recovery-tab.png) | |
-| **Settings, Recovery:** backups, snapshots, reset, storage | |
+| ![Virtual Machines](docs/images/your-systems.png) | ![Settings, General tab](docs/images/settings-general-tab.png) |
+| **Virtual Machines:** status, CPU, memory and disk use, start or power commands | **Settings, General:** display, startup, shared folder, about and updates |
+| ![Settings, Hardware tab](docs/images/settings-hardware-tab.png) | ![Settings, Hardware tab, Disks section](docs/images/settings-disks.png) |
+| **Settings, Hardware:** graphics, memory and CPU cores, disks | **Disks:** size, location, resize, reclaim free space, compact |
+| ![Settings, Devices tab](docs/images/settings-devices-tab.png) | ![Settings, Recovery tab](docs/images/settings-recovery-tab.png) |
+| **Settings, Devices:** sound, CD/DVD drive, network type, port forwards | **Settings, Recovery:** backups, snapshots, storage, repair, delete |
 
 ## Distributions
 
@@ -67,8 +67,8 @@ On first setup Try Linux offers to:
      confirms it; click **Open** to start the installed copy. No administrator
      permission is needed.
    - **Run** opens it from where it is, without installing. It won't ask again for
-     this version; you can install later from **Settings > Advanced > About**.
-   - Closing the window asks whether to quit, and Try Linux asks again next time.
+     this version; you can install later from **Settings > General > About**.
+   - Pressing Esc asks whether to quit, and Try Linux asks again next time.
 
 If a different version is already installed, the same prompt offers **Update**
 instead, which replaces the installed copy. Desktop shortcuts and Start with Windows
@@ -94,14 +94,14 @@ shortcuts you made for it.
 
 Once a day, Try Linux checks GitHub for a new release of Try Linux and of
 [WINQ-EMU](https://github.com/cmspam/winq-emu), the emulator that runs your systems.
-When one is available, a button appears on the home screen: **Update to x.y.z**,
-**Update WINQ-EMU**, or **Updates available** when there are both.
+When one is available, a notice at the top of the home screen says so, with an
+**Update** button. Try Linux and WINQ-EMU updates each get their own notice.
 
-<img src="docs/images/update-button-home.png" alt="Your systems screen with an Update to 1.1.6 button above the list" width="560">
+<img src="docs/images/update-button-home.png" alt="Virtual Machines screen with a notice above the list: Try Linux 1.1.7 is available. You have 1.1.6. Update button" width="560">
 
 **Try Linux updates**
 
-<img src="docs/images/update-prompt-window.png" alt="Update to Try Linux 1.1.6? prompt, with What's new and Update buttons" width="420">
+<img src="docs/images/update-prompt-window.png" alt="Update to Try Linux 1.1.7? prompt, with What's new and Update buttons" width="420">
 
 1. **What's new** opens the release notes; **Update** downloads the new `TryLinux.exe`.
 2. Try Linux checks the download against the release's published SHA-256 checksum.
@@ -120,23 +120,24 @@ have the Update button, so download 1.1.4 once by hand.
 3. Try Linux downloads the new installer from the WINQ-EMU releases page and runs it.
    Windows asks for permission, because it installs to `C:\WINQ-EMU`.
 
-**Settings > Advanced > About** shows both versions, has **Check for updates** to
+**Settings > General > About** shows both versions, has **Check for updates** to
 check right away, and **Check for updates automatically (once a day)** to turn the
 daily check off.
 
-<img src="docs/images/settings-about.png" alt="Settings, Advanced tab, About section: versions, Check for updates automatically, and Check for updates" width="560">
+<img src="docs/images/settings-about.png" alt="Settings, General tab, About section: versions, Check for updates automatically, and Check for updates" width="560">
 
 ## Using it
 
-**Choose a Linux OS**, then **Next** and **Install**. Setup downloads and verifies the
-installer, creates the disk and opens the VM window. Install Linux onto the virtual
-disk; your Windows drive is never touched.
+Click **Create**, choose a Linux OS, then **Next** and **Install**. Setup downloads and
+verifies the installer, creates the disk and opens the VM window. Install Linux onto
+the virtual disk; your Windows drive is never touched.
 
-**Your systems** lists each system with its status on the right: **Running**,
-**Paused**, **Off, console open**, or **Ready to install**.
+**Virtual Machines** lists each system with its status (**Running**, **Paused**,
+**Off, console open**, or **Ready to install**) and the CPU cores, memory and disk
+space it uses.
 
 - **Start** (or double-click) starts the selected system. Try Linux stays open on
-  Your systems, behind the system's window.
+  Virtual Machines, behind the system's window.
 - **Console** opens a running system's window. On a system that's off, it opens the
   window with the system still off (**Off, console open**); click **Start** to power it
   on there, or close the window. If the system is set to open fullscreen, Console
@@ -152,7 +153,7 @@ disk; your Windows drive is never touched.
 
 **Power** replaces **Start** while a system runs:
 
-<img src="docs/images/power-menu.png" alt="Your systems with the Power menu open: Shut down, Restart, Pause, Force stop and Reset" width="480">
+<img src="docs/images/power-menu.png" alt="Virtual Machines with the Power menu open: Shut down, Restart, Pause, Force stop and Reset" width="480">
 
 - **Shut down** presses the power button, so Linux shuts down cleanly. Its desktop
   may ask first; GNOME goes ahead on its own after 60 seconds.
@@ -171,16 +172,34 @@ Power menu. Each one uses the memory its resource profile gives it: two **Balanc
 systems fit, but two **Maximum** ones need more memory than your PC has. New systems
 get their own SSH port (2223, 2224, ...), so their port forwards don't clash.
 
-**Settings** (per system):
+**Settings** (per system). Each tab is a list of sections; click one to open it. A
+closed section shows a summary of its settings.
   - **General:** fullscreen and which display, start at Windows sign-in, desktop
-    shortcut, resource profile (Balanced / Maximum / Manual), disk capacity,
-    shared Windows folder (read-only unless allowed).
-  - **Devices:** sound and microphone.
-  - **Advanced:** guest displays, GPU / CPU / automatic rendering, Vulkan, GPU
-    memory, port forwards (`tcp:2223:22` for this PC, `lan tcp:8080:80` for your
-    network), and **About** with versions, install and update checks.
-  - **Recovery:** back up, restore as a copy, snapshots, reset, boot an ISO, move
-    storage, clean up downloads, delete.
+    shortcut, shared Windows folder (read-only unless allowed), and **About** with
+    versions, install and update checks.
+  - **Hardware:**
+    - **Graphics:** guest displays, GPU / CPU / automatic rendering, Vulkan, and GPU
+      memory up to what your graphics card has.
+    - **Resources:** Balanced, Maximum or Manual. Memory and CPU cores (in steps of 2)
+      only go up to what's free: Windows keeps 2 cores and a quarter of the memory,
+      and other running systems keep theirs.
+    - **Disks:** each disk's current size, free space on its drive, maximum size and
+      location. **Resize** grows or shrinks a disk. **Reclaim free space when Linux
+      deletes files** passes Linux's TRIM through, so deleted files' space is reused
+      instead of growing the disk file. **Compact** gives a disk's unused space back to
+      Windows.
+    - **Disk utilities:** **Add disk** creates a new disk or attaches an existing
+      `.qcow2` file; **Remove** takes one out (Linux sees each disk as its own drive and
+      starts from Disk 1).
+  - **Devices:** sound and microphone; a **CD/DVD drive** for ISOs such as drivers or
+    rescue disks, which you can change while the system runs; **network type** (shared
+    with this PC, port forwards only, or no network); and port forwards (`tcp:2223:22`
+    for this PC, `lan tcp:8080:80` for your network).
+  - **Recovery:** back up, restore as a copy, snapshots, move storage, clean up
+    downloads, repair (reset, or boot an ISO), delete.
+
+Size fields (memory, CPU cores, disk size, GPU memory, displays) are dropdowns of
+common sizes that you can also type into.
 
 **Reset**, **Delete**, **Clean up downloads**, and reverting or deleting a snapshot ask
 first, and pressing Enter picks **Cancel**:
@@ -198,7 +217,7 @@ sudo mount -t 9p -o trans=virtio,version=9p2000.L host /mnt/host
 ```
 
 Systems, downloads and settings live in `%LOCALAPPDATA%\TryLinux` (movable from
-Settings > Recovery).
+Settings > Recovery > Storage).
 
 ## Troubleshooting
 
@@ -211,7 +230,7 @@ look for **Virtualization**. It should say **Enabled**.
 Linux needs the processor's virtualization feature, which some PCs ship with turned off.
 Try Linux shows this message:
 
-<img src="docs/images/troubleshoot-bios-message.png" alt="Try Linux message: Fedora Workstation can't start yet. Hardware virtualization is turned off in your PC's BIOS/UEFI settings, with steps to turn it on" width="420">
+<img src="docs/images/troubleshoot-bios-message.png" alt="Notice at the top of Virtual Machines: Fedora Workstation can't start yet. Hardware virtualization is turned off in your PC's BIOS/UEFI settings, with steps to turn it on" width="560">
 
 1. Open **Settings > System > Recovery**, and next to **Advanced startup** click **Restart now**.
 

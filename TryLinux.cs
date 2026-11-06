@@ -336,7 +336,7 @@ static class SelfInstall
                     "Update", "Run")
                 : ThemedDialog.Choose(null, "Install Try Linux?",
                     "Try Linux copies itself to this folder and adds itself to the Start menu, so you can delete the downloaded file:", Dir,
-                    "Run opens it from here without installing; you can install it later from Settings > Advanced > About.\n\nUninstall it any time from Windows Settings > Apps > Installed apps.",
+                    "Run opens it from here without installing; you can install it later from Settings > General > About.\n\nUninstall it any time from Windows Settings > Apps > Installed apps.",
                     "Install", "Run");
             if (choice != DialogResult.Cancel) break;
             // Closing the window quits without remembering a choice, so the offer comes back next time.
@@ -495,8 +495,33 @@ class VmConfig
     public int Render;                  // 0 automatic, 1 GPU, 2 CPU
     public bool SharedWrite, Sound = true, Mic = true, ShortcutDirect = true;
     public string Forwards = "", FullscreenDisplay = "", LastRender = "";
+    public bool Reclaim = true;         // pass Linux's TRIM through, so deleted files free space in the disk file
+    public string Cd = "";              // ISO in the CD/DVD drive; empty when the drive is empty
+    public int NetType;                 // 0 shared (NAT), 1 port forwards only, 2 no network
+    public static readonly string[] NetTypeNames = { "Shared with this PC (NAT)", "Port forwards only", "No network" };
 
     public string Disk { get { return Path.Combine(Dir, Name + ".qcow2"); } }
+    // More disks after the boot disk: a file name inside Dir (made by Try Linux) or the full path of an attached file.
+    public List<string> ExtraDisks = new List<string>();
+
+    public string DiskPath(string entry) { return Path.IsPathRooted(entry) ? entry : Path.Combine(Dir, entry); }
+
+    // The boot disk first, then the others in the order they were added.
+    public List<string> AllDisks()
+    {
+        var list = new List<string> { Disk };
+        foreach (var d in ExtraDisks) list.Add(DiskPath(d));
+        return list;
+    }
+
+    public string NewDiskName()
+    {
+        for (int n = 2; ; n++)
+        {
+            string name = Name + "-disk" + n + ".qcow2";
+            if (!ExtraDisks.Contains(name, StringComparer.OrdinalIgnoreCase) && !File.Exists(Path.Combine(Dir, name))) return name;
+        }
+    }
     string IniPath { get { return Path.Combine(Dir, "vm.ini"); } }
 
     public static readonly string[] ProfileNames = { "Balanced", "Maximum", "Manual" };
@@ -563,6 +588,10 @@ class VmConfig
                 case "forwards": c.Forwards = v; break;
                 case "fsdisplay": c.FullscreenDisplay = v; break;
                 case "lastrender": c.LastRender = v; break;
+                case "reclaim": c.Reclaim = v != "0"; break;
+                case "cd": c.Cd = v; break;
+                case "nettype": if (isInt) c.NetType = Math.Max(0, Math.Min(2, n)); break;
+                case "disks": c.ExtraDisks = v.Split('|').Where(d => d.Length > 0).ToList(); break;
             }
         }
         return c;
@@ -579,14 +608,15 @@ class VmConfig
             "diskgb=" + DiskGB, "displays=" + Displays, "render=" + Render,
             "sharedwrite=" + (SharedWrite ? "1" : "0"), "sound=" + (Sound ? "1" : "0"), "mic=" + (Mic ? "1" : "0"),
             "shortcutdirect=" + (ShortcutDirect ? "1" : "0"), "forwards=" + Forwards,
-            "fsdisplay=" + FullscreenDisplay, "lastrender=" + LastRender });
+            "fsdisplay=" + FullscreenDisplay, "lastrender=" + LastRender, "disks=" + string.Join("|", ExtraDisks),
+            "reclaim=" + (Reclaim ? "1" : "0"), "cd=" + Cd, "nettype=" + NetType });
     }
 
     public void Resources(out int cores, out int ramGB)
     {
         int n = Environment.ProcessorCount, total = Sys.TotalRamGB;
-        if (Profile == 1) { cores = Math.Max(2, n - 2); ramGB = Math.Max(2, total * 3 / 4); }
-        else if (Profile == 2) { cores = Math.Max(1, Math.Min(n, Cores)); ramGB = Math.Max(1, Math.Min(total, RamGB)); }
+        if (Profile == 1) { cores = Sys.MaxCores; ramGB = Sys.MaxRamGB; }
+        else if (Profile == 2) { cores = Math.Max(1, Math.Min(Sys.MaxCores, Cores)); ramGB = Math.Max(1, Math.Min(Sys.MaxRamGB, RamGB)); }
         else { cores = Math.Max(2, n / 2); ramGB = Math.Max(2, Math.Min(16, total / 2)); }
     }
 
@@ -615,6 +645,181 @@ static class Sys
                 totalRam = Math.Max(2, (int)Math.Round(new Microsoft.VisualBasic.Devices.ComputerInfo().TotalPhysicalMemory / 1073741824.0));
             return totalRam;
         }
+    }
+
+    // The most one system may be given: Windows keeps 2 cores and a quarter of the memory.
+    public static int MaxCores { get { int n = Environment.ProcessorCount; return Math.Max(Math.Min(2, n), n - 2); } }
+    public static int MaxRamGB { get { return Math.Max(1, TotalRamGB * 3 / 4); } }
+
+    // The graphics card with the most memory of its own, as Windows records it (the WMI AdapterRAM
+    // figure stops at 4 GB). Graphics built into the processor have little or none of their own and
+    // use system memory instead, up to half of it, so they're given that.
+    static string gpuName;
+    static int gpuMem = -1;
+    public static int MaxGpuMemGB { get { ReadGpu(); return gpuMem; } }
+    public static string GpuName { get { ReadGpu(); return gpuName; } }
+    public static bool GpuDedicated { get { ReadGpu(); return gpuDedicated; } }
+    static bool gpuDedicated;
+
+    static void ReadGpu()
+    {
+        if (gpuMem >= 0) return;
+        long best = 0;
+        try
+        {
+            using (var cls = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"))
+                if (cls != null)
+                    foreach (var sub in cls.GetSubKeyNames())
+                    {
+                        long size = 0; string name = null;
+                        try
+                        {
+                            using (var k = cls.OpenSubKey(sub))
+                            {
+                                if (k == null) continue;
+                                name = k.GetValue("DriverDesc") as string;
+                                object q = k.GetValue("HardwareInformation.qwMemorySize"), m = k.GetValue("HardwareInformation.MemorySize");
+                                if (q is long) size = (long)q;
+                                else if (q is byte[] && ((byte[])q).Length >= 8) size = BitConverter.ToInt64((byte[])q, 0);
+                                else if (m is int) size = (uint)(int)m;
+                                else if (m is byte[] && ((byte[])m).Length >= 4) size = BitConverter.ToUInt32((byte[])m, 0);
+                            }
+                        }
+                        catch { continue; }
+                        if (name != null && size > best) { best = size; gpuName = name; }
+                    }
+        }
+        catch { }
+        int dedicated = (int)((best + (1L << 29)) >> 30);   // to the nearest GiB: a "16 GB" card reports a little under 16
+        gpuDedicated = dedicated >= 2;
+        gpuMem = gpuDedicated ? dedicated : Math.Max(1, TotalRamGB / 2);
+    }
+
+    // Common sizes offered in the memory and disk lists; any size in between can be typed.
+    public static readonly int[] RamSizes = { 1, 2, 4, 6, 8, 12, 16, 20, 24, 32, 40, 48, 64, 96, 128, 192, 256, 384, 512 };
+    public static readonly int[] DiskSizes = { 16, 32, 64, 128, 256, 512, 1024, 2048, 4096 };
+
+    public static SizeBox RamBox(int max, int value) { return new SizeBox(1, max, value, RamSizes, 1); }
+    public static SizeBox DiskBox(int min, int max, int value) { return new SizeBox(min, max, value, DiskSizes, 1); }
+
+    // Cores in twos (2, 4, 6...), up to `max` rounded down to an even number. A single-core PC can only give one.
+    public static SizeBox CoreBox(int max, int value)
+    {
+        int top = max >= 2 ? max / 2 * 2 : 1;
+        var steps = new List<int>();
+        for (int n = top >= 2 ? 2 : 1; n <= top; n += 2) steps.Add(n);
+        return new SizeBox(Math.Min(2, top), top, value, steps, top >= 2 ? 2 : 1);
+    }
+}
+
+// A number picked from a list of common sizes, or typed in. Typed values are kept within
+// Minimum..Maximum and, with Step 2, rounded up to an even number when the field is left.
+class SizeBox : ComboBox
+{
+    int min, max, step, value;
+    readonly int[] presets;
+    bool setting;
+    public event EventHandler ValueChanged;
+
+    public SizeBox(int min, int max, int value, IEnumerable<int> presets, int step)
+    {
+        this.min = min; this.max = Math.Max(min, max); this.step = step; this.presets = presets.ToArray();
+        DropDownStyle = ComboBoxStyle.DropDown;
+        FlatStyle = FlatStyle.Flat;
+        BackColor = Theme.Card; ForeColor = Theme.Text; Font = Theme.Body;
+        MaxDropDownItems = 12;
+        Native.DarkScrollbars(this);
+        Fill();
+        this.value = Fit(value);
+        Text = this.value.ToString();
+    }
+
+    public int Minimum { get { return min; } set { min = value; max = Math.Max(min, max); Fill(); Value = this.value; } }
+    public int Maximum { get { return max; } set { max = Math.Max(min, value); Fill(); Value = this.value; } }
+
+    public int Value
+    {
+        get { return value; }
+        set
+        {
+            int v = Fit(value);
+            bool changed = v != this.value;
+            this.value = v;
+            setting = true;
+            Text = v.ToString();
+            SelectionStart = Text.Length;
+            setting = false;
+            if (changed && ValueChanged != null) ValueChanged(this, EventArgs.Empty);
+        }
+    }
+
+    int Fit(int v)
+    {
+        if (step == 2 && max >= 2) v = (v + 1) / 2 * 2;
+        return Math.Max(min, Math.Min(max, v));
+    }
+
+    // The list: the preset sizes that fit, plus the top size so the largest choice is always there.
+    void Fill()
+    {
+        BeginUpdate();
+        Items.Clear();
+        foreach (int p in presets) if (p >= min && p <= max) Items.Add(p.ToString());
+        if (!presets.Contains(max)) Items.Add(max.ToString());
+        EndUpdate();
+    }
+
+    protected override void OnSelectedIndexChanged(EventArgs e)
+    {
+        base.OnSelectedIndexChanged(e);
+        int v;
+        if (!setting && SelectedIndex >= 0 && int.TryParse((string)Items[SelectedIndex], out v)) Value = v;
+    }
+
+    // While typing, a valid number takes effect at once; anything else waits until the field is left.
+    protected override void OnTextChanged(EventArgs e)
+    {
+        base.OnTextChanged(e);
+        if (setting) return;
+        int v;
+        if (int.TryParse(Text.Trim(), out v) && v >= min && v <= max && Fit(v) == v && v != value)
+        {
+            value = v;
+            if (ValueChanged != null) ValueChanged(this, EventArgs.Empty);
+        }
+    }
+
+    protected override void OnLeave(EventArgs e) { Commit(); base.OnLeave(e); Unselect(); }
+
+    // Windows selects an editable dropdown's text whenever it's sized or shown, which looks like
+    // a highlight on every field; only a field being typed in should show a selection.
+    protected override void OnResize(EventArgs e) { base.OnResize(e); Unselect(); }
+    protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); Unselect(); }
+    protected override void OnDropDownClosed(EventArgs e) { base.OnDropDownClosed(e); if (!Focused) Unselect(); }
+
+    void Unselect()
+    {
+        if (!IsHandleCreated || Focused) return;
+        BeginInvoke((Action)(() => { if (!IsDisposed && !Focused) SelectionLength = 0; }));
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (e.KeyCode == Keys.Enter) Commit();
+        base.OnKeyDown(e);
+    }
+
+    protected override void OnKeyPress(KeyPressEventArgs e)
+    {
+        if (!char.IsDigit(e.KeyChar) && !char.IsControl(e.KeyChar)) e.Handled = true;   // numbers only
+        base.OnKeyPress(e);
+    }
+
+    // Snaps whatever was typed to a valid value (or back to the last one if it isn't a number).
+    public void Commit()
+    {
+        int v;
+        Value = int.TryParse(Text.Trim(), out v) ? v : value;
     }
 }
 
@@ -846,7 +1051,10 @@ static class Net
     }
 
     // Sends one QMP command (e.g. system_powerdown) to a running QEMU.
-    public static void Qmp(int port, string command)
+    public static void Qmp(int port, string command) { Qmp(port, command, null); }
+
+    // With arguments (a JSON object); throws when QEMU answers with an error.
+    public static void Qmp(int port, string command, string args)
     {
         using (var c = new TcpClient("127.0.0.1", port))
         using (var s = c.GetStream())
@@ -857,8 +1065,15 @@ static class Net
             r.ReadLine();
             w.WriteLine("{\"execute\":\"qmp_capabilities\"}");
             r.ReadLine();
-            w.WriteLine("{\"execute\":\"" + command + "\"}");
-            r.ReadLine();
+            w.WriteLine("{\"execute\":\"" + command + "\"" + (args != null ? ",\"arguments\":" + args : "") + "}");
+            string reply = r.ReadLine();
+            // Events can arrive before the reply.
+            while (reply != null && reply.Contains("\"event\"")) reply = r.ReadLine();
+            if (args != null && reply != null && reply.Contains("\"error\""))
+            {
+                var m = System.Text.RegularExpressions.Regex.Match(reply, "\"desc\":\\s*\"([^\"]*)\"");
+                throw new Exception(m.Success ? m.Groups[1].Value : reply);
+            }
         }
     }
 }
@@ -1212,16 +1427,68 @@ static class Virt
 static class Theme
 {
     public static float Scale = 1;
-    public static readonly Color Bg = Color.FromArgb(20, 22, 28);
-    public static readonly Color Card = Color.FromArgb(30, 33, 42);
-    public static readonly Color CardHover = Color.FromArgb(38, 42, 54);
-    public static readonly Color CardSelected = Color.FromArgb(40, 52, 62);
-    public static readonly Color Border = Color.FromArgb(54, 60, 76);
-    public static readonly Color Text = Color.FromArgb(216, 222, 233);
-    public static readonly Color Muted = Color.FromArgb(132, 142, 162);
-    public static readonly Color Accent = Color.FromArgb(136, 192, 208);
-    public static readonly Color Accent2 = Color.FromArgb(129, 161, 193);
-    public static readonly Color Danger = Color.FromArgb(220, 120, 128);
+    // Colors follow Proton's palette (proton.me/blog/new-visual-universe) on a Proton Pass-style dark UI.
+    // "Depth": a deep background with surfaces shaded from top to bottom, and a purple glow on
+    // what's selected or open.
+    public static readonly Color Bg = Color.FromArgb(12, 12, 20);             // #0C0C14
+    public static readonly Color Card = Color.FromArgb(26, 23, 38);           // fields and flat fills
+    public static readonly Color CardHover = Color.FromArgb(36, 32, 54);
+    public static readonly Color CardSelected = Color.FromArgb(38, 32, 60);
+    public static readonly Color CardTop = Color.FromArgb(29, 26, 43), CardBottom = Color.FromArgb(22, 20, 31);           // #1D1A2B to #16141F
+    public static readonly Color HoverTop = Color.FromArgb(37, 33, 55), HoverBottom = Color.FromArgb(27, 24, 40);
+    public static readonly Color SelectedTop = Color.FromArgb(42, 35, 66), SelectedBottom = Color.FromArgb(28, 24, 48);   // #2A2342 to #1C1830
+    public static readonly Color Border = Color.FromArgb(42, 37, 64);         // #2A2540
+    public static readonly Color Text = Color.FromArgb(245, 244, 242);        // #F5F4F2
+    public static readonly Color Muted = Color.FromArgb(155, 151, 179);       // #9B97B3
+    // Accent is the main call to action only (Start, Next, Install). Highlight is the logo and
+    // active form elements: selection, tabs, checkboxes, progress, section titles.
+    public static readonly Color Accent = Color.FromArgb(109, 74, 255);       // #6D4AFF
+    public static readonly Color AccentHover = Color.FromArgb(138, 110, 255); // #8A6EFF
+    public static readonly Color Accent2 = Color.FromArgb(56, 37, 128);       // #382580
+    public static readonly Color Highlight = Color.FromArgb(196, 181, 255);   // #C4B5FF
+    public static readonly Color Highlight2 = Color.FromArgb(109, 74, 255);   // #6D4AFF
+
+    // Corner rounding for cards, bars, tabs and buttons, in design units; 0 draws them square.
+    public static int Radius = 0;
+
+    public static GraphicsPath Shape(Rectangle r, int radius)
+    {
+        var p = new GraphicsPath();
+        int d = Math.Min(radius * 2, Math.Min(r.Width, r.Height));
+        if (d <= 1) { p.AddRectangle(r); return p; }
+        p.AddArc(r.X, r.Y, d, d, 180, 90);
+        p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+        p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+        p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+        p.CloseFigure();
+        return p;
+    }
+
+    // A surface: shaded top to bottom, with a border, and when `glow` is set a purple glow just inside
+    // its edge (a control can't paint outside itself, so the glow fades inwards).
+    public static void Surface(Graphics g, Rectangle bounds, Color behind, Color top, Color bottom, Color border, bool glow)
+    {
+        if (!behind.IsEmpty) g.Clear(behind);   // Color.Empty: draw over what's there (one of several on a control)
+        var mode = g.SmoothingMode;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        var r = new Rectangle(bounds.X, bounds.Y, bounds.Width - 1, bounds.Height - 1);
+        int rad = D(Radius);
+        using (var path = Shape(r, rad))
+        {
+            using (var b = new LinearGradientBrush(new Rectangle(r.X, r.Y - 1, r.Width + 1, r.Height + 2), top, bottom, LinearGradientMode.Vertical))
+                g.FillPath(b, path);
+            if (glow)
+                for (int i = D(9); i >= 1; i--)
+                    using (var inner = Shape(Rectangle.Inflate(r, -i, -i), Math.Max(0, rad - i)))
+                    using (var p = new Pen(Color.FromArgb((int)(70 * Math.Pow(1 - i / (float)(D(9) + 1), 2)), Accent), 1.5f))
+                        g.DrawPath(p, inner);
+            using (var p = new Pen(border, glow ? 1.5f : 1f)) g.DrawPath(p, path);
+        }
+        g.SmoothingMode = mode;
+    }
+    public static readonly Color Success = Color.FromArgb(102, 222, 177);     // #66DEB1, a running system
+    public static readonly Color Danger = Color.FromArgb(235, 80, 141);       // #EB508D
+    public static readonly Color Warning = Color.FromArgb(249, 217, 73);      // #F9D949
 
     static string family;
     static string Family
@@ -1237,11 +1504,21 @@ static class Theme
         }
     }
 
+    // Headings (page and section titles) use a display serif, standing in for Proton's licensed ABC
+    // Arizona Flare: Sitka ships with Windows 10 and 11, with Georgia as the fallback. Everything else
+    // (descriptions, labels, buttons, tabs, system names) is Segoe UI. The logo stays monospace.
     public static Font Mono(float size, FontStyle style = FontStyle.Regular) { return new Font(Family, size, style); }
-    public static readonly Font Title = Mono(14f, FontStyle.Bold);
-    public static readonly Font Body = Mono(10f);
-    public static readonly Font Bold = Mono(10f, FontStyle.Bold);
-    public static readonly Font Small = Mono(9f);
+    static Font Display(string sitka, float size)
+    {
+        using (var fonts = new InstalledFontCollection())
+            return fonts.Families.Any(f => f.Name == sitka) ? new Font(sitka, size) : new Font("Georgia", size * 0.95f, FontStyle.Bold);
+    }
+    public static readonly Font Title = Display("Sitka Display Semibold", 16f);
+    public static readonly Font Heading = Display("Sitka Heading Semibold", 11.5f);
+    public static readonly Font Body = new Font("Segoe UI", 10f);
+    public static readonly Font Bold = new Font("Segoe UI Semibold", 10f);
+    public static readonly Font Small = new Font("Segoe UI", 9f);
+    public static readonly Font RowTitle = new Font("Segoe UI Semibold", 10.5f);   // a system or distribution name in a list
 
     public static int D(int v) { return (int)Math.Round(v * Scale); }
 }
@@ -1350,9 +1627,9 @@ class PixelLogo : Control
         int shadow = Math.Max(1, px / 3);
         // Center the letters plus their drop shadow, so the logo looks centered, not just measures it.
         int x0 = (Width - cols * px - shadow) / 2, y0 = (Height - 7 * px - shadow) / 2;
-        using (var sb = new SolidBrush(Color.FromArgb(34, 52, 62)))
+        using (var sb = new SolidBrush(Theme.Accent2))
             DrawWord(e.Graphics, x0 + shadow, y0 + shadow, px, r => sb);
-        var rows = Enumerable.Range(0, 7).Select(r => new SolidBrush(Lerp(Theme.Accent, Theme.Accent2, r / 6f))).ToArray();
+        var rows = Enumerable.Range(0, 7).Select(r => new SolidBrush(Lerp(Theme.Highlight, Theme.Highlight2, r / 6f))).ToArray();
         DrawWord(e.Graphics, x0, y0, px, r => rows[r]);
         foreach (var b in rows) b.Dispose();
     }
@@ -1399,7 +1676,7 @@ class Bar : Control
     {
         var g = e.Graphics;
         g.Clear(Theme.Card);
-        using (var b = new SolidBrush(Theme.Accent))
+        using (var b = new SolidBrush(Theme.Highlight))
         {
             if (value >= 0) g.FillRectangle(b, 0, 0, (float)(Width * Math.Min(1, value)), Height);
             else g.FillRectangle(b, (phase - 0.3f) * Width, 0, Width * 0.3f, Height);
@@ -1429,11 +1706,10 @@ static class ThemedDialog
     {
         Func<int, int> D = Theme.D;
         int w = D(560), pad = D(24), textX = D(80), textW = w - textX - pad;
-        using (var f = new Form { Text = "Try Linux", FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false,
+        using (var f = new DialogForm { Text = "Try Linux",
             StartPosition = owner == null ? FormStartPosition.CenterScreen : FormStartPosition.CenterParent,
             BackColor = Theme.Bg, ForeColor = Theme.Text, Font = Theme.Body, ShowInTaskbar = owner == null, Icon = Icons.App() })
         {
-            f.HandleCreated += delegate { Native.DarkTitleBar(f.Handle); };
             var icon = new PictureBox { Image = Icons.Draw(D(40)), SizeMode = PictureBoxSizeMode.AutoSize, BackColor = Theme.Bg };
             icon.Location = new Point(pad, pad);
             f.Controls.Add(icon);
@@ -1451,7 +1727,7 @@ static class ThemedDialog
             add(title, Theme.Title, Theme.Text, Theme.Bg, 0);
             y += D(10);
             if (!string.IsNullOrEmpty(before)) { add(before, Theme.Body, Theme.Muted, Theme.Bg, 0); y += D(10); }
-            if (!string.IsNullOrEmpty(path)) { add(path, Theme.Small, Theme.Accent, Theme.Card, D(8)); y += D(10); }
+            if (!string.IsNullOrEmpty(path)) { add(path, Theme.Small, Theme.Highlight, Theme.Card, D(8)); y += D(10); }
             if (!string.IsNullOrEmpty(after)) { add(after, Theme.Body, Theme.Muted, Theme.Bg, 0); y += D(10); }
             y = Math.Max(y, icon.Bottom) + D(14);
 
@@ -1467,15 +1743,176 @@ static class ThemedDialog
                 f.Controls.Add(cancel);
             }
             f.ClientSize = new Size(w, y + bh + pad);
+            // No title bar: drag the dialog by any part that isn't a button.
+            foreach (Control c in f.Controls) if (!(c is Button)) f.DragBy(c);
             // Enter picks the primary button, except for destructive actions.
             f.AcceptButton = danger && cancel != null ? cancel : ok;
-            // Esc closes the window like its X button.
+            // Esc closes the dialog (it has no X button).
             f.KeyPreview = true;
             f.KeyDown += (s, e) => { if (e.KeyCode == Keys.Escape) { f.DialogResult = DialogResult.Cancel; f.Close(); } };
             f.Shown += delegate { f.Activate(); ((Control)f.AcceptButton).Focus(); };
             var result = owner == null ? f.ShowDialog() : f.ShowDialog(owner);
             return result == DialogResult.OK || result == DialogResult.No ? result : DialogResult.Cancel;
         }
+    }
+}
+
+enum NoticeKind { Info, Success, Warning, Error }
+
+// The window's notification area, above every page: updates, results and problems that don't need an
+// answer. Each notification has a colored edge and icon by kind, an optional action button and a dismiss X.
+class NoticeBar : Panel
+{
+    class Item { public string Id, Text, ActionText; public NoticeKind Kind; public Action OnAction; }
+    readonly List<Item> items = new List<Item>();
+    readonly HashSet<string> dismissed = new HashSet<string>();
+    const int ColW = 640;
+    static readonly string IconFont = "Segoe MDL2 Assets";
+
+    public NoticeBar()
+    {
+        Dock = DockStyle.Top;
+        BackColor = Theme.Bg;
+        Visible = false;
+    }
+
+    public static Color KindColor(NoticeKind k)
+    {
+        switch (k)
+        {
+            case NoticeKind.Success: return Theme.Success;
+            case NoticeKind.Warning: return Color.FromArgb(249, 217, 73);   // #F9D949
+            case NoticeKind.Error: return Theme.Danger;
+            default: return Theme.Highlight;
+        }
+    }
+
+    static string Glyph(NoticeKind k)
+    {
+        switch (k)
+        {
+            case NoticeKind.Success: return "";   // Completed
+            case NoticeKind.Warning: return "";   // Warning
+            case NoticeKind.Error: return "";     // ErrorBadge
+            default: return "";                    // Info
+        }
+    }
+
+    // Shows a notification, replacing one with the same id. Ones the user dismissed stay hidden this session.
+    public void Post(string id, NoticeKind kind, string text, string actionText = null, Action onAction = null)
+    {
+        if (dismissed.Contains(id)) return;
+        items.RemoveAll(i => i.Id == id);
+        items.Add(new Item { Id = id, Kind = kind, Text = text, ActionText = actionText, OnAction = onAction });
+        Rebuild();
+    }
+
+    public void Remove(string id) { if (items.RemoveAll(i => i.Id == id) > 0) Rebuild(); }
+
+    void Rebuild()
+    {
+        SuspendLayout();
+        foreach (Control c in Controls.Cast<Control>().ToList()) { Controls.Remove(c); c.Dispose(); }
+        Func<int, int> D = Theme.D;
+        int y = D(12), w = D(ColW);
+        foreach (var it in items)
+        {
+            var item = it;
+            int actionW = item.ActionText != null ? D(110) : 0;
+            int textW = w - D(16 + 30 + 12 + 40) - (actionW > 0 ? actionW + D(10) : 0);
+            int textH = TextRenderer.MeasureText(item.Text, Theme.Body, new Size(textW, 0), TextFormatFlags.WordBreak).Height;
+            int h = Math.Max(D(44), textH + D(20));
+            var row = new Panel { BackColor = Theme.Card, Tag = "row" };
+            row.SetBounds(0, y, w, h);
+            Color kc = KindColor(item.Kind);
+            row.Paint += (s, e) =>
+            {
+                using (var p = new Pen(Theme.Border)) e.Graphics.DrawRectangle(p, 0, 0, row.Width - 1, row.Height - 1);
+                using (var b = new SolidBrush(kc)) e.Graphics.FillRectangle(b, 0, 0, D(4), row.Height);
+            };
+            var icon = new Label { Text = Glyph(item.Kind), Font = new Font(IconFont, 12f), ForeColor = kc, BackColor = Theme.Card,
+                                   TextAlign = ContentAlignment.MiddleCenter };
+            icon.SetBounds(D(16), 1, D(30), h - 2);
+            var text = new Label { Text = item.Text, Font = Theme.Body, ForeColor = Theme.Text, BackColor = Theme.Card,
+                                   TextAlign = ContentAlignment.MiddleLeft, UseMnemonic = false };
+            text.SetBounds(D(16 + 30 + 6), 1, textW, h - 2);
+            var close = new Label { Text = "", Font = new Font(IconFont, 9f), ForeColor = Theme.Muted, BackColor = Theme.Card,
+                                    TextAlign = ContentAlignment.MiddleCenter, Cursor = Cursors.Hand };
+            close.SetBounds(w - D(40), 1, D(36), h - 2);
+            close.MouseEnter += delegate { close.ForeColor = Theme.Text; };
+            close.MouseLeave += delegate { close.ForeColor = Theme.Muted; };
+            close.Click += delegate { dismissed.Add(item.Id); Remove(item.Id); };
+            row.Controls.Add(icon);
+            row.Controls.Add(text);
+            row.Controls.Add(close);
+            if (item.ActionText != null)
+            {
+                var act = new FlatBtn(item.ActionText);
+                act.ForeColor = kc;
+                act.FlatAppearance.BorderColor = kc;
+                act.SetBounds(w - D(40) - actionW - D(4), (h - D(30)) / 2, actionW, D(30));
+                act.Click += delegate { if (item.OnAction != null) item.OnAction(); };
+                row.Controls.Add(act);
+            }
+            Controls.Add(row);
+            y += h + D(8);
+        }
+        Height = items.Count > 0 ? y + D(4) : 0;
+        Visible = items.Count > 0;
+        PlaceRows();
+        ResumeLayout();
+    }
+
+    void PlaceRows()
+    {
+        int x = Math.Max(0, (ClientSize.Width - Theme.D(ColW)) / 2);
+        foreach (Control c in Controls) c.Left = x;
+    }
+
+    protected override void OnResize(EventArgs e) { base.OnResize(e); PlaceRows(); }
+}
+
+// A dialog window with no title bar: a thin border, rounded corners and a shadow, dragged by its body.
+class DialogForm : Form
+{
+    [DllImport("user32.dll")] static extern bool ReleaseCapture();
+    [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, IntPtr l);
+    [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int value, int size);
+
+    public DialogForm()
+    {
+        FormBorderStyle = FormBorderStyle.None;
+        MaximizeBox = MinimizeBox = false;
+        DragBy(this);
+    }
+
+    protected override CreateParams CreateParams
+    {
+        get { var cp = base.CreateParams; cp.ClassStyle |= 0x20000; return cp; }   // CS_DROPSHADOW
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        int round = 2;   // DWMWCP_ROUND (Windows 11; ignored elsewhere)
+        try { DwmSetWindowAttribute(Handle, 33, ref round, 4); } catch { }
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        using (var p = new Pen(Theme.Border)) e.Graphics.DrawRectangle(p, 0, 0, ClientSize.Width - 1, ClientSize.Height - 1);
+    }
+
+    // Pressing on `c` and moving drags the window, as a title bar would.
+    public void DragBy(Control c)
+    {
+        c.MouseDown += (s, e) =>
+        {
+            if (e.Button != MouseButtons.Left) return;
+            ReleaseCapture();
+            SendMessage(Handle, 0x00A1, (IntPtr)2, IntPtr.Zero);   // WM_NCLBUTTONDOWN, HTCAPTION
+        };
     }
 }
 
@@ -1499,7 +1936,7 @@ class DarkMenu : ToolStripProfessionalRenderer
         public override Color ImageMarginGradientMiddle { get { return Theme.Card; } }
         public override Color ImageMarginGradientEnd { get { return Theme.Card; } }
         public override Color MenuBorder { get { return Theme.Border; } }
-        public override Color MenuItemBorder { get { return Theme.Accent; } }
+        public override Color MenuItemBorder { get { return Theme.Highlight; } }
         public override Color MenuItemSelected { get { return Theme.CardSelected; } }
         public override Color MenuItemSelectedGradientBegin { get { return Theme.CardSelected; } }
         public override Color MenuItemSelectedGradientEnd { get { return Theme.CardSelected; } }
@@ -1510,8 +1947,46 @@ class DarkMenu : ToolStripProfessionalRenderer
 
 class FlatBtn : Button
 {
+    bool hover, down;
+
+    protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { hover = down = false; Invalidate(); base.OnMouseLeave(e); }
+    protected override void OnMouseDown(MouseEventArgs e) { down = true; Invalidate(); base.OnMouseDown(e); }
+    protected override void OnMouseUp(MouseEventArgs e) { down = false; Invalidate(); base.OnMouseUp(e); }
+    protected override void OnEnabledChanged(EventArgs e) { Invalidate(); base.OnEnabledChanged(e); }
+    protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
+    protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
+
+    // Drawn by hand so it can be shaded and rounded like the cards: the main action is a purple
+    // gradient, the others a shaded surface. A button whose BackColor is set to Accent counts as main.
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        Color behind = Parent != null ? Parent.BackColor : Theme.Bg;
+        bool primary = BackColor.ToArgb() == Theme.Accent.ToArgb();
+        Color top, bottom, border, fore = ForeColor;
+        if (!Enabled) { top = bottom = Theme.Card; border = Theme.Border; fore = Theme.Muted; }
+        else if (primary)
+        {
+            top = down ? Theme.Accent : hover ? Color.FromArgb(160, 140, 255) : Theme.AccentHover;
+            bottom = down ? Color.FromArgb(90, 58, 230) : hover ? Color.FromArgb(124, 92, 255) : Theme.Accent;
+            border = bottom;
+        }
+        else
+        {
+            top = hover || down ? Theme.HoverTop : Theme.CardTop;
+            bottom = hover || down ? Theme.HoverBottom : Theme.CardBottom;
+            border = Focused && ShowFocusCues ? Theme.Highlight : FlatAppearance.BorderColor;
+        }
+        Theme.Surface(g, ClientRectangle, behind, top, bottom, border, false);
+        TextRenderer.DrawText(g, Text, Font, ClientRectangle, fore,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+    }
+
     public FlatBtn(string text, bool primary = false, bool danger = false)
     {
+        // ResizeRedraw: a button that's widened after it first draws repaints all of itself.
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         Text = text;
         FlatStyle = FlatStyle.Flat;
         UseVisualStyleBackColor = false;
@@ -1521,9 +1996,9 @@ class FlatBtn : Button
         if (primary)
         {
             BackColor = Theme.Accent;
-            ForeColor = Theme.Bg;
+            ForeColor = Color.White;
             FlatAppearance.BorderColor = Theme.Accent;
-            FlatAppearance.MouseOverBackColor = Color.FromArgb(160, 210, 224);
+            FlatAppearance.MouseOverBackColor = Theme.AccentHover;
         }
         else
         {
@@ -1538,7 +2013,13 @@ class FlatBtn : Button
 class OptionRow : Control
 {
     public string Title = "", Sub = "", Status = "";
+    public int DesignHeight;   // 0: the list's RowHeight
     public Color StatusColor = Theme.Muted;
+    // A system's stats (label, value), e.g. ("CPU", "16 cores"), shown as columns on the right. The labels are
+    // column headers above the list (Virtual Machines), so each row shows just the values, with the status in
+    // its own column before them.
+    public Tuple<string, string>[] Stats;
+    public const int StatColW = 86, StatusColW = 76, Pad = 18;
     bool selected, hover;
 
     public OptionRow()
@@ -1554,29 +2035,54 @@ class OptionRow : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(selected ? Theme.CardSelected : hover ? Theme.CardHover : Theme.Card);
-        using (var p = new Pen(selected ? Theme.Accent : Theme.Border)) g.DrawRectangle(p, 0, 0, Width - 1, Height - 1);
-        if (selected) using (var b = new SolidBrush(Theme.Accent)) g.FillRectangle(b, 0, 0, Theme.D(4), Height);
+        Theme.Surface(g, ClientRectangle, Parent != null ? Parent.BackColor : Theme.Bg,
+            selected ? Theme.SelectedTop : hover ? Theme.HoverTop : Theme.CardTop,
+            selected ? Theme.SelectedBottom : hover ? Theme.HoverBottom : Theme.CardBottom,
+            selected ? Theme.Accent : Theme.Border, selected);
         int pad = Theme.D(18), half = Height / 2;
         var flags = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
         int textW = Width - pad * 2;
-        if (Status.Length > 0)
+        int right = Width - pad;   // the status and any stat columns are laid out leftwards from here
+        bool statusDone = false;
+        if (Stats != null && Height < Theme.D(64))
+        {
+            int colW = Theme.D(StatColW);
+            foreach (var s in Stats.Reverse())
+            {
+                TextRenderer.DrawText(g, s.Item2, Theme.Bold, new Rectangle(right - colW, 0, colW, Height), Theme.Text,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+                right -= colW;
+            }
+            using (var p = new Pen(Theme.Border)) g.DrawLine(p, right - Theme.D(10), Theme.D(12), right - Theme.D(10), Height - Theme.D(12));
+            right -= Theme.D(10);   // the status starts one column-width (86) before CPU, like the stats
+            // The status column (empty for a system that's off). A longer status ("Running, window closed")
+            // widens it to the left rather than being cut off.
+            int sw = Math.Max(Theme.D(StatusColW), TextRenderer.MeasureText(g, Status, Theme.Small, Size.Empty, TextFormatFlags.NoPrefix).Width + Theme.D(4));
+            if (Status.Length > 0)
+                TextRenderer.DrawText(g, Status, Theme.Small, new Rectangle(right - sw, 0, sw, Height), StatusColor,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+            right -= sw + Theme.D(10);
+            textW = right - pad;
+            statusDone = true;
+        }
+        if (Status.Length > 0 && !statusDone)
         {
             // The status sits on the right, centred on the row; the text to its left is shortened to fit.
             int statusW = TextRenderer.MeasureText(g, Status, Theme.Small, Size.Empty, TextFormatFlags.NoPrefix).Width;
-            TextRenderer.DrawText(g, Status, Theme.Small, new Rectangle(Width - pad - statusW, 0, statusW, Height), StatusColor,
+            TextRenderer.DrawText(g, Status, Theme.Small, new Rectangle(right - statusW, 0, statusW, Height), StatusColor,
                 TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
             textW -= statusW + Theme.D(16);
         }
         if (Height < Theme.D(64))
         {
-            TextRenderer.DrawText(g, Title, Theme.Bold, new Rectangle(pad, Theme.D(4), textW, half - Theme.D(2)), Theme.Text, flags);
-            TextRenderer.DrawText(g, Sub, Theme.Small, new Rectangle(pad, half, textW, half - Theme.D(6)), Theme.Muted, flags);
+            // A little more space between the title and the line under it.
+            TextRenderer.DrawText(g, Title, Theme.RowTitle, new Rectangle(pad, Theme.D(3), textW, half - Theme.D(3)), Theme.Text, flags);
+            TextRenderer.DrawText(g, Sub, Theme.Small, new Rectangle(pad, half + Theme.D(3), textW, half - Theme.D(7)), Theme.Muted, flags);
             return;
         }
         // Tall rows: title on top, description wrapped onto the lines below.
-        TextRenderer.DrawText(g, Title, Theme.Bold, new Rectangle(pad, Theme.D(6), Width - pad * 2, Theme.D(20)), Theme.Text, flags);
-        TextRenderer.DrawText(g, Sub, Theme.Small, new Rectangle(pad, Theme.D(27), Width - pad * 2, Height - Theme.D(30)), Theme.Muted,
+        TextRenderer.DrawText(g, Title, Theme.RowTitle, new Rectangle(pad, Theme.D(9), Width - pad * 2, Theme.D(20)), Theme.Text, flags);
+        TextRenderer.DrawText(g, Sub, Theme.Small, new Rectangle(pad, Theme.D(35), Width - pad * 2, Height - Theme.D(38)), Theme.Muted,
             TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
     }
 }
@@ -1594,25 +2100,29 @@ class OptionList : Panel
         BackColor = Theme.Bg;
     }
 
-    public void AddItem(string title, string sub, object tag, string status = null, Color? statusColor = null)
+    // `height` (design units) overrides RowHeight for this row, e.g. a one-line entry in a list of two-line ones.
+    public OptionRow AddItem(string title, string sub, object tag, string status = null, Color? statusColor = null, int height = 0)
     {
-        var row = new OptionRow { Title = title, Sub = sub, Tag = tag, Status = status ?? "", StatusColor = statusColor ?? Theme.Muted };
+        var row = new OptionRow { Title = title, Sub = sub, Tag = tag, Status = status ?? "", StatusColor = statusColor ?? Theme.Muted, DesignHeight = height };
         int index = rows.Count;
         row.MouseDown += delegate { SelectedIndex = index; };
         row.DoubleClick += delegate { if (Activated != null) Activated(this, EventArgs.Empty); };
         rows.Add(row);
         Controls.Add(row);
         LayoutRows();
+        return row;
     }
 
     protected override void OnResize(EventArgs e) { base.OnResize(e); LayoutRows(); }
 
     void LayoutRows()
     {
-        int h = Theme.D(RowHeight), gap = Theme.D(6);
-        bool scroll = rows.Count * (h + gap) - gap > ClientSize.Height;
+        int gap = Theme.D(6);
+        Func<OptionRow, int> h = r => Theme.D(r.DesignHeight > 0 ? r.DesignHeight : RowHeight);
+        bool scroll = rows.Sum(r => h(r) + gap) - gap > ClientSize.Height;
         int w = ClientSize.Width - (scroll ? SystemInformation.VerticalScrollBarWidth + Theme.D(4) : 0);
-        for (int i = 0; i < rows.Count; i++) rows[i].SetBounds(0, AutoScrollPosition.Y + i * (h + gap), w, h);
+        int y = AutoScrollPosition.Y;
+        foreach (var r in rows) { r.SetBounds(0, y, w, h(r)); y += h(r) + gap; }
     }
 
     public int SelectedIndex
@@ -1658,16 +2168,39 @@ class Segmented : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(Theme.Card);
+        Theme.Surface(g, ClientRectangle, Parent != null ? Parent.BackColor : Theme.Bg, Theme.CardTop, Theme.CardBottom, Theme.Border, false);
         int n = Options.Length;
         for (int i = 0; i < n; i++)
         {
             var r = new Rectangle(i * Width / n, 0, (i + 1) * Width / n - i * Width / n, Height);
-            if (i == selectedIndex) using (var b = new SolidBrush(Theme.Accent)) g.FillRectangle(b, r);
+            if (i == selectedIndex)
+            {
+                var mode = g.SmoothingMode;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                using (var path = Theme.Shape(Rectangle.Inflate(r, -Theme.D(3), -Theme.D(3)), Math.Max(0, Theme.D(Theme.Radius) - Theme.D(3))))
+                using (var b = new LinearGradientBrush(r, Theme.Highlight, Theme.AccentHover, LinearGradientMode.Vertical)) g.FillPath(b, path);
+                g.SmoothingMode = mode;
+            }
             TextRenderer.DrawText(g, Options[i], Theme.Bold, r, i == selectedIndex ? Theme.Bg : Theme.Text,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
         }
-        using (var p = new Pen(Theme.Border)) g.DrawRectangle(p, 0, 0, Width - 1, Height - 1);
+    }
+}
+
+// A bordered container that groups related rows, a shade darker than the rows inside it.
+class BoxPanel : Panel
+{
+    public static readonly Color Fill = Color.FromArgb(29, 28, 45);
+
+    public BoxPanel()
+    {
+        BackColor = Fill;
+        SetStyle(ControlStyles.ResizeRedraw, true);
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        Theme.Surface(e.Graphics, ClientRectangle, Parent != null ? Parent.BackColor : Theme.Bg, Fill, Fill, Theme.Border, false);
     }
 }
 
@@ -1677,6 +2210,9 @@ class Page : Panel
     public readonly Panel Col = new Panel();
     // Set for pages whose column fills the window height (it lays out the column's contents).
     public Action Fill;
+    // Pages are laid out for an 84-tall logo; the logo is now 56 tall, so everything below it moves up.
+    const int LogoH = 56, LayoutLogoH = 84;
+    readonly int shift;
 
     public Page(int colHeight, bool logo = true)
     {
@@ -1684,9 +2220,15 @@ class Page : Panel
         BackColor = Theme.Bg;
         AutoScroll = logo;
         Col.BackColor = Theme.Bg;
-        Col.Size = new Size(Theme.D(640), Theme.D(colHeight));
+        shift = logo ? LayoutLogoH - LogoH : 0;
+        Col.Size = new Size(Theme.D(640), Theme.D(Math.Max(0, colHeight - shift)));
         Controls.Add(Col);
-        if (logo) Add(new PixelLogo(), 0, 0, 640, 84);
+        if (logo)
+        {
+            var l = new PixelLogo { Px = 7 };
+            l.SetBounds(0, 0, Theme.D(640), Theme.D(LogoH));
+            Col.Controls.Add(l);
+        }
     }
 
     protected override void OnResize(EventArgs e)
@@ -1695,11 +2237,12 @@ class Page : Panel
         int x = Math.Max(0, (ClientSize.Width - Col.Width) / 2);
         if (Fill != null) { Col.Location = new Point(x, 0); Fill(); }
         else Col.Location = new Point(x, Math.Max(0, (ClientSize.Height - Col.Height) / 2));
+        PerformLayout();   // recompute the scroll area for the column's new place (e.g. after notifications shrink the page)
     }
 
     public T Add<T>(T c, int x, int y, int w, int h) where T : Control
     {
-        c.SetBounds(Theme.D(x), Theme.D(y), Theme.D(w), Theme.D(h));
+        c.SetBounds(Theme.D(x), Theme.D(y - shift), Theme.D(w), Theme.D(h));
         Col.Controls.Add(c);
         return c;
     }
@@ -1717,18 +2260,11 @@ class Page : Panel
         return Add(new TextBox { Text = text, Font = Theme.Body, BackColor = Theme.Card, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle }, x, y, w, 26);
     }
 
-    public NumericUpDown Number(int min, int max, int value, int x, int y, int w = 90)
-    {
-        var n = Add(new NumericUpDown { Minimum = min, Maximum = max, Font = Theme.Body, BackColor = Theme.Card, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle }, x, y, w, 26);
-        n.Value = Math.Max(min, Math.Min(max, value));
-        return n;
-    }
-
     public CheckBox Check(string text, bool on, int x, int y, int w)
     {
         var c = Add(new CheckBox { Text = text, Checked = on, Font = Theme.Body, ForeColor = Theme.Text, BackColor = Theme.Bg, FlatStyle = FlatStyle.Flat, UseMnemonic = false }, x, y, w, 26);
         c.FlatAppearance.BorderColor = Theme.Border;
-        c.FlatAppearance.CheckedBackColor = Theme.Accent;
+        c.FlatAppearance.CheckedBackColor = Theme.Highlight;
         return c;
     }
 }
@@ -1737,7 +2273,7 @@ class Page : Panel
 class ResourcePicker
 {
     Segmented profile;
-    NumericUpDown ram, cores;
+    SizeBox ram, cores;
     Label summary;
 
     public void Attach(Page p, int y, VmConfig c)
@@ -1745,9 +2281,9 @@ class ResourcePicker
         p.Caption("Resources", 0, y, 180, 32);
         profile = p.Add(new Segmented { Options = VmConfig.ProfileNames }, 190, y, 450, 32);
         p.Caption("Memory GB", 190, y + 44, 100, 26, Theme.Small, Theme.Muted);
-        ram = p.Number(1, Sys.TotalRamGB, c.RamGB, 290, y + 44);
+        ram = p.Add(Sys.RamBox(Sys.MaxRamGB, c.RamGB), 290, y + 44, 90, 26);
         p.Caption("Cores", 410, y + 44, 70, 26, Theme.Small, Theme.Muted);
-        cores = p.Number(1, Environment.ProcessorCount, c.Cores, 480, y + 44);
+        cores = p.Add(Sys.CoreBox(Sys.MaxCores, c.Cores), 480, y + 44, 90, 26);
         summary = p.Caption("", 190, y + 76, 450, 24, Theme.Small, Theme.Muted);
         profile.Changed += delegate { Refresh(); };
         ram.ValueChanged += delegate { Refresh(); };
@@ -1755,14 +2291,19 @@ class ResourcePicker
         profile.SelectedIndex = Math.Max(0, Math.Min(2, c.Profile));
     }
 
+    bool showing;
+
     void Refresh()
     {
+        if (showing) return;
         bool manual = profile.SelectedIndex == 2;
         ram.Enabled = cores.Enabled = manual;
         var probe = new VmConfig();
         Store(probe);
         int n, gb;
         probe.Resources(out n, out gb);
+        // Balanced and Maximum show what they'll give in the greyed-out fields; Manual starts from there.
+        if (!manual) { showing = true; ram.Value = gb; cores.Value = n; showing = false; }
         summary.Text = "Uses " + n + " of " + Environment.ProcessorCount + " cores and " + gb + " of " + Sys.TotalRamGB + " GB memory";
     }
 
@@ -1799,7 +2340,7 @@ partial class MainForm : Form
     // Started from a shortcut or at sign-in (--start): go to the tray once it's up. Otherwise Try Linux stays open.
     bool trayAfterStart;
     bool busy, cancelRequested, quitting, trayHintShown, restartPending;
-    FlatBtn homeUpdate;     // the home screen's "Update to x.y.z" button, shown once a check finds one
+    readonly NoticeBar notices = new NoticeBar();   // the notification area above every page
     string stagedUpdate;    // a verified update waiting to be applied when Try Linux quits
     Page page;
     Label pStatus, pDetail, pTip;
@@ -1818,12 +2359,13 @@ partial class MainForm : Form
         Icon = Icons.App();
         StartPosition = FormStartPosition.CenterScreen;
         var area = System.Windows.Forms.Screen.PrimaryScreen.WorkingArea;
-        ClientSize = new Size(Math.Min(D(980), area.Width - 40), Math.Min(D(640), area.Height - 60));
+        ClientSize = new Size(Math.Min(D(980), area.Width - 40), Math.Min(D(760), area.Height - 60));
         MinimumSize = new Size(D(700), D(520));
 
         tray = new NotifyIcon { Icon = Icon, Text = "Try Linux", Visible = true, ContextMenuStrip = new ContextMenuStrip { Renderer = new DarkMenu(), ShowItemToolTips = true } };
         tray.ContextMenuStrip.Opening += delegate { BuildTrayMenu(); };
         tray.DoubleClick += delegate { ShowLauncher(); };
+        Controls.Add(notices);
 
         AppSettings.Load();
         Winq.Detect();
@@ -1886,6 +2428,7 @@ partial class MainForm : Form
         var old = page;
         page = p;
         Controls.Add(p);
+        p.BringToFront();   // docked last, so it fills the space under the notification area
         if (old != null) { Controls.Remove(old); old.Dispose(); }
         ResumeLayout();
     }
@@ -1897,22 +2440,42 @@ partial class MainForm : Form
         var vms = VmConfig.All();
         if (vms.Count == 0) { ShowChoose(); return; }
 
-        var p = new Page(520);
-        p.Caption("Your systems", 0, 100, 640, 30, Theme.Title);
-        var list = p.Add(new OptionList(), 0, 140, 640, 270);
+        // Sections (logo, title, list, buttons) are spaced twice as far apart as before.
+        var p = new Page(514);
+        p.Caption("Virtual Machines", 0, 116, 640, 30, Theme.Title);
+        // Column headers for the rows' status and stats, on the title row and lined up with the rows' columns,
+        // over a divider line.
+        int x = 640 - OptionRow.Pad;
+        foreach (var label in new[] { "DISK", "MEM", "CPU" })
+        {
+            x -= OptionRow.StatColW;
+            p.Caption(label, x, 116, OptionRow.StatColW, 30, Theme.Small, Theme.Muted, ContentAlignment.BottomLeft).BringToFront();   // over the title label
+        }
+        p.Caption("STATUS", x - 10 - OptionRow.StatusColW, 116, OptionRow.StatusColW, 30, Theme.Small, Theme.Muted, ContentAlignment.BottomLeft).BringToFront();
+        p.Add(new Panel { BackColor = Theme.Border }, 0, 154, 640, 1);
+        var list = p.Add(new OptionList(), 0, 166, 640, 270);
         foreach (var vm in vms)
-            list.AddItem(vm.DisplayName, Describe(vm), vm, Status(vm), On(vm) ? Theme.Accent : Theme.Muted);
+        {
+            var row = list.AddItem(vm.DisplayName, OsLabel(vm), vm, Status(vm), On(vm) ? Theme.Success : Theme.Muted);
+            int cores, ram;
+            vm.Resources(out cores, out ram);
+            row.Stats = new[] {
+                Tuple.Create("CPU", cores + (cores == 1 ? " core" : " cores")),
+                Tuple.Create("MEM", ram + " GB"),
+                Tuple.Create("DISK", DiskUsed(vm)),
+            };
+        }
 
         // Four equal buttons across the 640-wide column, 12 apart.
-        var add = p.Add(new FlatBtn("Add a system"), 0, 428, 151, 42);
-        var settings = p.Add(new FlatBtn("Settings"), 163, 428, 151, 42);
+        var add = p.Add(new FlatBtn("Create"), 0, 472, 151, 42);
+        var settings = p.Add(new FlatBtn("Settings"), 163, 472, 151, 42);
         p.Tag = "home";
         // Console opens the system's window; for a system that's off, the window opens with it still off.
-        var console = p.Add(new FlatBtn("Console"), 326, 428, 151, 42);
-        var start = p.Add(new FlatBtn("Start", true), 489, 428, 151, 42);
+        var console = p.Add(new FlatBtn("Console"), 326, 472, 151, 42);
+        var start = p.Add(new FlatBtn("Start", true), 489, 472, 151, 42);
         // A running system has Power in place of Start: a menu, so nothing powers off from one click.
         // Double-clicking it opens its window.
-        var power = p.Add(new FlatBtn("Power  ▾") { Visible = false }, 489, 428, 151, 42);
+        var power = p.Add(new FlatBtn("Power  ▾") { Visible = false }, 489, 472, 151, 42);
         power.Click += delegate
         {
             var vm = (VmConfig)list.SelectedTag;
@@ -1925,12 +2488,6 @@ partial class MainForm : Form
             menu.Closed += delegate { BeginInvoke((Action)menu.Dispose); };
             menu.Show(power, new Point(0, power.Height));
         };
-        p.Caption("Double-click a system to start it, or to open its window while it runs.", 0, 482, 640, 24, Theme.Small, Theme.Muted);
-        homeUpdate = p.Add(new FlatBtn("Update") { Visible = false }, 440, 96, 200, 36);
-        homeUpdate.ForeColor = Theme.Accent;
-        homeUpdate.FlatAppearance.BorderColor = Theme.Accent;
-        homeUpdate.BringToFront();   // the title label spans the row
-        homeUpdate.Click += delegate { UpdateClicked(); };
         ShowUpdateButton();
 
         list.SelectionChanged += delegate
@@ -1958,15 +2515,18 @@ partial class MainForm : Form
         SetPage(p);
     }
 
+    // Updates are notifications: one for Try Linux and one for WINQ-EMU, each with an Update button.
     void ShowUpdateButton()
     {
-        if (homeUpdate == null || homeUpdate.IsDisposed) return;
-        bool app = Updater.Available != null && stagedUpdate == null, winq = Updater.WinqAvailable != null;
-        if (!app && !winq && stagedUpdate == null) { homeUpdate.Visible = false; return; }
-        homeUpdate.Text = app && winq ? "Updates available" : app ? "Update to " + Updater.Available
-            : winq ? "Update WINQ-EMU" : "Updates when you quit";
-        homeUpdate.Enabled = app || winq;
-        homeUpdate.Visible = true;
+        if (stagedUpdate != null)
+            notices.Post("update", NoticeKind.Info, "Try Linux " + Updater.Available + " is downloaded and installs when you quit Try Linux.");
+        else if (Updater.Available != null)
+            notices.Post("update", NoticeKind.Info, "Try Linux " + Updater.Available + " is available. You have " + Version + ".", "Update", StartUpdate);
+        else notices.Remove("update");
+        if (Updater.WinqAvailable != null)
+            notices.Post("winq", NoticeKind.Info, "WINQ-EMU " + Updater.WinqAvailable + " is available. You have " + (Winq.Version ?? "an older version") + ".",
+                "Update", StartWinqUpdate);
+        else notices.Remove("winq");
     }
 
     // One button covers both updates; with both available, it asks which one.
@@ -2089,6 +2649,43 @@ partial class MainForm : Form
         return string.Join("  ·  ", new[] { what, ram + " GB, " + cores + " cores" }.Where(s => !string.IsNullOrEmpty(s)));
     }
 
+    // What's installed: the distribution and the version in its installer's file name, e.g.
+    // "Fedora-Workstation-Live-45-1.4.x86_64.iso" -> "Fedora Workstation 45". A custom ISO shows its file name.
+    static string OsLabel(VmConfig vm)
+    {
+        string file = Path.GetFileNameWithoutExtension(vm.Iso ?? "");
+        var d = Distro.Find(vm.DistroId);
+        if (d == null) return file.Length > 0 ? file : "Custom ISO";
+        var m = Regex.Match(Regex.Replace(file, @"x86_64|amd64|aarch64|arm64|64-?bit", ""), @"(?<![A-Za-z\d])(\d+(?:\.\d+)?)");
+        return m.Success ? d.Name + " " + m.Groups[1].Value : d.Name;
+    }
+
+    // Renames a system (its display name; the folder and internal name stay). A desktop shortcut named
+    // after it moves to the new name.
+    void Rename(VmConfig cfg, string name)
+    {
+        name = (name ?? "").Trim();
+        if (name.Length == 0 || name == cfg.DisplayName) return;
+        string oldShortcut = ShortcutPath(cfg);
+        bool hadShortcut = File.Exists(oldShortcut);
+        cfg.DisplayName = name;
+        cfg.Save();
+        if (hadShortcut)
+            try { File.Delete(oldShortcut); WriteShortcut(cfg); }
+            catch (Exception ex) { Error("Renamed, but the desktop shortcut couldn't be renamed: " + ex.Message); }
+    }
+
+    // How much space the system's virtual disk file takes on this PC now (it grows as Linux uses space).
+    static string DiskUsed(VmConfig vm)
+    {
+        try
+        {
+            long b = vm.AllDisks().Where(File.Exists).Sum(d => new FileInfo(d).Length);
+            return b >= 1L << 30 ? (b / 1073741824.0).ToString("0.0") + " GB" : Math.Max(0, b >> 20) + " MB";
+        }
+        catch (IOException) { return "?"; }
+    }
+
     // Powered on: running or paused, not a console opened while off.
     bool On(VmConfig vm) { RunningVm r; return running.TryGetValue(vm.Name, out r) && !r.Held; }
 
@@ -2104,19 +2701,36 @@ partial class MainForm : Form
     void ShowChoose()
     {
         bool hasVms = VmConfig.All().Count > 0;
-        var p = new Page(606);
-        p.Caption("Choose a Linux OS", 0, 94, 640, 30, Theme.Title, null, ContentAlignment.MiddleCenter);
-        p.Caption("Try Linux downloads the official installer and checks it before use.", 0, 124, 640, 22, Theme.Small, Theme.Muted, ContentAlignment.MiddleCenter);
-        int listH = Distro.Catalog.Length * 70 - 6;
-        var list = p.Add(new OptionList { RowHeight = 64 }, 0, 154, 640, listH);
+        // Sections are spaced twice as far apart as before.
+        // Two containers: the distributions, then your own installer (an ISO file on this PC or a URL link).
+        // One selection across both: choosing in one clears the other.
+        const int padIn = 6;
+        int distroH = Distro.Catalog.Length * 78 - 6, ownH = 54;
+        int box1 = distroH + padIn * 2, box2 = ownH + padIn * 2;
+        int top = 172;
+        var p = new Page(top + box1 + 12 + box2 + 20 + 42);
+        p.Caption("Choose a Linux OS", 0, 104, 640, 30, Theme.Title, null, ContentAlignment.MiddleCenter);
+        p.Caption("Try Linux downloads the official installer and checks it before use.", 0, 134, 640, 22, Theme.Small, Theme.Muted, ContentAlignment.MiddleCenter);
+
+        var distroBox = p.Add(new BoxPanel(), 0, top, 640, box1);
+        var list = new OptionList { RowHeight = 72, BackColor = BoxPanel.Fill };
+        list.SetBounds(Theme.D(padIn), Theme.D(padIn), Theme.D(640 - padIn * 2), Theme.D(distroH));
+        distroBox.Controls.Add(list);
         foreach (var d in Distro.Catalog) list.AddItem(d.Name, d.Blurb, d);
+
+        var ownBox = p.Add(new BoxPanel(), 0, top + box1 + 12, 640, box2);
+        // One option; Next asks whether the installer is an ISO file on this PC or a URL link.
+        var own = new OptionList { RowHeight = 54, BackColor = BoxPanel.Fill };
+        own.SetBounds(Theme.D(padIn), Theme.D(padIn), Theme.D(640 - padIn * 2), Theme.D(ownH));
+        ownBox.Controls.Add(own);
+        own.AddItem("Use your own installer", "An .iso file already on this PC, or a URL link to download one", "own");
+
+        bool syncing = false;
+        list.SelectionChanged += delegate { if (!syncing && list.SelectedIndex >= 0) { syncing = true; own.SelectedIndex = -1; syncing = false; } };
+        own.SelectionChanged += delegate { if (!syncing && own.SelectedIndex >= 0) { syncing = true; list.SelectedIndex = -1; syncing = false; } };
         list.SelectedIndex = 0;
 
-        int y = 154 + listH + 12;
-        p.Caption("Or install from", 0, y, 160, 36, Theme.Small, Theme.Muted);
-        var fromFile = p.Add(new FlatBtn("An ISO file..."), 160, y, 160, 36);
-        var fromUrl = p.Add(new FlatBtn("A link..."), 330, y, 130, 36);
-        y += 36 + 16;
+        int y = top + box1 + 12 + box2 + 20;
         if (hasVms)
         {
             var back = p.Add(new FlatBtn("Back"), 0, y, 120, 42);
@@ -2151,13 +2765,143 @@ partial class MainForm : Form
             }
             ShowOptions(plan);
         };
-        EventHandler go = delegate { choose(list.SelectedTag); };
+        EventHandler go = delegate
+        {
+            var tag = list.SelectedTag ?? own.SelectedTag;
+            if ((tag as string) == "own")
+            {
+                var plan = AskOwnInstaller();
+                if (plan != null) ShowOptions(plan);
+                return;
+            }
+            if (tag != null) choose(tag);
+        };
         next.Click += go;
         list.Activated += go;
-        fromFile.Click += delegate { choose("file"); };
-        fromUrl.Click += delegate { choose("url"); };
+        own.Activated += go;
         AcceptButton = next;
         SetPage(p);
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, string l);
+
+    // "Use your own installer": choose an ISO file on this PC, or paste a URL link, in one dialog.
+    // Choosing a file clears the link and typing a link clears the file, so Save uses whichever is set.
+    InstallPlan AskOwnInstaller()
+    {
+        Func<int, int> D = Theme.D;
+        int w = D(560), pad = D(24), textX = D(80), textW = w - textX - pad;
+        string iso = null;
+        using (var f = new DialogForm { Text = "Try Linux", StartPosition = FormStartPosition.CenterParent,
+            BackColor = Theme.Bg, ForeColor = Theme.Text, Font = Theme.Body, ShowInTaskbar = false })
+        {
+            var icon = new PictureBox { Image = Icons.Draw(D(40)), SizeMode = PictureBoxSizeMode.AutoSize, BackColor = Theme.Bg };
+            icon.Location = new Point(pad, pad);
+            int y = pad;
+            Func<string, Font, Color, int, Label> label = (text, font, color, h) =>
+            {
+                var l = new Label { Text = text, Font = font, ForeColor = color, BackColor = Theme.Bg, UseMnemonic = false, AutoEllipsis = true };
+                l.SetBounds(textX, y, textW, h);
+                f.Controls.Add(l);
+                y += h;
+                return l;
+            };
+            label("Use your own installer", Theme.Title, Theme.Text, D(30));
+            y += D(14);
+
+            label("An ISO file on this PC", Theme.Heading, Theme.Text, D(22));
+            y += D(6);
+            var pick = new FlatBtn("Choose an ISO file...");
+            pick.SetBounds(textX, y, D(200), D(34));
+            f.Controls.Add(pick);
+            y += D(34) + D(6);
+            var chosen = label("No file chosen", Theme.Small, Theme.Muted, D(20));
+            y += D(10);
+            // "OR", centred on a divider line across the dialog's text column.
+            var or = new Panel { BackColor = Theme.Bg };
+            or.SetBounds(textX, y, textW, D(20));
+            or.Paint += (s, e) =>
+            {
+                var g = e.Graphics;
+                var size = TextRenderer.MeasureText(g, "OR", Theme.Small, Size.Empty, TextFormatFlags.NoPadding);
+                int mid = or.Height / 2, gap = D(10), left = (or.Width - size.Width) / 2;
+                using (var p = new Pen(Theme.Border))
+                {
+                    g.DrawLine(p, 0, mid, left - gap, mid);
+                    g.DrawLine(p, left + size.Width + gap, mid, or.Width, mid);
+                }
+                TextRenderer.DrawText(g, "OR", Theme.Small, new Rectangle(0, 0, or.Width, or.Height), Theme.Muted,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+            };
+            f.Controls.Add(or);
+            y += D(20) + D(10);
+
+            label("URL Link", Theme.Heading, Theme.Text, D(22));
+            y += D(6);
+            var url = new TextBox { Font = Theme.Body, BackColor = Theme.Card, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle };
+            url.SetBounds(textX, y, textW, D(28));
+            f.Controls.Add(url);
+            f.HandleCreated += delegate { SendMessage(url.Handle, 0x1501, (IntPtr)1, "https://... (address of an .iso file)"); };   // EM_SETCUEBANNER
+            y += D(28) + D(4);
+            var urlNote = label("Paste the address of an .iso file.", Theme.Small, Theme.Muted, D(20));
+            y += D(20);
+
+            int bw = D(150), bh = D(38);
+            var save = new FlatBtn("Save", true) { Enabled = false };
+            save.SetBounds(w - pad - bw, y, bw, bh);
+            var cancel = new FlatBtn("Cancel") { DialogResult = DialogResult.Cancel };
+            cancel.SetBounds(w - pad - bw * 2 - D(10), y, bw, bh);
+            f.Controls.Add(save);
+            f.Controls.Add(cancel);
+            f.Controls.Add(icon);
+            f.ClientSize = new Size(w, y + bh + pad);
+            foreach (Control c in f.Controls) if (!(c is Button) && !(c is TextBox)) f.DragBy(c);
+
+            Action refresh = () =>
+            {
+                save.Enabled = iso != null || url.Text.Trim().Length > 0;
+                chosen.Text = iso != null ? Path.GetFileName(iso) : "No file chosen";
+                chosen.ForeColor = iso != null ? Theme.Highlight : Theme.Muted;
+            };
+            pick.Click += delegate
+            {
+                using (var dlg = new OpenFileDialog { Filter = "Disk images (*.iso)|*.iso|All files|*.*", Title = "Choose a Linux installer" })
+                {
+                    if (dlg.ShowDialog(f) != DialogResult.OK) return;
+                    iso = dlg.FileName;
+                    url.Text = "";
+                    refresh();
+                }
+            };
+            url.TextChanged += delegate { if (url.Text.Length > 0) iso = null; refresh(); };
+            save.Click += delegate
+            {
+                if (iso == null)
+                {
+                    Uri u;
+                    if (!Uri.TryCreate(url.Text.Trim(), UriKind.Absolute, out u) || (u.Scheme != "https" && u.Scheme != "http"))
+                    {
+                        urlNote.Text = "That isn't a web address. It should start with https://";
+                        urlNote.ForeColor = Theme.Danger;
+                        return;
+                    }
+                }
+                f.DialogResult = DialogResult.OK;
+            };
+            f.CancelButton = cancel;
+            f.AcceptButton = save;
+            if (f.ShowDialog(this) != DialogResult.OK) return null;
+
+            var plan = new InstallPlan();
+            if (iso != null) { plan.LocalIso = iso; plan.Label = Path.GetFileNameWithoutExtension(iso); }
+            else
+            {
+                var u = new Uri(url.Text.Trim());
+                plan.Url = u.ToString();
+                plan.Label = Path.GetFileNameWithoutExtension(u.AbsolutePath);
+            }
+            return plan;
+        }
     }
 
     void ShowOptions(InstallPlan plan)
@@ -2166,41 +2910,46 @@ partial class MainForm : Form
         var cfg = new VmConfig { Profile = 0, RamGB = 8, Cores = Math.Max(2, Environment.ProcessorCount / 2) };
         cfg.SshPort = existing.Count == 0 ? 2223 : Math.Max(2222, existing.Max(v => v.SshHostPort)) + 1;
 
-        var p = new Page(560);
-        p.Caption("Set up " + plan.Label, 0, 100, 640, 30, Theme.Title);
-        p.Caption("Name", 0, 146, 180, 26);
-        var name = p.Input(UniqueName(plan.Distro != null ? plan.Distro.Id : plan.Label), 190, 146, 250);
+        var p = new Page(534);
+        p.Caption("Name", 0, 120, 180, 26);
+        // The name shown on Virtual Machines; the folder name is made from it.
+        string suggested = plan.Distro != null ? plan.Distro.Name : plan.Label;
+        for (int i = 2; existing.Any(v => string.Equals(v.DisplayName, suggested, StringComparison.CurrentCultureIgnoreCase)); i++)
+            suggested = (plan.Distro != null ? plan.Distro.Name : plan.Label) + " " + i;
+        var name = p.Input(suggested, 190, 120, 250);
 
         var res = new ResourcePicker();
-        res.Attach(p, 188, cfg);
+        res.Attach(p, 162, cfg);
 
-        p.Caption("Disk size", 0, 300, 180, 26);
-        var disk = p.Number(16, 2048, plan.Distro != null ? plan.Distro.DiskGB : 64, 190, 300);
-        p.Caption("GB, grows only as you use it", 290, 300, 350, 26, Theme.Small, Theme.Muted);
+        p.Caption("Disk size", 0, 274, 180, 26);
+        var disk = p.Add(Sys.DiskBox(16, 2048, plan.Distro != null ? plan.Distro.DiskGB : 64), 190, 274, 90, 26);
+        p.Caption("GB, grows only as you use it", 290, 274, 350, 26, Theme.Small, Theme.Muted);
 
-        p.Caption("Storage", 0, 342, 180, 26);
+        p.Caption("Storage", 0, 316, 180, 26);
         TextBox storage = null;
         if (existing.Count == 0)
         {
-            storage = p.Input(AppSettings.Storage, 190, 342, 330);
-            var change = p.Add(new FlatBtn("Change"), 530, 340, 110, 30);
+            storage = p.Input(AppSettings.Storage, 190, 316, 330);
+            var change = p.Add(new FlatBtn("Change"), 530, 314, 110, 30);
             change.Click += delegate
             {
                 using (var dlg = new FolderBrowserDialog { Description = "Where should Try Linux keep its systems and downloads?" })
                     if (dlg.ShowDialog(this) == DialogResult.OK) storage.Text = Path.Combine(dlg.SelectedPath, "TryLinux");
             };
         }
-        else p.Caption(AppSettings.Storage, 190, 342, 450, 26, Theme.Small, Theme.Muted);
+        else p.Caption(AppSettings.Storage, 190, 316, 450, 26, Theme.Small, Theme.Muted);
 
-        p.Caption("The installer only sees a virtual disk. Your Windows drive is never touched.", 0, 392, 640, 40, Theme.Small, Theme.Muted);
+        p.Caption("The installer only sees a virtual disk. Your Windows drive is never touched.", 0, 366, 640, 40, Theme.Small, Theme.Muted);
 
-        var back = p.Add(new FlatBtn("Back"), 0, 470, 120, 42);
+        var back = p.Add(new FlatBtn("Back"), 0, 444, 120, 42);
         back.Click += delegate { ShowChoose(); };
-        var install = p.Add(new FlatBtn("Install", true), 500, 470, 140, 42);
+        var install = p.Add(new FlatBtn("Install", true), 500, 444, 140, 42);
         install.Click += delegate
         {
-            string id = name.Text.Trim();
-            if (!Regex.IsMatch(id, "^[A-Za-z0-9_-]{1,40}$")) { Error("Use 1-40 letters, numbers, - or _ for the name."); return; }
+            string display = name.Text.Trim();
+            if (display.Length == 0 || display.Length > 60) { Error("Give the system a name of up to 60 characters."); return; }
+            if (existing.Any(v => string.Equals(v.DisplayName, display, StringComparison.CurrentCultureIgnoreCase)))
+            { Error("You already have a system named \"" + display + "\". Choose another name."); return; }
             if (storage != null)
             {
                 string s = storage.Text.Trim();
@@ -2208,11 +2957,11 @@ partial class MainForm : Form
                 AppSettings.Storage = s;
                 AppSettings.Save();
             }
+            // The folder is made from the name after storage is chosen, so it's unique where it's created.
+            string id = UniqueName(display);
             cfg.Name = id;
             cfg.Dir = Path.Combine(AppSettings.VmsDir, id);
-            if (File.Exists(cfg.Disk)) { Error("A system named '" + id + "' already exists."); return; }
-            cfg.DisplayName = plan.Distro != null ? plan.Distro.Name : plan.Label;
-            if (existing.Any(v => v.DisplayName == cfg.DisplayName)) cfg.DisplayName += " (" + id + ")";
+            cfg.DisplayName = display;
             cfg.DistroId = plan.Distro != null ? plan.Distro.Id : "";
             res.Store(cfg);
             Install(plan, cfg, (int)disk.Value);
@@ -2237,7 +2986,7 @@ partial class MainForm : Form
         pStatus = p.Caption(status, 0, 124, 640, 28, Theme.Body, Theme.Text, ContentAlignment.MiddleCenter);
         pBar = p.Add(new Bar(), 120, 164, 400, 10);
         pDetail = p.Caption("", 0, 184, 640, 22, Theme.Small, Theme.Muted, ContentAlignment.MiddleCenter);
-        pTip = p.Caption("", 40, 228, 560, 44, Theme.Small, Theme.Accent, ContentAlignment.TopCenter);
+        pTip = p.Caption("", 40, 228, 560, 44, Theme.Small, Theme.Highlight, ContentAlignment.TopCenter);
         if (cancellable)
         {
             var cancel = p.Add(new FlatBtn("Cancel"), 260, 300, 120, 38);
@@ -2425,7 +3174,7 @@ partial class MainForm : Form
         if (running.TryGetValue(cfg.Name, out existing)) { ShowVm(existing); return; }
         if (!Winq.Ready)
         {
-            Error("WINQ-EMU isn't installed. Add a system to install it, or get it from github.com/cmspam/winq-emu/releases.");
+            Error("WINQ-EMU isn't installed. Click Create to install it, or get it from github.com/cmspam/winq-emu/releases.");
             return;
         }
         var virt = Virt.Check();
@@ -2524,16 +3273,14 @@ partial class MainForm : Form
         do vm.EventPort = Net.FreePort(); while (vm.EventPort == vm.QmpPort);
         string outputs = cfg.Displays > 1 ? ",max_outputs=" + cfg.Displays : "";
         string gpu = cpu ? "virtio-vga" + outputs
-            : (cfg.Venus ? "virtio-vga-gl,blob=on,hostmem=" + cfg.GpuMemGB + "G,venus=on" : "virtio-vga-gl") + outputs;
+            : (cfg.Venus ? "virtio-vga-gl,blob=on,hostmem=" + Math.Max(1, Math.Min(Sys.MaxGpuMemGB, cfg.GpuMemGB)) + "G,venus=on" : "virtio-vga-gl") + outputs;
         var a = new List<string> {
             "-machine q35,accel=whpx", "-cpu host",
             "-smp " + cores, "-m " + ram + "G",
             // window-close=off: closing the window doesn't quit QEMU; Try Linux hides it instead.
             "-display " + (cpu ? "sdl" : "sdl,gl=on") + ",window-close=off",
             "-device " + gpu,
-            "-drive " + Q("file=" + cfg.Disk + ",format=qcow2,if=virtio"),
-            "-device virtio-net-pci,netdev=net0",
-            "-netdev user,id=net0" + string.Concat(cfg.ForwardRules().Select(f => "," + f.ToHostFwd())),
+            cfg.NetType == 2 ? "-nic none" : "-device virtio-net-pci,netdev=net0",
             "-usb", "-device usb-tablet",
             "-name " + Q(cfg.DisplayName),
             "-qmp tcp:127.0.0.1:" + vm.QmpPort + ",server=on,wait=off",
@@ -2542,6 +3289,20 @@ partial class MainForm : Form
             // again. Resetting in place could leave QEMU's GPU state behind and stop it from coming back.
             "-action reboot=shutdown"
         };
+        // The boot disk comes first, so it's the one the BIOS starts from; a missing extra disk is left out.
+        int at = 6;   // after the graphics device, where the boot disk used to be listed
+        foreach (var d in cfg.AllDisks())
+            if (d == cfg.Disk || File.Exists(d))
+                a.Insert(at++, "-drive " + Q("file=" + d + ",format=qcow2,if=virtio" + (cfg.Reclaim ? ",discard=unmap,detect-zeroes=unmap" : "")));
+        // restrict=on keeps the system off this PC and the internet, but port forwards still reach it.
+        if (cfg.NetType != 2)
+            a.Add("-netdev user,id=net0" + (cfg.NetType == 1 ? ",restrict=on" : "") + string.Concat(cfg.ForwardRules().Select(f => "," + f.ToHostFwd())));
+        // A CD/DVD drive whose disc can be changed while the system runs (QMP id "cd"). The hard disk still boots first.
+        if (!installer)
+        {
+            a.Add("-drive " + Q("if=none,id=cd0,media=cdrom,readonly=on" + (cfg.Cd.Length > 0 && File.Exists(cfg.Cd) ? ",format=raw,file=" + cfg.Cd : "")));
+            a.Add("-device ide-cd,drive=cd0,id=cd");
+        }
         if (cfg.Sound) { a.Add("-device intel-hda"); a.Add("-device " + (cfg.Mic ? "hda-duplex" : "hda-output")); }
         if (cfg.Fullscreen && FullscreenScreen(cfg) == null && !held) a.Add("-full-screen");
         if (held) a.Add("-S");   // window open, machine powered off until "cont"
@@ -2611,7 +3372,7 @@ partial class MainForm : Form
                 Boot(VmConfig.Load(vm.Cfg.Dir), true, false, vm.Held);
                 return;
             }
-            if (portClash) msg += "\n\nA forwarded port is already in use. Change the port forwards in Settings > Advanced.";
+            if (portClash) msg += "\n\nA forwarded port is already in use. Change the port forwards in Settings > Devices.";
             ShowLauncher();
             Error(vm.Cfg.DisplayName + " couldn't start.\n\n" + msg);
             return;
@@ -2836,13 +3597,28 @@ partial class MainForm : Form
         try { BeginInvoke(a); } catch (InvalidOperationException) { }
     }
 
-    void Error(string msg) { Notice(msg, "Something went wrong"); }
-    void Info(string msg) { Notice(msg, "Try Linux"); }
+    void Error(string msg) { Notice(msg, "Something went wrong", NoticeKind.Error); }
+    void Info(string msg) { Notice(msg, "Try Linux", NoticeKind.Info); }
+    int noticeCount;
 
     // A themed notice. Its title is the message's first part: up to a blank line, a colon or the
     // first sentence, when that's short; otherwise `fallback`, with the whole message below.
-    void Notice(string msg, string fallback)
+    // While the window is open, a message goes to the notification area; info clears itself after 10 seconds.
+    // With Try Linux only in the tray, it's a dialog, since nothing would show the notification.
+    void Notice(string msg, string fallback, NoticeKind kind)
     {
+        if (Visible && WindowState != FormWindowState.Minimized)
+        {
+            string id = "msg" + (++noticeCount);
+            notices.Post(id, kind, msg.Trim().Replace("\n\n", "\n"));
+            if (kind == NoticeKind.Info || kind == NoticeKind.Success)
+            {
+                var t = new Timer { Interval = 10000 };
+                t.Tick += delegate { t.Dispose(); notices.Remove(id); };
+                t.Start();
+            }
+            return;
+        }
         msg = msg.Trim();
         string title = null, body = null;
         int cut;
