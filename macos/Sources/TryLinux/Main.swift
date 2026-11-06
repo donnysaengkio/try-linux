@@ -4,7 +4,7 @@ import AppKit
 import SwiftUI
 
 enum AppInfo {
-    static let version = "1.0.2"
+    static let version = "1.0.3"
 }
 
 @main

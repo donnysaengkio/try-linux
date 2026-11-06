@@ -184,12 +184,12 @@ enum SelfTest {
         }
         snap("home", HomeView())
         // The update notification, in the notification area above the page.
-        model.updateAvailable = "1.0.3"
+        model.updateAvailable = "1.0.4"
         snap("home-update", VStack(spacing: 0) { NoticeArea(); HomeView() })
         model.updateAvailable = nil
         // One notification of each kind.
         model.notices = [
-            Notice(id: "a", kind: .info, text: "Try Linux 1.0.3 is available. You have \(AppInfo.version).", actionTitle: "Update", action: {}),
+            Notice(id: "a", kind: .info, text: "Try Linux 1.0.4 is available. You have \(AppInfo.version).", actionTitle: "Update", action: {}),
             Notice(id: "b", kind: .success, text: "Dev box was backed up to ~/Backups."),
             Notice(id: "c", kind: .warning, text: "Ubuntu test couldn't grow its disk, so it keeps its current size."),
             Notice(id: "d", kind: .error, text: "Couldn't save settings: the disk is full."),
@@ -250,7 +250,7 @@ enum SelfTest {
             primary: "Open", secondary: nil, danger: false, pick: { _ in }))
         dialog("quit-prompt", DialogView(title: "Quit Try Linux?", text: "Try Linux will close without installing. You'll be asked again the next time you open it.",
             path: nil, after: nil, primary: "Quit", secondary: "Back", danger: false, pick: { _ in }))
-        dialog("update-prompt", DialogView(title: "Update to Try Linux 1.0.3?",
+        dialog("update-prompt", DialogView(title: "Update to Try Linux 1.0.4?",
             text: "You have version \(AppInfo.version). Try Linux downloads the update from GitHub, checks it against its published checksum and restarts.",
             path: nil, after: "Your Linux systems aren't affected.", primary: "Update", secondary: "What's new", danger: false, pick: { _ in }))
         dialog("update-when-quit", DialogView(title: "Update when you quit?",
