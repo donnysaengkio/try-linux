@@ -3,51 +3,49 @@ import AppKit
 import CoreText
 import SwiftUI
 
-// Three themes, the same as Try Linux for Windows, chosen in Settings > General > Appearance:
+// Two themes, the same as Try Linux for Windows, chosen in Settings > General > Appearance:
 //   Dark: Firefox's dark Settings page. Neutral grays (page #111113, cards #252429, panel #1C1B22,
 //         borders #39383D) with lavender #B89CFE for what's selected and the main buttons.
-//   Light: Bitwarden's brand colors, light. Off White #F3F6F9 page, white cards, Light Grey #D8E2EB
-//         lines, Bitwarden Blue #175DDC for what's selected and the main buttons, Deep Blue #0C3276.
-//   Blue: Bitwarden's brand colors, dark. Navy from Deep Blue #0C3276, Bitwarden Blue #175DDC buttons,
-//         Light Teal #A2F4FD for what's selected, Off White #F3F6F9 text, Medium Grey #99A7B5.
+//   Light: Proton Pass's light settings. A lavender-white page (#FCF9FE), white cards, soft lavender-grey
+//         lines (#DEDBE8) and Proton's purple #6D4AFF for what's selected and the main buttons.
 // Surfaces are shaded from top to bottom, with an outline on what's selected or open.
 enum Theme {
-    static let names = ["dark", "light", "blue"]
-    static let titles = ["Dark", "Light", "Blue"]
+    static let names = ["dark", "light"]
+    static let titles = ["Dark", "Light"]
     // The theme in use; AppModel.applyTheme() sets it and redraws the window.
     static var name = "dark"
     static var isLight: Bool { name == "light" }
 
-    private static func c(_ dark: Int, _ light: Int, _ blue: Int) -> Color { hex(name == "light" ? light : name == "blue" ? blue : dark) }
+    private static func c(_ dark: Int, _ light: Int) -> Color { hex(name == "light" ? light : dark) }
 
-    static var bg: Color { c(0x111113, 0xF3F6F9, 0x06132B) }
-    static var card: Color { c(0x252429, 0xFFFFFF, 0x0E2247) }              // fields and flat fills
-    static var cardHover: Color { c(0x2E2D33, 0xEAF0F6, 0x132B57) }
-    static var cardSelected: Color { c(0x352E48, 0xDCE7FB, 0x173874) }
-    static var cardTop: Color { c(0x28272C, 0xFFFFFF, 0x10264E) }           // shaded surfaces: top
-    static var cardBottom: Color { c(0x232227, 0xF8FAFC, 0x0C1F42) }        // and bottom
-    static var hoverTop: Color { c(0x302F35, 0xF0F5FA, 0x16305E) }
-    static var hoverBottom: Color { c(0x2A292F, 0xE7EEF5, 0x11284F) }
-    static var selectedTop: Color { c(0x372F4D, 0xE6EEFD, 0x183F82) }
-    static var selectedBottom: Color { c(0x2C263D, 0xD9E5FB, 0x12326B) }
-    static var box: Color { c(0x1C1B22, 0xEAF0F5, 0x0A1A38) }               // containers that group rows
-    static var border: Color { c(0x39383D, 0xC9D5E1, 0x22427A) }
-    static var text: Color { c(0xFBFBFE, 0x101A27, 0xF3F6F9) }
-    static var muted: Color { c(0xBFBFC9, 0x56677A, 0x99A7B5) }
+    static var bg: Color { c(0x111113, 0xFCF9FE) }
+    static var card: Color { c(0x252429, 0xFFFFFF) }              // fields and flat fills
+    static var cardHover: Color { c(0x2E2D33, 0xF6F2FC) }
+    static var cardSelected: Color { c(0x352E48, 0xEEE8FF) }
+    static var cardTop: Color { c(0x28272C, 0xFFFFFF) }           // shaded surfaces: top
+    static var cardBottom: Color { c(0x232227, 0xFBF9FE) }        // and bottom
+    static var hoverTop: Color { c(0x302F35, 0xF8F5FD) }
+    static var hoverBottom: Color { c(0x2A292F, 0xF2EEFA) }
+    static var selectedTop: Color { c(0x372F4D, 0xF3EEFF) }
+    static var selectedBottom: Color { c(0x2C263D, 0xE9E1FF) }
+    static var box: Color { c(0x1C1B22, 0xF4F1F9) }               // containers that group rows
+    static var border: Color { c(0x39383D, 0xDEDBE8) }
+    static var text: Color { c(0xFBFBFE, 0x0C0C14) }
+    static var muted: Color { c(0xBFBFC9, 0x6B6880) }
     // Accent is the main call to action only (Start, Next, Save). Highlight is the logo and active
     // form elements: selection, tabs, checkboxes, progress, section titles.
-    static var accent: Color { c(0xB89CFE, 0x175DDC, 0x175DDC) }
-    static var accentHover: Color { c(0xC7B1FF, 0x2F6FE4, 0x2F6FE4) }
-    static var accentLight: Color { c(0xD6C7FF, 0x4A84EC, 0x4A84EC) }       // the main button under the pointer: top
-    static var accentMid: Color { c(0xC2A9FF, 0x2366E0, 0x2366E0) }         // and bottom
-    static var accentDark: Color { c(0xA487F2, 0x1250C0, 0x1250C0) }        // pressed
-    static var accent2: Color { c(0x5E4898, 0x0C3276, 0x0C3276) }
-    static var onAccent: Color { c(0x15141A, 0xFFFFFF, 0xFFFFFF) }          // text on the main buttons
-    static var highlight: Color { c(0xC7B1FF, 0x175DDC, 0xA2F4FD) }
-    static var highlight2: Color { c(0xB89CFE, 0x0C3276, 0x2CDDE9) }
-    static var success: Color { c(0x7ED68A, 0x0E8A4F, 0x7BF1A8) }           // a running system
-    static var warning: Color { c(0xF9D949, 0xB38600, 0xFDC700) }
-    static var danger: Color { c(0xF26D6D, 0xD63B25, 0xFF6550) }            // red, apart from the accent
+    static var accent: Color { c(0xB89CFE, 0x6D4AFF) }
+    static var accentHover: Color { c(0xC7B1FF, 0x8466FF) }
+    static var accentLight: Color { c(0xD6C7FF, 0x9A82FF) }       // the main button under the pointer: top
+    static var accentMid: Color { c(0xC2A9FF, 0x7A5CFF) }         // and bottom
+    static var accentDark: Color { c(0xA487F2, 0x5A37E6) }        // pressed
+    static var accent2: Color { c(0x5E4898, 0x3A1F99) }
+    static var onAccent: Color { c(0x15141A, 0xFFFFFF) }          // text on the main buttons
+    static var highlight: Color { c(0xC7B1FF, 0x5B2BD1) }
+    static var highlight2: Color { c(0xB89CFE, 0x3A1F99) }
+    static var success: Color { c(0x7ED68A, 0x1C8A4E) }           // a running system
+    static var warning: Color { c(0xF9D949, 0xB38600) }
+    static var danger: Color { c(0xF26D6D, 0xD6332E) }            // red, apart from the accent
 
     // Menus, dialogs and the window frame drawn by macOS: dark for the dark themes, light for Light.
     static var appearance: NSAppearance? { NSAppearance(named: isLight ? .aqua : .darkAqua) }
@@ -61,7 +59,7 @@ enum Theme {
 
     // Blend from the top of the logo to the bottom (the highlight colors).
     static func logoRow(_ t: Double) -> Color {
-        let (a, b) = name == "light" ? (0x2F6FE4, 0x0C3276) : name == "blue" ? (0xA2F4FD, 0x2CDDE9) : (0xD6C7FF, 0xA487F2)
+        let (a, b) = name == "light" ? (0x7A5CFF, 0x3A1F99) : (0xD6C7FF, 0xA487F2)
         func ch(_ v: Int, _ s: Int) -> Double { Double(v >> s & 0xFF) }
         return rgb(ch(a, 16) + (ch(b, 16) - ch(a, 16)) * t, ch(a, 8) + (ch(b, 8) - ch(a, 8)) * t, ch(a, 0) + (ch(b, 0) - ch(a, 0)) * t)
     }

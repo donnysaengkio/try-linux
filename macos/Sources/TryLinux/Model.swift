@@ -54,7 +54,7 @@ final class AppModel: ObservableObject {
     // The theme in use (Theme.name); the window is made again when it changes.
     @Published var themeName = AppModel.wantedTheme
 
-    // Settings > General > Appearance, for Try Linux as a whole: the theme (dark, light or blue), or
+    // Settings > General > Appearance, for Try Linux as a whole: the theme (dark or light), or
     // macOS's own appearance with Follow system (Light in Light mode, Dark otherwise).
     static var themeSetting: String {
         get { UserDefaults.standard.string(forKey: "theme").flatMap { Theme.names.contains($0) ? $0 : nil } ?? "dark" }

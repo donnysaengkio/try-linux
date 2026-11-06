@@ -86,9 +86,9 @@ them too. If you turned on **Open at login**, turn it off first in Settings > Ge
 Once a day, Try Linux checks GitHub for a new release. When there is one, a
 notification with an **Update** button appears at the top of the window.
 
-<img src="docs/images/update-button.png" alt="Virtual Machines with a notification: Try Linux 1.0.6 is available, with an Update button" width="560">
+<img src="docs/images/update-button.png" alt="Virtual Machines with a notification: Try Linux 1.0.7 is available, with an Update button" width="560">
 
-<img src="docs/images/update-prompt.png" alt="Update to Try Linux 1.0.6? prompt, with What's New and Update buttons" width="420">
+<img src="docs/images/update-prompt.png" alt="Update to Try Linux 1.0.7? prompt, with What's New and Update buttons" width="420">
 
 1. **What's New** opens the release notes; **Update** downloads the new version.
 2. Try Linux checks the download against the release's published SHA-256 checksum
