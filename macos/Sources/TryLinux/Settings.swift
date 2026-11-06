@@ -13,23 +13,32 @@ struct SettingsView: View {
     @State private var checkUpdates = Updater.enabled
     @State private var checking = false
     @State private var open: Set<String>
+    @State private var lit: String?
     @State private var diskIndex = 0
 
     static let resolutions = [(1280, 800), (1920, 1200), (2560, 1600)]
-    // Which sections are open, kept while Try Linux runs.
+    // Which sections are open, and the one last opened (the only one highlighted), while Settings is open.
+    // Opening Settings from Virtual Machines starts with every section closed (reset()).
     static var opened: Set<String> = []
+    static var lastOpened: String?
+    static func reset() { opened = []; lastOpened = nil }
 
     init(config: VMConfig, tab: Int = 0) {
         _c = State(initialValue: config)
         _tab = State(initialValue: tab)
         _open = State(initialValue: Self.opened)
+        _lit = State(initialValue: Self.lastOpened)
     }
 
     private var isRunning: Bool { model.running[c.id] != nil }
 
     private func bar(_ title: String) -> Binding<Bool> {
         Binding(get: { open.contains(title) },
-                set: { v in if v { open.insert(title) } else { open.remove(title) }; Self.opened = open })
+                set: { v in
+                    if v { open.insert(title); lit = title } else { open.remove(title); if lit == title { lit = nil } }
+                    Self.opened = open
+                    Self.lastOpened = lit
+                })
     }
 
     var body: some View {
@@ -49,6 +58,7 @@ struct SettingsView: View {
                     .padding(.top, 16)
                     .padding(.trailing, 14)
                     .padding(.bottom, 10)
+                    .environment(\.litSection, lit ?? "")   // "": nothing highlighted
                 }
                 .frame(maxHeight: .infinity)
                 footer
@@ -116,6 +126,19 @@ struct SettingsView: View {
     // MARK: General
 
     @ViewBuilder private var general: some View {
+        // Info: the notes given when it was created (editable), what it runs and where it's kept.
+        SectionBar(title: "Info", summary: c.description.split(separator: "\n").first.map(String.init) ?? "No description", open: bar("Info")) {
+            HStack(alignment: .top, spacing: 10) {
+                Text("Description").font(Theme.sans(13)).foregroundColor(Theme.text).frame(width: 180, alignment: .leading).padding(.top, 4)
+                NotesInput(text: $c.description).frame(height: 76)
+            }
+            .padding(.trailing, 12)
+            FormRow(label: "Operating system") { Text(model.osLabel(c)).font(Theme.sans(13)).foregroundColor(Theme.text) }
+            FormRow(label: "Location") {
+                Text(Paths.display(c.dir)).font(Theme.sans(13)).foregroundColor(Theme.text).lineLimit(1).truncationMode(.middle)
+            }
+        }
+
         SectionBar(title: "Display and startup",
                    summary: (c.fullscreen ? "Fullscreen" : "In a window") + "  ·  \(c.width)×\(c.height)" + (openAtLogin ? "  ·  Opens when you log in" : ""),
                    open: bar("Display and startup")) {
@@ -285,7 +308,10 @@ struct SettingsView: View {
         FormRow(label: "Maximum size") { Text(exists ? size(Disk.capacity(url)) : "").font(Theme.sans(13)).foregroundColor(Theme.text) }
 
         SubHeading(text: "Disk information")
-        Note(text: "Disk space is not preallocated: the file grows as Linux uses it, up to the maximum size.")
+        // Only Disk 1 can be made with its full size allocated (Create > Allocate the full size now).
+        Note(text: diskIndex == 0 && c.diskFull
+             ? "Preallocated: its full maximum size was taken on the drive when it was made."
+             : "Dynamic: the file takes space on the drive only as Linux stores data, up to the maximum size.")
         Note(text: "Stored in \(url.lastPathComponent)" + (diskIndex == 0 ? ", the disk \(c.displayName) starts from." : "."))
         // The path field starts right after its label.
         HStack(spacing: 12) {
@@ -553,6 +579,7 @@ struct SettingsView: View {
         guard stopped(), Ask.confirm("Delete \(c.displayName)?", "This permanently removes its virtual disks, snapshots and everything installed in it.", "Delete",
                                      after: attached ? "Disks added from other folders and downloaded ISOs are kept." : "Downloaded ISOs are kept.",
                                      destructive: true) else { return }
+        c.forget()   // a system in a location of its own is no longer looked for there
         do { try FileManager.default.removeItem(at: c.dir) } catch { model.show("Couldn't delete it completely: \(error.localizedDescription)") }
         model.goHome()
     }

@@ -10,6 +10,9 @@ struct InstallPlan: Equatable {
     var localISO: URL?
     var url: URL?
     var label: String
+    var disk: URL? = nil          // an existing raw disk image to import (copied), instead of an installer
+    var source: DiskSource? = nil // what was read from that disk and the settings beside it
+    var own = false               // chosen on Use Your Own Installer
 }
 
 struct ProgressState {
@@ -41,6 +44,7 @@ final class AppModel: ObservableObject {
 
     enum Screen: Equatable {
         case home, choose, progress
+        case own(InstallPlan?)      // Use Your Own Installer, with what was chosen before (coming Back)
         case setup(InstallPlan)
         case settings(String)
     }
@@ -146,7 +150,7 @@ final class AppModel: ObservableObject {
     // "Fedora-Workstation-Live-45-1.4.aarch64.iso" -> "Fedora Workstation 45". A custom ISO shows its file name.
     func osLabel(_ c: VMConfig) -> String {
         let file = URL(fileURLWithPath: c.iso).deletingPathExtension().lastPathComponent
-        guard let d = Distro.find(c.distroId) else { return c.iso.isEmpty ? "Custom ISO" : file }
+        guard let d = Distro.find(c.distroId) else { return c.iso.isEmpty ? (c.pendingInstall ? "Custom ISO" : "Imported disk") : file }
         let cleaned = file.replacingOccurrences(of: "(x86_64|amd64|aarch64|arm64|64-?bit)", with: "", options: .regularExpression)
         if let r = cleaned.range(of: "(?<![A-Za-z0-9])[0-9]+(\\.[0-9]+)?", options: .regularExpression) {
             return d.name + " " + cleaned[r]
@@ -226,12 +230,13 @@ final class AppModel: ObservableObject {
                 }
                 iso = dest
             }
-            progress = ProgressState(status: "Creating the virtual disk", detail: "\(diskGB) GB, grows only as you use it")
+            progress = ProgressState(status: "Creating the virtual disk", detail: "\(diskGB) GB" + (config.diskFull ? ", allocating its full size" : ""))
             var c = config
             c.iso = iso!.path
             c.pendingInstall = true
-            try Disk.create(c.diskURL, gb: diskGB)
+            try Disk.create(c.diskURL, gb: diskGB, full: c.diskFull)
             try c.save()
+            c.remember()
             busy = false
             reload()
             boot(c)
@@ -242,6 +247,35 @@ final class AppModel: ObservableObject {
             busy = false
             goHome()
             show(error.localizedDescription)
+        }
+    }
+
+    // Use Your Own Installer > An Existing Virtual Disk: copies a raw disk image (APFS makes the copy a
+    // clone, so it's quick and takes no extra space until either changes) into a new system, then starts it.
+    // Nothing is installed; the original file isn't changed.
+    func importDisk(_ plan: InstallPlan, _ config: VMConfig) async {
+        guard VZVirtualMachine.isSupported else { show(Self.unsupported); return }
+        guard let src = plan.disk else { return }
+        busy = true
+        screen = .progress
+        progress = ProgressState(status: "Importing " + src.lastPathComponent, detail: "Copied into a new disk for " + config.displayName)
+        var c = config
+        do {
+            try FileManager.default.createDirectory(at: c.dir, withIntermediateDirectories: true)
+            try await Task.detached(priority: .userInitiated) { try FileManager.default.copyItem(at: src, to: c.diskURL) }.value
+            c.iso = ""
+            c.pendingInstall = false
+            c.diskFull = false
+            try c.save()
+            c.remember()
+            busy = false
+            reload()
+            boot(c)
+        } catch {
+            try? FileManager.default.removeItem(at: c.dir)
+            busy = false
+            goHome()
+            show("Couldn't import \(src.lastPathComponent): \(error.localizedDescription)")
         }
     }
 

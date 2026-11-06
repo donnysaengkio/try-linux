@@ -1,57 +1,92 @@
 // Colors, fonts and the flat controls shared by every page (the same look as Try Linux for Windows).
 import AppKit
+import CoreText
 import SwiftUI
 
-// Colors follow Proton's palette (proton.me/blog/new-visual-universe) on a Proton Pass-style dark UI.
-// "Depth": a deep background with surfaces shaded from top to bottom, and a purple glow on what's
-// selected or open, the same look as Try Linux for Windows.
+// Colors follow Firefox's Settings page in its dark theme, the same as Try Linux for Windows: neutral
+// grays (page #111113, cards #252429, panel #1C1B22, borders #39383D) with lavender #B89CFE for what's
+// selected and the main buttons. Surfaces are shaded from top to bottom, with a lavender outline on
+// what's selected or open.
 enum Theme {
-    static let bg = rgb(12, 12, 20)              // #0C0C14
-    static let card = rgb(26, 23, 38)            // fields and flat fills
-    static let cardHover = rgb(36, 32, 54)
-    static let cardSelected = rgb(42, 35, 66)    // #2A2342
-    static let cardTop = rgb(29, 26, 43)         // #1D1A2B, shaded surfaces: top
-    static let cardBottom = rgb(22, 20, 31)      // #16141F, and bottom
-    static let hoverTop = rgb(37, 33, 55)
-    static let hoverBottom = rgb(27, 24, 40)
-    static let selectedTop = rgb(42, 35, 66)     // #2A2342
-    static let selectedBottom = rgb(28, 24, 48)  // #1C1830
-    static let box = rgb(18, 17, 28)             // containers that group rows
-    static let border = rgb(42, 37, 64)          // #2A2540
-    static let text = rgb(245, 244, 242)         // #F5F4F2
-    static let muted = rgb(155, 151, 179)        // #9B97B3
+    static let bg = hex(0x111113)
+    static let card = hex(0x252429)              // fields and flat fills
+    static let cardHover = hex(0x2E2D33)
+    static let cardSelected = hex(0x352E48)
+    static let cardTop = hex(0x28272C)           // shaded surfaces: top
+    static let cardBottom = hex(0x232227)        // and bottom
+    static let hoverTop = hex(0x302F35)
+    static let hoverBottom = hex(0x2A292F)
+    static let selectedTop = hex(0x372F4D)
+    static let selectedBottom = hex(0x2C263D)
+    static let box = hex(0x1C1B22)               // containers that group rows
+    static let border = hex(0x39383D)
+    static let text = hex(0xFBFBFE)
+    static let muted = hex(0xBFBFC9)
     // Accent is the main call to action only (Start, Next, Save). Highlight is the logo and active
     // form elements: selection, tabs, checkboxes, progress, section titles.
-    static let accent = rgb(109, 74, 255)        // #6D4AFF
-    static let accentHover = rgb(138, 110, 255)  // #8A6EFF
-    static let accent2 = rgb(56, 37, 128)        // #382580
-    static let highlight = rgb(196, 181, 255)    // #C4B5FF
-    static let highlight2 = rgb(138, 110, 255)   // #8A6EFF
-    static let success = rgb(102, 222, 177)      // #66DEB1, a running system
-    static let warning = rgb(249, 217, 73)       // #F9D949
-    static let danger = rgb(235, 80, 141)        // #EB508D
+    static let accent = hex(0xB89CFE)
+    static let accentHover = hex(0xC7B1FF)
+    static let accentLight = hex(0xD6C7FF)       // the main button under the pointer: top
+    static let accentMid = hex(0xC2A9FF)         // and bottom
+    static let accentDark = hex(0xA487F2)        // pressed
+    static let accent2 = hex(0x5E4898)
+    static let onAccent = hex(0x15141A)          // text on the lavender, like Firefox's selected pill
+    static let highlight = hex(0xC7B1FF)
+    static let highlight2 = hex(0xB89CFE)
+    static let success = hex(0x7ED68A)           // a running system
+    static let warning = hex(0xF9D949)
+    static let danger = hex(0xF26D6D)            // red, apart from the lavender accent
 
     static func rgb(_ r: Double, _ g: Double, _ b: Double) -> Color {
         Color(red: r / 255, green: g / 255, blue: b / 255)
     }
 
-    // Blend from highlight (top of the logo) to highlight2 (bottom).
+    static func hex(_ v: Int) -> Color { rgb(Double(v >> 16 & 0xFF), Double(v >> 8 & 0xFF), Double(v & 0xFF)) }
+
+    // Blend from the top of the logo (#D6C7FF) to the bottom (#A487F2).
     static func logoRow(_ t: Double) -> Color {
-        rgb(167 + (138 - 167) * t, 146 + (110 - 146) * t, 255)
+        rgb(214 + (164 - 214) * t, 199 + (135 - 199) * t, 255 + (242 - 255) * t)
     }
 
-    // The serif display font (New York) is for headings: page, section and dialog titles. Everything
-    // else (system names, descriptions, labels, buttons, tabs) is the system's sans-serif font.
+    // Fonts, as in Try Linux for Windows: Prompt for page and dialog titles, Work Sans for section titles,
+    // Noto Sans for everything else (system names, descriptions, labels, buttons, tabs). They're bundled
+    // (Open Font License, Resources/Fonts) and registered at start; without them the system fonts are used.
+    static let fontsLoaded: Bool = {
+        guard let dir = Bundle.main.resourceURL?.appendingPathComponent("Fonts"),
+              let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return false }
+        for f in files where f.pathExtension.lowercased() == "ttf" {
+            CTFontManagerRegisterFontsForURL(f as CFURL, .process, nil)
+        }
+        return NSFont(name: "NotoSans-Regular", size: 12) != nil
+    }()
+
+    private static func custom(_ name: String, _ size: CGFloat) -> Font? {
+        _ = fontsLoaded
+        return NSFont(name: name, size: size) != nil ? .custom(name, fixedSize: size) : nil
+    }
+
+    // Titles of 18 points and up (pages, dialogs, the system's name) are Prompt; smaller ones (section bars
+    // and titles) are Work Sans. Both are a little larger than the serif they replace, so they're drawn smaller.
     static func display(_ size: CGFloat, _ weight: Font.Weight = .semibold) -> Font {
-        .system(size: size, weight: weight, design: .serif)
+        (size >= 18 ? custom("Prompt-SemiBold", size * 0.9) : custom("WorkSans-SemiBold", size * 0.95))
+            ?? .system(size: size, weight: weight, design: .serif)
     }
 
     static func mono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
         .system(size: size, weight: weight, design: .monospaced)
     }
 
+    // Noto Sans runs wider than San Francisco, so it's drawn at 95%.
     static func sans(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
-        .system(size: size, weight: weight)
+        let bold = weight == .semibold || weight == .bold || weight == .medium || weight == .heavy
+        return custom(bold ? "NotoSans-SemiBold" : "NotoSans-Regular", size * 0.95) ?? .system(size: size, weight: weight)
+    }
+
+    // The same font as sans(), for measuring text (button widths).
+    static func nsSans(_ size: CGFloat, bold: Bool) -> NSFont {
+        _ = fontsLoaded
+        return NSFont(name: bold ? "NotoSans-SemiBold" : "NotoSans-Regular", size: size * 0.95)
+            ?? .systemFont(ofSize: size, weight: bold ? .semibold : .regular)
     }
 }
 
@@ -63,7 +98,7 @@ struct BoxStyle: ViewModifier {
 }
 
 // A shaded surface: lighter at the top than the bottom, with a border. Selected (or open) surfaces get
-// the accent border and a soft purple glow just inside their edge.
+// the accent border (no glow inside it).
 struct Surface: ViewModifier {
     var selected = false
     var hover = false
@@ -73,7 +108,6 @@ struct Surface: ViewModifier {
             : hover ? [Theme.hoverTop, Theme.hoverBottom] : [Theme.cardTop, Theme.cardBottom]
         return content
             .background(LinearGradient(colors: colors, startPoint: .top, endPoint: .bottom))
-            .overlay(Rectangle().stroke(Theme.accent.opacity(selected ? 0.55 : 0), lineWidth: 8).blur(radius: 6).clipped())
             .overlay(Rectangle().stroke(selected ? Theme.accent : Theme.border, lineWidth: selected ? 1.5 : 1))
     }
 }
@@ -143,13 +177,14 @@ private struct FlatButtonBody: View {
     @State private var hover = false
 
     var body: some View {
-        // The main button is a purple gradient, lighter on hover and darker while pressed; the others are shaded surfaces.
+        // The main button is a lavender gradient with dark text, lighter on hover and darker while pressed;
+        // the others are shaded surfaces.
         let fill: [Color] = primary
-            ? (configuration.isPressed ? [Theme.accent, Theme.accent2] : (hover ? [Theme.highlight, Theme.accentHover] : [Theme.accentHover, Theme.accent]))
+            ? (configuration.isPressed ? [Theme.accent, Theme.accentDark] : (hover ? [Theme.accentLight, Theme.accentMid] : [Theme.accentHover, Theme.accent]))
             : (configuration.isPressed || hover ? [Theme.hoverTop, Theme.hoverBottom] : [Theme.cardTop, Theme.cardBottom])
         configuration.label
             .font(Theme.sans(13, .semibold))
-            .foregroundColor(primary ? .white : (danger ? Theme.danger : (accent ? Theme.highlight : Theme.text)))
+            .foregroundColor(primary ? Theme.onAccent : (danger ? Theme.danger : (accent ? Theme.highlight : Theme.text)))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(LinearGradient(colors: fill, startPoint: .top, endPoint: .bottom))
             .overlay(Rectangle().stroke(primary ? Theme.accent : accent ? Theme.highlight : (danger ? Theme.danger : Theme.border), lineWidth: 1))
@@ -439,20 +474,34 @@ struct SubHeading: View {
     }
 }
 
+// The section last opened in Settings, the only one highlighted (several can be open at once, like a
+// multiselectable accordion). Nil highlights every open section.
+private struct LitSectionKey: EnvironmentKey { static let defaultValue: String? = nil }
+extension EnvironmentValues {
+    var litSection: String? {
+        get { self[LitSectionKey.self] }
+        set { self[LitSectionKey.self] = newValue }
+    }
+}
+
 // A settings section: a bar that opens and closes it. A closed bar shows a summary of its settings on
-// the right. Every word of its title starts with a capital letter ("Camera And USB").
+// the right. Every word of its title starts with a capital letter ("Camera And USB"). An open bar that
+// isn't the one last opened looks like a closed one, with its chevron pointing down.
 struct SectionBar<Content: View>: View {
     let title: String
     var summary = ""
     @Binding var open: Bool
     @ViewBuilder let content: () -> Content
     @State private var hover = false
+    @Environment(\.litSection) private var litSection
+
+    private var lit: Bool { open && (litSection == nil || litSection == title) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Button { open.toggle() } label: {
                 HStack(spacing: 0) {
-                    Text(titleCase(title)).font(Theme.display(15)).foregroundColor(open ? Theme.highlight : Theme.text)
+                    Text(titleCase(title)).font(Theme.display(15)).foregroundColor(lit ? Theme.highlight : Theme.text)
                         .lineLimit(1).fixedSize()
                     Spacer(minLength: 24)
                     if !open {
@@ -464,7 +513,7 @@ struct SectionBar<Content: View>: View {
                 }
                 .padding(.horizontal, 14)
                 .frame(height: 42)
-                .surface(selected: open, hover: hover)
+                .surface(selected: lit, hover: hover)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -498,7 +547,7 @@ struct ActionRow: View {
 
     // A button width that fits the longest of `titles`, with a little room each side.
     static func width(_ titles: [String]) -> CGFloat {
-        let font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        let font = Theme.nsSans(13, bold: true)
         let widest = titles.map { (titleCase($0) as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
         return max(80, ceil(widest) + 32)
     }

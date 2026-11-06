@@ -13,6 +13,8 @@ rm -rf build
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/TryLinux"
 sed "s/__VERSION__/$VERSION/g" Resources/Info.plist > "$APP/Contents/Info.plist"
+# The interface fonts (Open Font License, see Resources/Fonts), registered by the app when it starts.
+cp -R Resources/Fonts "$APP/Contents/Resources/Fonts"
 
 "$APP/Contents/MacOS/TryLinux" --write-iconset build/AppIcon.iconset
 iconutil -c icns build/AppIcon.iconset -o "$APP/Contents/Resources/AppIcon.icns"

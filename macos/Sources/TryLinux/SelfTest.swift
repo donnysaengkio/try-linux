@@ -57,6 +57,40 @@ enum SelfTest {
         } catch {
             lines.append("vm configuration\tERROR\t\(error.localizedDescription)")
         }
+        // Create > Allocate the full size now: the whole size is taken on the drive; without it, almost nothing.
+        do {
+            let full = storage.appendingPathComponent("full-test.img"), sparse = storage.appendingPathComponent("sparse-test.img")
+            try Disk.create(full, gb: 1, full: true)
+            try Disk.create(sparse, gb: 1)
+            let a = Disk.allocated(full), b = Disk.allocated(sparse)
+            lines.append("disk allocation\t\(a >= 1 << 30 && b < 1 << 20 ? "ok" : "FAIL")\tfull \(a >> 20) MB, sparse \(b >> 20) MB of 1024 MB")
+            try? FileManager.default.removeItem(at: full)
+            try? FileManager.default.removeItem(at: sparse)
+        } catch {
+            lines.append("disk allocation\tERROR\t\(error.localizedDescription)")
+        }
+        // Import: a Try Linux system's disk brings its name, description and resources along.
+        do {
+            var src = VMConfig(id: "dev-box", displayName: "Dev Box")
+            src.location = storage.appendingPathComponent("elsewhere").path
+            src.description = "Docker and VS Code"
+            src.profile = 2; src.ramGB = 6; src.cores = 4
+            try Disk.create(src.diskURL, gb: 8)
+            try src.save()
+            let s = DiskSource.read(src.diskURL)
+            let ok = s.name == "Dev Box" && s.description == "Docker and VS Code" && s.ramGB == 6 && s.cores == 4 && s.size == 8 << 30
+            lines.append("disk source\t\(ok ? "ok" : "FAIL")\t\(s.name) | \(s.summary)")
+            // A system in a location of its own is listed once it's remembered, and not after it's forgotten.
+            let before = VMConfig.all().contains { $0.id == "dev-box" }
+            src.remember()
+            let listed = VMConfig.all().first { $0.id == "dev-box" }
+            src.forget()
+            let after = VMConfig.all().contains { $0.id == "dev-box" }
+            lines.append("own location\t\(!before && listed?.dir.path == src.dir.path && !after ? "ok" : "FAIL")\t\(listed?.dir.path ?? "not listed")")
+            try? FileManager.default.removeItem(at: src.dir)
+        } catch {
+            lines.append("disk source\tERROR\t\(error.localizedDescription)")
+        }
         do {
             try Snapshots.take(c)
             lines.append("snapshot\t\(Snapshots.list(c).count) taken")
@@ -203,7 +237,11 @@ enum SelfTest {
         snap("home-window-closed", HomeView())
         model.previewStatus = [:]
         snap("choose", ChooseView())
-        snap("setup", SetupView(plan: InstallPlan(distro: Distro.catalog[0], label: "Fedora Workstation")))
+        let fedoraPlan = InstallPlan(distro: Distro.catalog[0], label: "Fedora Workstation")
+        snap("setup", SetupView(plan: fedoraPlan, step: 1))          // Create > Resources, as in the README
+        snap("create-general", SetupView(plan: fedoraPlan, step: 0))
+        snap("create-summary", SetupView(plan: fedoraPlan, step: 2))
+        snap("own-installer", OwnInstallerPage(last: nil))
         model.progress = ProgressState(status: "Downloading Fedora-Workstation-Live-45-1.4.aarch64.iso", value: 0.42,
                                        detail: "1.17 GB of 2.78 GB  ·  24.8 MB/s  ·  2 min left", cancellable: true)
         ProgressScreen.fixedTip = 0
@@ -221,9 +259,10 @@ enum SelfTest {
         c.cd = "/Users/you/Downloads/virtio-drivers.iso"
         for (name, tab, open) in tabs {
             SettingsView.opened = open
+            SettingsView.lastOpened = open.sorted().first
             snap(name, SettingsView(config: c, tab: tab), height: name == "settings-disks" ? 900 : 760)
         }
-        SettingsView.opened = []
+        SettingsView.reset()
         c.cd = ""
 
         func dialog<V: View>(_ name: String, _ view: V) {
@@ -272,7 +311,6 @@ enum SelfTest {
             after: "You can download them again later.", primary: "Delete", secondary: "Cancel", danger: true, pick: { _ in }))
         dialog("console-ask", DialogView(title: "\(sys) isn't running", text: "Would you like to power it on?",
             path: nil, after: nil, primary: "Power on", secondary: "Cancel", danger: false, pick: { _ in }))
-        dialog("own-installer", OwnInstallerView(done: { _ in }))
         dialog("resize-disk", DiskSizeView(name: "Disk 1", capacity: 64 << 30, used: 17 << 30, done: { _ in }))
         dialog("add-disk", AddDiskView(done: { _ in }))
         Icons.writeIconset(to: dir.appendingPathComponent("AppIcon.iconset"))

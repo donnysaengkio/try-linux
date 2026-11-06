@@ -51,6 +51,11 @@ struct VMConfig: Codable, Identifiable, Equatable {
     var extraDisks: [String] = []
     var cd = ""                     // ISO in the CD/DVD drive; empty when the drive is empty
     var netType = 0                 // 0 shared with this Mac (NAT), 1 no network
+    var description = ""            // the user's notes about this system (may be several lines)
+    var diskFull = false            // Disk 1 was made with its full size allocated (not sparse)
+    // The folder that holds this system's folder when it isn't the storage folder (Create > Location);
+    // set from where it's found, not saved.
+    var location = ""
 
     static let profileNames = ["Balanced", "Maximum", "Manual"]
     static let netTypeNames = ["Shared with this Mac (NAT)", "No network"]
@@ -87,9 +92,17 @@ struct VMConfig: Codable, Identifiable, Equatable {
         extraDisks = get(.extraDisks, [String]())
         cd = get(.cd, "")
         netType = min(1, max(0, get(.netType, 0)))
+        description = get(.description, "")
+        diskFull = get(.diskFull, false)
     }
 
-    var dir: URL { Paths.vms.appendingPathComponent(id, isDirectory: true) }
+    private enum CodingKeys: String, CodingKey {
+        case id, displayName, distroId, iso, pendingInstall, profile, ramGB, cores, diskGB, width, height, fullscreen,
+             sharedFolder, sharedWrite, sound, mic, clipboard, rosetta, lastBoot, macAddress, extraDisks, cd, netType,
+             description, diskFull
+    }
+
+    var dir: URL { (location.isEmpty ? Paths.vms : URL(fileURLWithPath: location, isDirectory: true)).appendingPathComponent(id, isDirectory: true) }
     var diskURL: URL { dir.appendingPathComponent("disk.img") }
 
     func diskFile(_ entry: String) -> URL { entry.hasPrefix("/") ? URL(fileURLWithPath: entry) : dir.appendingPathComponent(entry) }
@@ -112,8 +125,20 @@ struct VMConfig: Codable, Identifiable, Equatable {
               var c = try? JSONDecoder().decode(VMConfig.self, from: data) else { return nil }
         c.id = dir.lastPathComponent
         if c.displayName.isEmpty { c.displayName = c.id }
+        let parent = dir.deletingLastPathComponent().standardizedFileURL
+        c.location = parent.path == Paths.vms.standardizedFileURL.path ? "" : parent.path
         return c
     }
+
+    // Folders of systems made outside the storage folder (Create > Location), so Virtual Machines finds them.
+    static var otherDirs: [String] {
+        get { UserDefaults.standard.stringArray(forKey: "vmDirs") ?? [] }
+        set { UserDefaults.standard.set(newValue, forKey: "vmDirs") }
+    }
+
+    // Remembers a system that isn't in the storage folder; forget() is for when it's deleted.
+    func remember() { if !location.isEmpty, !Self.otherDirs.contains(dir.path) { Self.otherDirs.append(dir.path) } }
+    func forget() { Self.otherDirs.removeAll { $0 == dir.path } }
 
     func save() throws {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -123,7 +148,11 @@ struct VMConfig: Codable, Identifiable, Equatable {
     }
 
     static func all() -> [VMConfig] {
-        let dirs = (try? FileManager.default.contentsOfDirectory(at: Paths.vms, includingPropertiesForKeys: nil)) ?? []
+        var dirs = (try? FileManager.default.contentsOfDirectory(at: Paths.vms, includingPropertiesForKeys: nil)) ?? []
+        // Then those in a location of their own (a drive that isn't connected just leaves them out).
+        for p in otherDirs where !dirs.contains(where: { $0.standardizedFileURL.path == URL(fileURLWithPath: p).standardizedFileURL.path }) {
+            dirs.append(URL(fileURLWithPath: p, isDirectory: true))
+        }
         return dirs.compactMap { d in
             guard let c = load(d), FileManager.default.fileExists(atPath: c.diskURL.path) else { return nil }
             return c
@@ -160,25 +189,54 @@ struct VMConfig: Codable, Identifiable, Equatable {
         return (c, r)
     }
 
-    static func uniqueId(_ seed: String) -> String {
+    // The folder name for a new system, from its name: unique among your systems and in `parent` (the
+    // storage folder unless it has a location of its own).
+    static func uniqueId(_ seed: String, in parent: URL = Paths.vms) -> String {
         var base = seed.lowercased().replacingOccurrences(of: "[^a-z0-9_-]+", with: "-", options: .regularExpression)
             .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
         if base.isEmpty { base = "linux" }
         if base.count > 32 { base = String(base.prefix(32)) }
+        let taken = Set(all().map(\.id))
         var n = base, i = 2
-        while FileManager.default.fileExists(atPath: Paths.vms.appendingPathComponent(n).path) { n = "\(base)-\(i)"; i += 1 }
+        while taken.contains(n) || FileManager.default.fileExists(atPath: parent.appendingPathComponent(n).path) { n = "\(base)-\(i)"; i += 1 }
         return n
     }
 }
 
 enum Disk {
-    // Raw disk images are sparse on APFS, so a 64 GB disk only uses what Linux writes.
-    static func create(_ url: URL, gb: Int) throws {
+    // Raw disk images are sparse on APFS, so a 64 GB disk only uses what Linux writes. With `full`, the whole
+    // size is allocated on the drive now (F_PREALLOCATE) instead.
+    static func create(_ url: URL, gb: Int, full: Bool = false) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         guard FileManager.default.createFile(atPath: url.path, contents: nil) else { throw AppError("Couldn't create the virtual disk.") }
         let h = try FileHandle(forWritingTo: url)
-        try h.truncate(atOffset: UInt64(gb) << 30)
+        let size = UInt64(gb) << 30
+        if full {
+            var store = fstore_t(fst_flags: UInt32(F_ALLOCATEALL), fst_posmode: F_PEOFPOSMODE, fst_offset: 0,
+                                 fst_length: off_t(size), fst_bytesalloc: 0)
+            if fcntl(h.fileDescriptor, F_PREALLOCATE, &store) == -1 {
+                try? h.close()
+                try? FileManager.default.removeItem(at: url)
+                throw AppError("Couldn't allocate \(gb) GB for the virtual disk. Check that the drive has room, or untick \"Allocate the full size now\".")
+            }
+        }
+        try h.truncate(atOffset: size)
         try h.close()
+    }
+
+    // How much of the drive a file takes now (its allocated blocks), for checking a full allocation.
+    static func allocated(_ url: URL) -> Int64 {
+        var st = stat()
+        return stat(url.path, &st) == 0 ? Int64(st.st_blocks) * 512 : -1
+    }
+
+    // Free space on the drive that holds `folder` (the nearest folder that exists), and the drive's name.
+    static func free(_ folder: URL) -> (bytes: Int64, volume: String)? {
+        var u = folder
+        while !FileManager.default.fileExists(atPath: u.path), u.pathComponents.count > 1 { u.deleteLastPathComponent() }
+        guard let v = try? u.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey, .volumeNameKey]),
+              let bytes = v.volumeAvailableCapacityForImportantUsage else { return nil }
+        return (bytes, v.volumeName ?? "this Mac")
     }
 
     // Grows the disk to `gb`; never shrinks it.
@@ -314,5 +372,36 @@ enum Backups {
         }
         try c.save()
         return c
+    }
+}
+
+// What an existing disk image tells about itself: its size, and the settings of the Try Linux system it
+// came from when it sits in one (a system's folder holds config.json beside disk.img).
+struct DiskSource: Equatable {
+    var size: Int64 = -1
+    var name = "", description = "", from = ""
+    var ramGB = 0, cores = 0
+
+    static func read(_ disk: URL) -> DiskSource {
+        var s = DiskSource()
+        s.size = (try? disk.resourceValues(forKeys: [.fileSizeKey]).fileSize).map { Int64($0) } ?? -1
+        let folder = disk.deletingLastPathComponent()
+        if disk.lastPathComponent == "disk.img", let c = VMConfig.load(folder) {
+            s.name = c.displayName
+            s.description = c.description
+            let r = c.resources()
+            s.ramGB = r.ramGB
+            s.cores = r.cores
+            s.from = "Try Linux"
+        }
+        return s
+    }
+
+    // One line for Use Your Own Installer, e.g. "64 GB  ·  settings from Try Linux: 8 GB, 4 cores".
+    var summary: String {
+        var parts: [String] = []
+        if size > 0 { parts.append(String(format: "%.0f GB", Double(size) / 1_073_741_824)) }
+        parts.append(from.isEmpty ? "no saved settings found beside it" : "settings from \(from): \(ramGB) GB, \(cores) \(cores == 1 ? "core" : "cores")")
+        return parts.joined(separator: "  ·  ")
     }
 }

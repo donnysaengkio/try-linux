@@ -18,7 +18,8 @@ struct RootView: View {
             switch model.screen {
             case .home: HomeView()
             case .choose: ChooseView()
-            case .setup(let plan): SetupView(plan: plan)
+            case .own(let last): OwnInstallerPage(last: last)
+            case .setup(let plan): SetupView(plan: plan).id(plan.disk?.path ?? plan.localISO?.path ?? plan.url?.absoluteString ?? plan.label)
             case .progress: ProgressScreen()
             case .settings(let id):
                 if let c = model.systems.first(where: { $0.id == id }) { SettingsView(config: c).id(c.id) } else { HomeView() }
@@ -160,7 +161,7 @@ struct HomeView: View {
             // Four equal buttons across the 640-wide column, 12 apart.
             HStack(spacing: 12) {
                 Button("Create") { model.screen = .choose }.buttonStyle(FlatButton()).frame(width: 151, height: 42)
-                Button("Settings") { if let c = current { model.screen = .settings(c.id) } }.buttonStyle(FlatButton()).frame(width: 151, height: 42)
+                Button("Settings") { if let c = current { SettingsView.reset(); model.screen = .settings(c.id) } }   // every section starts closed.buttonStyle(FlatButton()).frame(width: 151, height: 42)
                 // Console opens the system's window; for a system that's off, the window opens with it still off.
                 Button("Console") { if let c = current { model.openConsole(c) } }.buttonStyle(FlatButton()).frame(width: 151, height: 42)
                 if let c = current, model.isOn(c) {
@@ -260,7 +261,7 @@ struct ChooseView: View {
             }
             .modifier(BoxStyle())
             .padding(.top, 24)
-            OptionRow(title: "Use your own installer", subtitle: "An .iso file already on this Mac, or a URL link to download one",
+            OptionRow(title: "Use Your Own Installer", subtitle: "An existing disk image to import, an .iso file on this Mac, or a URL link to one",
                       selected: selected == -1, twoLine: true)
                 .onTapGesture(count: 2) { selected = -1; next() }
                 .onTapGesture { selected = -1 }
@@ -279,83 +280,108 @@ struct ChooseView: View {
     }
 
     private func next() {
-        if selected == -1 {
-            if let plan = OwnInstallerDialog.ask() { model.screen = .setup(plan) }
-            return
-        }
+        if selected == -1 { model.screen = .own(nil); return }
         let d = Distro.catalog[selected]
         model.screen = .setup(InstallPlan(distro: d, label: d.name))
     }
 }
 
-// "Use your own installer": choose an ISO file on this Mac, or paste a URL link, in one dialog.
-// Choosing a file clears the link and typing a link clears the file, so Save uses whichever is set.
-enum OwnInstallerDialog {
-    @MainActor
-    static func ask() -> InstallPlan? {
-        var plan: InstallPlan?
-        ThemedDialog.present { close in
-            OwnInstallerView { result in plan = result; close() }
+// "OR", centred on a divider line across the column.
+struct OrDivider: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            Rectangle().fill(Theme.border).frame(height: 1)
+            Text("OR").font(Theme.sans(11)).foregroundColor(Theme.muted)
+            Rectangle().fill(Theme.border).frame(height: 1)
         }
-        return plan
+        .padding(.vertical, 12)
     }
 }
 
-struct OwnInstallerView: View {
-    let done: (InstallPlan?) -> Void
+// Use Your Own Installer, a Create page before General: an existing disk image to import, an ISO file on
+// this Mac, or a URL link. Choosing one clears the others. `last` is what was chosen before, coming Back.
+struct OwnInstallerPage: View {
+    @EnvironmentObject var model: AppModel
+    var last: InstallPlan?
+    @State private var disk: URL?
+    @State private var source: DiskSource?
     @State private var iso: URL?
     @State private var link = ""
     @State private var error: String?
 
+    // Both buttons as wide as the longer label needs, so they line up without much space around the text.
+    private let buttonW = ActionRow.width(["Choose A Disk File", "Choose An ISO File"])
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: 16) {
-                Image(nsImage: Icons.image(size: 40)).resizable().frame(width: 40, height: 40)
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("Use your own installer").font(Theme.display(18)).foregroundColor(Theme.text)
-                    Text("An ISO file on this Mac").font(Theme.sans(13, .semibold)).foregroundColor(Theme.text).padding(.top, 14)
-                    Button("Choose An ISO File…") { choose() }.buttonStyle(FlatButton()).frame(width: 200, height: 32).padding(.top, 8)
-                    Text(iso?.lastPathComponent ?? "No file chosen").font(Theme.sans(11.5))
-                        .foregroundColor(iso == nil ? Theme.muted : Theme.highlight).padding(.top, 6)
-                    // "OR", centred on a divider line.
-                    HStack(spacing: 10) {
-                        Rectangle().fill(Theme.border).frame(height: 1)
-                        Text("OR").font(Theme.sans(11)).foregroundColor(Theme.muted)
-                        Rectangle().fill(Theme.border).frame(height: 1)
-                    }
-                    .padding(.vertical, 14)
-                    Text("URL Link").font(Theme.sans(13, .semibold)).foregroundColor(Theme.text)
-                    TextInput(text: $link, placeholder: "https://… (address of an .iso file)").padding(.top, 8)
-                        .onChange(of: link) { v in if !v.isEmpty { iso = nil; error = nil } }
-                    Text(error ?? "Paste the address of an ARM64 (aarch64) .iso file.").font(Theme.sans(11.5))
-                        .foregroundColor(error == nil ? Theme.muted : Theme.danger).padding(.top, 6)
+        Page {
+            Heading(text: "Use Your Own Installer", centered: true).padding(.top, 20)
+            VStack(alignment: .leading, spacing: 0) {
+                // A disk that already has Linux installed (from Try Linux, or another raw disk image).
+                Text("An Existing Virtual Disk").font(Theme.display(15)).foregroundColor(Theme.text)
+                HStack(spacing: 14) {
+                    Button("Choose A Disk File") { chooseDisk() }.buttonStyle(FlatButton()).frame(width: buttonW, height: 32)
+                    Text(disk?.lastPathComponent ?? "No disk chosen").font(Theme.sans(13))
+                        .foregroundColor(disk == nil ? Theme.muted : Theme.highlight).lineLimit(1).truncationMode(.middle)
                 }
+                .padding(.top, 8)
+                Note(text: disk != nil ? (source?.summary ?? "") : "A raw disk image (.img or .raw). It's copied; the original isn't changed.")
+                    .padding(.top, 6)
+                OrDivider()
+                Text("An ISO File On This Mac").font(Theme.display(15)).foregroundColor(Theme.text)
+                HStack(spacing: 14) {
+                    Button("Choose An ISO File") { chooseISO() }.buttonStyle(FlatButton()).frame(width: buttonW, height: 32)
+                    Text(iso?.lastPathComponent ?? "No file chosen").font(Theme.sans(13))
+                        .foregroundColor(iso == nil ? Theme.muted : Theme.highlight).lineLimit(1).truncationMode(.middle)
+                }
+                .padding(.top, 8)
+                OrDivider()
+                Text("URL Link").font(Theme.display(15)).foregroundColor(Theme.text)
+                TextInput(text: $link, placeholder: "https://… (address of an .iso file)").padding(.top, 8)
+                    .onChange(of: link) { v in if !v.isEmpty { iso = nil; disk = nil; source = nil; error = nil } }
+                Text(error ?? "Paste the address of an ARM64 (aarch64) .iso file.").font(Theme.sans(11.5))
+                    .foregroundColor(error == nil ? Theme.muted : Theme.danger).padding(.top, 6)
             }
-            HStack(spacing: 10) {
+            .padding(.top, 24)
+            HStack {
+                Button("Back") { model.screen = .choose }.buttonStyle(FlatButton()).frame(width: 120, height: 42)
                 Spacer()
-                Button("Cancel") { done(nil) }.buttonStyle(FlatButton()).frame(width: 150, height: 36)
-                    .keyboardShortcut(.cancelAction)
-                Button("Save") { save() }.buttonStyle(FlatButton(primary: true)).frame(width: 150, height: 36)
+                Button("Next") { next() }.buttonStyle(FlatButton(primary: true)).frame(width: 140, height: 42)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(iso == nil && link.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(disk == nil && iso == nil && link.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            .padding(.top, 22)
+            .padding(.top, 24)
         }
-        .padding(24)
-        .frame(width: 520)
-        .background(Theme.bg)
+        .onAppear {
+            guard let last else { return }
+            disk = last.disk; source = last.source; iso = last.localISO; link = last.url?.absoluteString ?? ""
+        }
     }
 
-    private func choose() {
-        guard let url = Ask.file("Choose a Linux installer (ARM64 / aarch64)") else { return }
-        iso = url
+    private func chooseDisk() {
+        guard let url = Ask.file("Choose a disk image to import (.img or .raw)", iso: false) else { return }
+        disk = url
+        source = DiskSource.read(url)
+        iso = nil
         link = ""
         error = nil
     }
 
-    private func save() {
+    private func chooseISO() {
+        guard let url = Ask.file("Choose a Linux installer (ARM64 / aarch64)") else { return }
+        iso = url
+        disk = nil
+        source = nil
+        link = ""
+        error = nil
+    }
+
+    private func next() {
+        if let disk {
+            model.screen = .setup(InstallPlan(label: disk.deletingPathExtension().lastPathComponent, disk: disk, source: source, own: true))
+            return
+        }
         if let iso {
-            done(InstallPlan(localISO: iso, label: iso.deletingPathExtension().lastPathComponent))
+            model.screen = .setup(InstallPlan(localISO: iso, label: iso.deletingPathExtension().lastPathComponent, own: true))
             return
         }
         let s = link.trimmingCharacters(in: .whitespaces)
@@ -363,7 +389,7 @@ struct OwnInstallerView: View {
             error = "That isn't a web address. It should start with https://"
             return
         }
-        done(InstallPlan(url: url, label: url.deletingPathExtension().lastPathComponent))
+        model.screen = .setup(InstallPlan(url: url, label: url.deletingPathExtension().lastPathComponent, own: true))
     }
 }
 
@@ -422,79 +448,239 @@ struct ResourcePicker: View {
     }
 }
 
+// Create, in three steps after choosing what to install: General (name, description, location),
+// Resources (profile, memory, cores, disk size) and Summary. Back and Next keep what was entered.
 struct SetupView: View {
     @EnvironmentObject var model: AppModel
     let plan: InstallPlan
+    @State var step = 0                 // 0 General, 1 Resources, 2 Summary
     @State private var name = ""
+    @State private var notes = ""
+    @State private var ownLocation = false
+    @State private var location = ""
     @State private var profile = 0
     @State private var ramGB = 8
     @State private var cores = max(2, VMConfig.hostCores / 2)
     @State private var diskGB = 64
-    @State private var storage = Paths.display(Paths.root)
+    @State private var diskFull = false
+    @State private var started = false
+
+    private var parent: URL { ownLocation && !location.isEmpty ? URL(fileURLWithPath: location, isDirectory: true) : Paths.vms }
 
     var body: some View {
         Page {
-            VStack(alignment: .leading, spacing: 14) {
-                // The name the system gets, shown on Virtual Machines.
-                FormRow(label: "Name") { TextInput(text: $name).frame(width: 250) }
-                ResourcePicker(profile: $profile, ramGB: $ramGB, cores: $cores)
-                FormRow(label: "Disk size (GB)") {
-                    SizeField(value: $diskGB, presets: Sizes.disk, range: 16...2048)
+            Heading(text: ["General", "Resources", "Summary"][step], centered: true).padding(.top, 20)
+            Group {
+                switch step {
+                case 1: resources
+                case 2: summary
+                default: general
                 }
-                FormRow(label: "Storage") {
-                    Text(storage).font(Theme.sans(11.5)).foregroundColor(Theme.muted).lineLimit(1).truncationMode(.middle)
-                    if model.systems.isEmpty {
-                        Button("Change") { changeStorage() }.buttonStyle(FlatButton()).frame(width: 100, height: 28)
-                    }
-                }
-                Note(text: "The installer only sees a virtual disk, a file on your Mac. Your Mac's drive is never touched.")
-                    .padding(.top, 8)
             }
             .padding(.top, 28)
             HStack {
-                Button("Back") { model.screen = .choose }.buttonStyle(FlatButton()).frame(width: 120, height: 42)
+                Button("Back") { back() }.buttonStyle(FlatButton()).frame(width: 120, height: 42)
                 Spacer()
-                Button("Install") { install() }.buttonStyle(FlatButton(primary: true)).frame(width: 140, height: 42)
+                Button(step < 2 ? "Next" : plan.disk != nil ? "Import" : "Install") { next() }
+                    .buttonStyle(FlatButton(primary: true)).frame(width: 140, height: 42)
                     .keyboardShortcut(.defaultAction)
             }
             .padding(.top, 30)
         }
-        .onAppear {
-            if name.isEmpty {
-                // The distribution's name, with " 2" and up if a system already has it.
-                let base = plan.distro?.name ?? plan.label
-                var n = base, i = 2
-                while model.systems.contains(where: { $0.displayName.caseInsensitiveCompare(n) == .orderedSame }) { n = "\(base) \(i)"; i += 1 }
-                name = n
+        .onAppear { start() }
+    }
+
+    // MARK: General
+
+    private var general: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            FormRow(label: "Name") { TextInput(text: $name) }
+            HStack(alignment: .top, spacing: 10) {
+                Text("Description").font(Theme.sans(13)).foregroundColor(Theme.text).frame(width: 180, alignment: .leading).padding(.top, 4)
+                VStack(alignment: .leading, spacing: 4) {
+                    NotesInput(text: $notes).frame(height: 76)
+                    Note(text: "(Optional): Shown in Settings > General > Info.").padding(.leading, 8)
+                }
             }
-            diskGB = plan.distro?.diskGB ?? 64
+            // The default is the storage folder; a different one is used only while the box is ticked.
+            FormRow(label: "Location") {
+                Text(ownLocation ? (location.isEmpty ? "Choose a folder" : Paths.display(URL(fileURLWithPath: location))) : Paths.display(Paths.vms))
+                    .font(Theme.sans(13)).foregroundColor(ownLocation ? Theme.text : Theme.muted)
+                    .lineLimit(1).truncationMode(.middle)
+                    .padding(.horizontal, 8).frame(maxWidth: .infinity, minHeight: 26, alignment: .leading)
+                    .background(ownLocation ? Theme.card : Theme.bg).overlay(Rectangle().stroke(Theme.border, lineWidth: 1))
+                Button("Browse") { browse() }.buttonStyle(FlatButton()).frame(width: 100, height: 28).disabled(!ownLocation)
+            }
+            FormRow(label: "") { CheckRow(title: "Choose a different location", on: $ownLocation) }
+            FormRow(label: "") {
+                Note(text: ownLocation ? "Try Linux makes a folder for this system inside it." : "The default: where Try Linux keeps its systems.")
+            }
         }
     }
 
-    private func changeStorage() {
-        guard let url = Ask.folder("Where should Try Linux keep its systems and downloads?") else { return }
-        let path = url.appendingPathComponent("TryLinux", isDirectory: true).path
-        UserDefaults.standard.set(path, forKey: "storage")
-        storage = Paths.display(Paths.root)
+    private func browse() {
+        if let url = Ask.folder("Where should Try Linux keep this system?") { location = url.path }
     }
 
-    private func install() {
+    // MARK: Resources
+
+    private var freeLine: String {
+        guard let f = Disk.free(parent) else { return "" }
+        return "up to \(f.bytes >> 30) GB free on \(f.volume)"
+    }
+
+    private var resources: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ResourcePicker(profile: $profile, ramGB: $ramGB, cores: $cores)
+            if let src = plan.disk {
+                FormRow(label: "Disk") {
+                    Text(src.lastPathComponent + (plan.source.map { $0.size > 0 ? "  ·  \($0.size >> 30) GB" : "" } ?? ""))
+                        .font(Theme.sans(13)).foregroundColor(Theme.text).lineLimit(1).truncationMode(.middle)
+                }
+                FormRow(label: "") { Note(text: "Keeps its own size  ·  " + freeLine) }
+            } else {
+                FormRow(label: "Disk size (GB)") {
+                    // The size is fixed while it's to be allocated in full; untick to change it.
+                    SizeField(value: $diskGB, presets: Sizes.disk, range: 16...2048).disabled(diskFull)
+                    Text(freeLine).font(Theme.sans(11.5)).foregroundColor(Theme.muted)
+                }
+                FormRow(label: "") { CheckRow(title: "Allocate the full size now", on: $diskFull) }
+            }
+        }
+    }
+
+    // MARK: Summary
+
+    private var summary: some View {
+        let r = probe.resources()
+        let id = VMConfig.uniqueId(name.trimmingCharacters(in: .whitespaces), in: parent)
+        let first = notes.split(separator: "\n", omittingEmptySubsequences: false).first.map(String.init) ?? ""
+        let source: String = plan.disk.map { "Import " + Paths.display($0) }
+            ?? plan.localISO.map { Paths.display($0) }
+            ?? plan.url.map { "Download " + $0.absoluteString }
+            ?? "Download from \(URL(string: plan.distro?.base ?? "")?.host ?? "the official site"), checksum verified"
+        let disk = plan.disk != nil
+            ? (plan.source.map { $0.size > 0 ? "\($0.size >> 30) GB" : "As imported" } ?? "As imported") + " (Dynamic)"
+            : "\(diskGB) GB" + (diskFull ? " (Preallocated)" : " (Dynamic)")
+        let rows: [(String, String)] = [
+            ("Name", name.trimmingCharacters(in: .whitespaces)),
+            ("Description", notes.isEmpty ? "None" : first + (notes.contains("\n") ? " …" : "")),
+            ("Operating system", plan.distro?.name ?? (plan.disk != nil ? "From the imported disk" : plan.label)),
+            (plan.disk != nil ? "Disk" : "Installer", source),
+            ("Location", Paths.display(parent.appendingPathComponent(id))),
+            ("Resource profile", VMConfig.profileNames[min(2, max(0, profile))]),
+            ("Memory", "\(r.ramGB) GB"),
+            ("CPU cores", "\(r.cores)"),
+            ("Disk size", disk),
+        ]
+        // The details in a bordered box, like the lists on Choose a Linux OS.
+        return VStack(alignment: .leading, spacing: 0) {
+            ForEach(rows.indices, id: \.self) { i in
+                HStack(spacing: 10) {
+                    Text(rows[i].0).font(Theme.sans(13)).foregroundColor(Theme.muted).frame(width: 170, alignment: .leading)
+                    Text(rows[i].1).font(Theme.sans(13)).foregroundColor(Theme.text).lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: 0)
+                }
+                .frame(height: 28)
+            }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 10)
+        .background(Theme.box)
+        .overlay(Rectangle().stroke(Theme.border, lineWidth: 1))
+    }
+
+    private var probe: VMConfig {
+        var p = VMConfig(id: "", displayName: "")
+        p.profile = profile
+        p.ramGB = ramGB
+        p.cores = cores
+        return p
+    }
+
+    // MARK: steps
+
+    private func start() {
+        guard !started else { return }
+        started = true
+        // A disk's own settings (beside it, from Try Linux) fill in what they can.
+        let src = plan.source
+        let base = (src?.name.isEmpty == false ? src!.name : nil) ?? plan.distro?.name ?? plan.label
+        // The distribution's name, with " 2" and up if a system already has it.
+        var n = base, i = 2
+        while model.systems.contains(where: { $0.displayName.caseInsensitiveCompare(n) == .orderedSame }) { n = "\(base) \(i)"; i += 1 }
+        name = n
+        if let src {
+            notes = src.description
+            if src.ramGB > 0 || src.cores > 0 {
+                profile = 2   // Manual, starting from the disk's own memory and cores
+                if src.ramGB > 0 { ramGB = min(VMConfig.maxRamGB, max(2, src.ramGB)) }
+                if src.cores > 0 { cores = min(VMConfig.maxCores, max(1, src.cores)) }
+            }
+        }
+        diskGB = plan.distro?.diskGB ?? 64
+    }
+
+    private func back() {
+        if step > 0 { step -= 1; return }
+        model.screen = plan.own ? .own(plan) : .choose
+    }
+
+    private func next() {
+        switch step {
+        case 0:
+            let display = name.trimmingCharacters(in: .whitespaces)
+            guard (1...60).contains(display.count) else { model.show("Give the system a name of 1 to 60 characters."); return }
+            if model.systems.contains(where: { $0.displayName.caseInsensitiveCompare(display) == .orderedSame }) {
+                model.show("A system named \"\(display)\" already exists. Choose another name.")
+                return
+            }
+            if ownLocation && location.isEmpty { model.show("Choose a folder for the location, or untick \"Choose a different location\"."); return }
+            step = 1
+        case 1:
+            if diskFull && plan.disk == nil, let f = Disk.free(parent), f.bytes < (Int64(diskGB) << 30) + (1 << 30) {
+                model.show("The drive doesn't have \(diskGB) GB free to allocate now. Choose a smaller size, or untick \"Allocate the full size now\".")
+                return
+            }
+            step = 2
+        default:
+            create()
+        }
+    }
+
+    private func create() {
         let display = name.trimmingCharacters(in: .whitespaces)
-        guard (1...60).contains(display.count) else {
-            model.show("Give the system a name of 1 to 60 characters.")
-            return
-        }
-        if model.systems.contains(where: { $0.displayName.caseInsensitiveCompare(display) == .orderedSame }) {
-            model.show("A system named \"\(display)\" already exists. Choose another name.")
-            return
-        }
         // The folder name comes from the display name; the display name is what Virtual Machines shows.
-        var c = VMConfig(id: VMConfig.uniqueId(display), displayName: display)
+        var c = VMConfig(id: VMConfig.uniqueId(display, in: parent), displayName: display)
+        if ownLocation && parent.standardizedFileURL.path != Paths.vms.standardizedFileURL.path { c.location = parent.path }
         c.distroId = plan.distro?.id ?? ""
+        c.description = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         c.profile = profile
         c.ramGB = ramGB
         c.cores = cores
-        Task { await model.install(plan, c, diskGB: diskGB) }
+        c.diskFull = plan.disk == nil && diskFull
+        if plan.disk != nil { Task { await model.importDisk(plan, c) } } else { Task { await model.install(plan, c, diskGB: diskGB) } }
+    }
+}
+
+// A text box of several lines (a description), drawn like TextInput.
+struct NotesInput: View {
+    @Binding var text: String
+
+    var body: some View {
+        TextEditor(text: $text)
+            .font(Theme.sans(13))
+            .foregroundColor(Theme.text)
+            .scrollContentBackgroundHidden()
+            .padding(.horizontal, 4).padding(.vertical, 4)
+            .background(Theme.card)
+            .overlay(Rectangle().stroke(Theme.border, lineWidth: 1))
+    }
+}
+
+extension View {
+    // TextEditor draws its own white background until macOS 13's scrollContentBackground(.hidden).
+    @ViewBuilder func scrollContentBackgroundHidden() -> some View {
+        if #available(macOS 13.0, *) { self.scrollContentBackground(.hidden) } else { self }
     }
 }
 

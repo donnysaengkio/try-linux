@@ -239,6 +239,10 @@ and runs `--self-test`, which checks the download catalog and renders every scre
 - Inspired by [Try Omarchy](https://github.com/omacom/try-omarchy).
 - Linux distributions are downloaded from their official mirrors and carry their own
   licenses.
+- Fonts, bundled in the app under the [SIL Open Font License 1.1](Resources/Fonts/):
+  [Prompt](https://github.com/cadsondemak/Prompt) by Cadson Demak,
+  [Work Sans](https://github.com/weiweihuanghuang/Work-Sans) by Wei Huang and
+  [Noto Sans](https://github.com/notofonts/latin-greek-cyrillic) by the Noto Project Authors.
 
 ## License
 
