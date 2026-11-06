@@ -159,7 +159,7 @@ struct HomeView: View {
             .padding(.top, 12)
             // Four equal buttons across the 640-wide column, 12 apart.
             HStack(spacing: 12) {
-                Button("Add a system") { model.screen = .choose }.buttonStyle(FlatButton()).frame(width: 151, height: 42)
+                Button("Create") { model.screen = .choose }.buttonStyle(FlatButton()).frame(width: 151, height: 42)
                 Button("Settings") { if let c = current { model.screen = .settings(c.id) } }.buttonStyle(FlatButton()).frame(width: 151, height: 42)
                 // Console opens the system's window; for a system that's off, the window opens with it still off.
                 Button("Console") { if let c = current { model.openConsole(c) } }.buttonStyle(FlatButton()).frame(width: 151, height: 42)
@@ -312,8 +312,8 @@ struct OwnInstallerView: View {
             HStack(alignment: .top, spacing: 16) {
                 Image(nsImage: Icons.image(size: 40)).resizable().frame(width: 40, height: 40)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("Use your own installer").font(Theme.mono(16, .bold)).foregroundColor(Theme.text)
-                    Text("An ISO file on this Mac").font(Theme.mono(13, .bold)).foregroundColor(Theme.text).padding(.top, 14)
+                    Text("Use your own installer").font(Theme.display(18)).foregroundColor(Theme.text)
+                    Text("An ISO file on this Mac").font(Theme.sans(13, .semibold)).foregroundColor(Theme.text).padding(.top, 14)
                     Button("Choose an ISO file…") { choose() }.buttonStyle(FlatButton()).frame(width: 200, height: 32).padding(.top, 8)
                     Text(iso?.lastPathComponent ?? "No file chosen").font(Theme.sans(11.5))
                         .foregroundColor(iso == nil ? Theme.muted : Theme.highlight).padding(.top, 6)
@@ -324,7 +324,7 @@ struct OwnInstallerView: View {
                         Rectangle().fill(Theme.border).frame(height: 1)
                     }
                     .padding(.vertical, 14)
-                    Text("URL Link").font(Theme.mono(13, .bold)).foregroundColor(Theme.text)
+                    Text("URL Link").font(Theme.sans(13, .semibold)).foregroundColor(Theme.text)
                     TextInput(text: $link, placeholder: "https://… (address of an .iso file)").padding(.top, 8)
                         .onChange(of: link) { v in if !v.isEmpty { iso = nil; error = nil } }
                     Text(error ?? "Paste the address of an ARM64 (aarch64) .iso file.").font(Theme.sans(11.5))
@@ -367,33 +367,67 @@ struct OwnInstallerView: View {
     }
 }
 
+// Balanced, Maximum or Manual, with memory and CPU cores. They only go up to what's free: macOS keeps
+// 2 cores and a quarter of the memory, and other running systems keep theirs (`otherCores`, `otherRamGB`).
+// Balanced and Maximum show what they'll give in the greyed-out fields; Manual starts from there.
 struct ResourcePicker: View {
     @Binding var profile: Int
     @Binding var ramGB: Int
     @Binding var cores: Int
+    var otherCores = 0
+    var otherRamGB = 0
+
+    private var maxRam: Int { max(2, VMConfig.maxRamGB - otherRamGB) }
+    private var maxCores: Int { max(1, VMConfig.maxCores - otherCores) }
+
+    private var probe: VMConfig {
+        var p = VMConfig(id: "", displayName: "")
+        p.profile = profile
+        p.ramGB = ramGB
+        p.cores = cores
+        return p
+    }
+
+    private var shownRam: Binding<Int> {
+        Binding(get: { profile == 2 ? min(ramGB, maxRam) : min(probe.resources().ramGB, maxRam) }, set: { ramGB = $0 })
+    }
+    private var shownCores: Binding<Int> {
+        Binding(get: { profile == 2 ? min(cores, maxCores) : min(probe.resources().cores, maxCores) }, set: { cores = $0 })
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            FormRow(label: "Resources") {
-                Segmented(options: VMConfig.profileNames, selection: $profile).frame(width: 450, height: 32)
+            FormRow(label: "Resource profile") {
+                Segmented(options: VMConfig.profileNames, selection: $profile).frame(width: 400, height: 30)
             }
-            FormRow(label: "") {
-                Text("Memory GB").font(Theme.sans(11.5)).foregroundColor(Theme.muted)
-                NumberField(value: $ramGB, range: 2...VMConfig.hostRamGB).disabled(profile != 2)
-                Text("Cores").font(Theme.sans(11.5)).foregroundColor(Theme.muted).padding(.leading, 20)
-                NumberField(value: $cores, range: 1...VMConfig.hostCores).disabled(profile != 2)
+            FormRow(label: "Memory (GB)") {
+                SizeField(value: shownRam, presets: Sizes.ram, range: 2...maxRam).disabled(profile != 2)
+                Text("up to \(maxRam) of \(VMConfig.hostRamGB) GB").font(Theme.sans(11.5)).foregroundColor(Theme.muted)
             }
-            FormRow(label: "") { Note(text: summary) }
+            FormRow(label: "CPU cores") {
+                SizeField(value: shownCores, presets: Sizes.cores(maxCores), range: 1...maxCores, step: Sizes.coreStep(maxCores))
+                    .disabled(profile != 2)
+                Text("up to \(maxCores) of \(VMConfig.hostCores)" + (maxCores > 1 ? ", in steps of 2" : ""))
+                    .font(Theme.sans(11.5)).foregroundColor(Theme.muted)
+            }
+            Note(text: summary)
+        }
+        .onAppear {
+            // Manual values saved by an older version may be odd or over the limit.
+            if profile == 2 {
+                if cores > maxCores { cores = maxCores }
+                if maxCores > 1, cores % 2 == 1 { cores = min(maxCores - maxCores % 2, cores + 1) }
+                if ramGB > maxRam { ramGB = maxRam }
+            }
         }
     }
 
     private var summary: String {
-        var probe = VMConfig(id: "", displayName: "")
-        probe.profile = profile
-        probe.ramGB = ramGB
-        probe.cores = cores
         let r = probe.resources()
-        return "Uses \(r.cores) of \(VMConfig.hostCores) cores and \(r.ramGB) of \(VMConfig.hostRamGB) GB memory"
+        let c = min(r.cores, maxCores), g = min(r.ramGB, maxRam)
+        return "Next start: \(c) \(c == 1 ? "core" : "cores") and \(g) GB of memory. Changes apply the next time it starts.\n"
+            + (otherRamGB > 0 ? "macOS keeps 2 cores and a quarter of the memory; other running systems use \(otherCores) cores and \(otherRamGB) GB."
+                              : "macOS keeps 2 cores and a quarter of the memory.")
     }
 }
 
@@ -409,13 +443,13 @@ struct SetupView: View {
 
     var body: some View {
         Page {
-            Heading(text: "Set up \(plan.label)").padding(.top, 12)
             VStack(alignment: .leading, spacing: 14) {
+                // The name the system gets, shown on Virtual Machines.
                 FormRow(label: "Name") { TextInput(text: $name).frame(width: 250) }
                 ResourcePicker(profile: $profile, ramGB: $ramGB, cores: $cores)
-                FormRow(label: "Disk size") {
-                    NumberField(value: $diskGB, range: 16...2048, step: 8)
-                    Text("GB, grows only as you use it").font(Theme.sans(11.5)).foregroundColor(Theme.muted)
+                FormRow(label: "Disk size (GB)") {
+                    SizeField(value: $diskGB, presets: Sizes.disk, range: 16...2048)
+                    Text("grows only as you use it").font(Theme.sans(11.5)).foregroundColor(Theme.muted)
                 }
                 FormRow(label: "Storage") {
                     Text(storage).font(Theme.sans(11.5)).foregroundColor(Theme.muted).lineLimit(1).truncationMode(.middle)
@@ -426,7 +460,7 @@ struct SetupView: View {
                 Note(text: "The installer only sees a virtual disk, a file on your Mac. Your Mac's drive is never touched.")
                     .padding(.top, 8)
             }
-            .padding(.top, 18)
+            .padding(.top, 28)
             HStack {
                 Button("Back") { model.screen = .choose }.buttonStyle(FlatButton()).frame(width: 120, height: 42)
                 Spacer()
@@ -436,7 +470,13 @@ struct SetupView: View {
             .padding(.top, 30)
         }
         .onAppear {
-            if name.isEmpty { name = VMConfig.uniqueId(plan.distro?.id ?? plan.label) }
+            if name.isEmpty {
+                // The distribution's name, with " 2" and up if a system already has it.
+                let base = plan.distro?.name ?? plan.label
+                var n = base, i = 2
+                while model.systems.contains(where: { $0.displayName.caseInsensitiveCompare(n) == .orderedSame }) { n = "\(base) \(i)"; i += 1 }
+                name = n
+            }
             diskGB = plan.distro?.diskGB ?? 64
         }
     }
@@ -449,17 +489,17 @@ struct SetupView: View {
     }
 
     private func install() {
-        let id = name.trimmingCharacters(in: .whitespaces)
-        guard id.range(of: "^[A-Za-z0-9_-]{1,40}$", options: .regularExpression) != nil else {
-            model.show("Use 1-40 letters, numbers, - or _ for the name.")
+        let display = name.trimmingCharacters(in: .whitespaces)
+        guard (1...60).contains(display.count) else {
+            model.show("Give the system a name of 1 to 60 characters.")
             return
         }
-        var c = VMConfig(id: id, displayName: plan.distro?.name ?? plan.label)
-        if FileManager.default.fileExists(atPath: c.diskURL.path) {
-            model.show("A system named '\(id)' already exists.")
+        if model.systems.contains(where: { $0.displayName.caseInsensitiveCompare(display) == .orderedSame }) {
+            model.show("A system named \"\(display)\" already exists. Choose another name.")
             return
         }
-        if model.systems.contains(where: { $0.displayName == c.displayName }) { c.displayName += " (\(id))" }
+        // The folder name comes from the display name; the display name is what Virtual Machines shows.
+        var c = VMConfig(id: VMConfig.uniqueId(display), displayName: display)
         c.distroId = plan.distro?.id ?? ""
         c.profile = profile
         c.ramGB = ramGB

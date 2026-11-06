@@ -157,7 +157,7 @@ final class AppModel: ObservableObject {
     // The values shown in a system's row: CPU, memory and how much space its disk takes now.
     func stats(_ c: VMConfig) -> [String] {
         let r = c.resources()
-        let used = Double(Disk.used(c.diskURL))
+        let used = Double(c.allDisks.reduce(UInt64(0)) { $0 + Disk.used($1) })
         let disk = used >= 1_073_741_824 ? String(format: "%.1f GB", used / 1_073_741_824) : "\(Int(used / 1_048_576)) MB"
         return ["\(r.cores) \(r.cores == 1 ? "core" : "cores")", "\(r.ramGB) GB", previewDisk[c.id] ?? disk]
     }

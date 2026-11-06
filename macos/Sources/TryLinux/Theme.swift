@@ -3,21 +3,29 @@ import AppKit
 import SwiftUI
 
 // Colors follow Proton's palette (proton.me/blog/new-visual-universe) on a Proton Pass-style dark UI.
+// "Depth": a deep background with surfaces shaded from top to bottom, and a purple glow on what's
+// selected or open, the same look as Try Linux for Windows.
 enum Theme {
-    static let bg = rgb(25, 25, 39)              // #191927
-    static let card = rgb(34, 33, 52)
-    static let cardHover = rgb(42, 40, 62)
-    static let cardSelected = rgb(48, 45, 69)    // #302D45
-    static let box = rgb(29, 28, 45)             // containers that group rows
-    static let border = rgb(56, 48, 88)          // #383058
+    static let bg = rgb(12, 12, 20)              // #0C0C14
+    static let card = rgb(26, 23, 38)            // fields and flat fills
+    static let cardHover = rgb(36, 32, 54)
+    static let cardSelected = rgb(42, 35, 66)    // #2A2342
+    static let cardTop = rgb(29, 26, 43)         // #1D1A2B, shaded surfaces: top
+    static let cardBottom = rgb(22, 20, 31)      // #16141F, and bottom
+    static let hoverTop = rgb(37, 33, 55)
+    static let hoverBottom = rgb(27, 24, 40)
+    static let selectedTop = rgb(42, 35, 66)     // #2A2342
+    static let selectedBottom = rgb(28, 24, 48)  // #1C1830
+    static let box = rgb(18, 17, 28)             // containers that group rows
+    static let border = rgb(42, 37, 64)          // #2A2540
     static let text = rgb(245, 244, 242)         // #F5F4F2
-    static let muted = rgb(150, 146, 176)
+    static let muted = rgb(155, 151, 179)        // #9B97B3
     // Accent is the main call to action only (Start, Next, Save). Highlight is the logo and active
     // form elements: selection, tabs, checkboxes, progress, section titles.
     static let accent = rgb(109, 74, 255)        // #6D4AFF
     static let accentHover = rgb(138, 110, 255)  // #8A6EFF
     static let accent2 = rgb(56, 37, 128)        // #382580
-    static let highlight = rgb(167, 146, 255)    // #A792FF
+    static let highlight = rgb(196, 181, 255)    // #C4B5FF
     static let highlight2 = rgb(138, 110, 255)   // #8A6EFF
     static let success = rgb(102, 222, 177)      // #66DEB1, a running system
     static let warning = rgb(249, 217, 73)       // #F9D949
@@ -32,8 +40,12 @@ enum Theme {
         rgb(167 + (138 - 167) * t, 146 + (110 - 146) * t, 255)
     }
 
-    // The monospaced font is for headings only (page and section titles, system names); everything else
-    // (descriptions, labels, buttons, tabs) is the system's sans-serif font.
+    // The serif display font (New York) is for headings: page, section and dialog titles. Everything
+    // else (system names, descriptions, labels, buttons, tabs) is the system's sans-serif font.
+    static func display(_ size: CGFloat, _ weight: Font.Weight = .semibold) -> Font {
+        .system(size: size, weight: weight, design: .serif)
+    }
+
     static func mono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
         .system(size: size, weight: weight, design: .monospaced)
     }
@@ -48,6 +60,26 @@ struct BoxStyle: ViewModifier {
     func body(content: Content) -> some View {
         content.padding(6).background(Theme.box).overlay(Rectangle().stroke(Theme.border, lineWidth: 1))
     }
+}
+
+// A shaded surface: lighter at the top than the bottom, with a border. Selected (or open) surfaces get
+// the accent border and a soft purple glow just inside their edge.
+struct Surface: ViewModifier {
+    var selected = false
+    var hover = false
+
+    func body(content: Content) -> some View {
+        let colors = selected ? [Theme.selectedTop, Theme.selectedBottom]
+            : hover ? [Theme.hoverTop, Theme.hoverBottom] : [Theme.cardTop, Theme.cardBottom]
+        return content
+            .background(LinearGradient(colors: colors, startPoint: .top, endPoint: .bottom))
+            .overlay(Rectangle().stroke(Theme.accent.opacity(selected ? 0.55 : 0), lineWidth: 8).blur(radius: 6).clipped())
+            .overlay(Rectangle().stroke(selected ? Theme.accent : Theme.border, lineWidth: selected ? 1.5 : 1))
+    }
+}
+
+extension View {
+    func surface(selected: Bool = false, hover: Bool = false) -> some View { modifier(Surface(selected: selected, hover: hover)) }
 }
 
 struct PixelLogo: View {
@@ -111,14 +143,15 @@ private struct FlatButtonBody: View {
     @State private var hover = false
 
     var body: some View {
-        let fill: Color = primary
-            ? (configuration.isPressed ? Theme.accent2 : (hover ? Theme.accentHover : Theme.accent))
-            : (configuration.isPressed || hover ? Theme.cardHover : Theme.card)
+        // The main button is a purple gradient, lighter on hover and darker while pressed; the others are shaded surfaces.
+        let fill: [Color] = primary
+            ? (configuration.isPressed ? [Theme.accent, Theme.accent2] : (hover ? [Theme.highlight, Theme.accentHover] : [Theme.accentHover, Theme.accent]))
+            : (configuration.isPressed || hover ? [Theme.hoverTop, Theme.hoverBottom] : [Theme.cardTop, Theme.cardBottom])
         configuration.label
             .font(Theme.sans(13, .semibold))
             .foregroundColor(primary ? .white : (danger ? Theme.danger : (accent ? Theme.highlight : Theme.text)))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(fill)
+            .background(LinearGradient(colors: fill, startPoint: .top, endPoint: .bottom))
             .overlay(Rectangle().stroke(primary ? Theme.accent : accent ? Theme.highlight : (danger ? Theme.danger : Theme.border), lineWidth: 1))
             .contentShape(Rectangle())
             .opacity(enabled ? 1 : 0.45)
@@ -142,14 +175,14 @@ struct OptionRow: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Rectangle().fill(selected ? Theme.highlight : Color.clear).frame(width: 4)
+            // The glow marks the selected row, so there's no stripe on its left.
             VStack(alignment: .leading, spacing: 7) {
-                Text(title).font(Theme.mono(13, .bold)).foregroundColor(Theme.text).lineLimit(1)
+                Text(title).font(Theme.sans(14, .semibold)).foregroundColor(Theme.text).lineLimit(1)
                 Text(subtitle).font(Theme.sans(11.5)).foregroundColor(Theme.muted)
                     .lineLimit(twoLine ? 2 : 1)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.leading, 14)
+            .padding(.leading, 18)
             .padding(.trailing, 18)
             .padding(.vertical, 9)
             Spacer(minLength: 0)
@@ -170,8 +203,7 @@ struct OptionRow: View {
         }
         .frame(maxWidth: .infinity, minHeight: twoLine ? 70 : 54, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)   // keep to its content; don't stretch into free space
-        .background(selected ? Theme.cardSelected : (hover ? Theme.cardHover : Theme.card))
-        .overlay(Rectangle().stroke(selected ? Theme.highlight : Theme.border, lineWidth: 1))
+        .surface(selected: selected, hover: hover)
         .contentShape(Rectangle())
         .onHover { hover = $0 }
     }
@@ -188,7 +220,8 @@ struct Segmented: View {
                     .font(Theme.sans(13, .semibold))
                     .foregroundColor(i == selection ? Theme.bg : Theme.text)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(i == selection ? Theme.highlight : Theme.card)
+                    .background(LinearGradient(colors: i == selection ? [Theme.highlight, Theme.accentHover] : [Theme.cardTop, Theme.cardBottom],
+                                               startPoint: .top, endPoint: .bottom))
                     .contentShape(Rectangle())
                     .onTapGesture { selection = i }
             }
@@ -208,8 +241,7 @@ struct TabStrip: View {
                     .font(Theme.sans(13, .semibold))
                     .foregroundColor(i == selection ? Theme.highlight : Theme.text)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(i == selection ? Theme.cardSelected : Theme.card)
-                    .overlay(Rectangle().stroke(i == selection ? Theme.highlight : Theme.border, lineWidth: 1))
+                    .surface(selected: i == selection)
                     .contentShape(Rectangle())
                     .onTapGesture { selection = i }
             }
@@ -348,7 +380,7 @@ struct Heading: View {
 
     var body: some View {
         Text(text)
-            .font(Theme.mono(19, .bold))
+            .font(Theme.display(22))
             .foregroundColor(Theme.text)
             .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
     }
@@ -386,8 +418,158 @@ struct SectionTitle: View {
 
     var body: some View {
         // Twice the space above each section as before.
-        Text(text).font(Theme.mono(13, .bold)).foregroundColor(Theme.highlight).padding(.top, 28).padding(.bottom, 4)
+        Text(text).font(Theme.display(15)).foregroundColor(Theme.highlight).padding(.top, 28).padding(.bottom, 4)
     }
+}
+
+// A smaller heading inside an open section ("Capacity", "Disk information").
+struct SubHeading: View {
+    let text: String
+
+    var body: some View {
+        Text(text).font(Theme.sans(13, .semibold)).foregroundColor(Theme.text).padding(.top, 8)
+    }
+}
+
+// A settings section: a bar that opens and closes it. A closed bar shows a summary of its settings on
+// the right. Every word of its title starts with a capital letter ("Camera And USB").
+struct SectionBar<Content: View>: View {
+    let title: String
+    var summary = ""
+    @Binding var open: Bool
+    @ViewBuilder let content: () -> Content
+    @State private var hover = false
+
+    static func titleCase(_ s: String) -> String {
+        s.split(separator: " ", omittingEmptySubsequences: false)
+            .map { w in w.isEmpty ? "" : w.prefix(1).uppercased() + w.dropFirst() }
+            .joined(separator: " ")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button { open.toggle() } label: {
+                HStack(spacing: 0) {
+                    Text(Self.titleCase(title)).font(Theme.display(15)).foregroundColor(open ? Theme.highlight : Theme.text)
+                        .lineLimit(1).fixedSize()
+                    Spacer(minLength: 24)
+                    if !open {
+                        Text(summary).font(Theme.sans(11.5)).foregroundColor(Theme.muted).lineLimit(1).truncationMode(.tail)
+                    }
+                    Image(systemName: open ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 11, weight: .semibold)).foregroundColor(Theme.muted)
+                        .frame(width: 20).padding(.leading, 10)
+                }
+                .padding(.horizontal, 14)
+                .frame(height: 42)
+                .surface(selected: open, hover: hover)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .onHover { hover = $0 }
+            if open {
+                VStack(alignment: .leading, spacing: 10) { content() }
+                    .padding(.horizontal, 4)
+                    .padding(.bottom, 8)
+            }
+        }
+    }
+}
+
+// A line of text with its button on the right, in from the bar's edge. Every such button on a tab
+// gets the same `width`, so they look equal.
+struct ActionRow: View {
+    let text: String
+    let button: String
+    var width: CGFloat = 130
+    var danger = false
+    let action: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(text).font(Theme.sans(13)).foregroundColor(Theme.text).lineLimit(1)
+            Spacer(minLength: 0)
+            Button(button, action: action).buttonStyle(FlatButton(danger: danger)).frame(width: width, height: 30)
+        }
+        .padding(.trailing, 12)
+    }
+
+    // A button width that fits the longest of `titles`, with a little room each side.
+    static func width(_ titles: [String]) -> CGFloat {
+        let font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        let widest = titles.map { ($0 as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
+        return max(80, ceil(widest) + 32)
+    }
+}
+
+// A size dropdown you can also type into (memory, CPU cores, disk size). The list holds common sizes in
+// its range plus the maximum. A typed value that fits takes effect at once; leaving the field clamps it
+// to the range and rounds it up to the step.
+struct SizeField: View {
+    @Binding var value: Int
+    let presets: [Int]
+    let range: ClosedRange<Int>
+    var step = 1
+    var width: CGFloat = 100
+    @State private var text = ""
+    @FocusState private var focused: Bool
+    @Environment(\.isEnabled) private var enabled
+
+    private var top: Int { step > 1 ? max(range.lowerBound, range.upperBound - range.upperBound % step) : range.upperBound }
+
+    private var list: [Int] {
+        var l = presets.filter { range.contains($0) && $0 % step == 0 }
+        if !l.contains(top) { l.append(top) }
+        return l.sorted()
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            TextField("", text: $text)
+                .textFieldStyle(.plain)
+                .font(Theme.sans(13))
+                .foregroundColor(enabled ? Theme.text : Theme.muted)
+                .padding(.leading, 8)
+                .focused($focused)
+                .onSubmit { commit() }
+                .onChange(of: focused) { f in if !f { commit() } }
+                .onChange(of: text) { t in
+                    let digits = t.filter(\.isNumber)
+                    if digits != t { text = digits; return }
+                    if let n = Int(digits), range.contains(n), n % step == 0, n != value { value = n }
+                }
+            Menu {
+                ForEach(list, id: \.self) { v in Button("\(v)") { value = v; text = "\(v)" } }
+            } label: {
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)).foregroundColor(Theme.text)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .frame(width: 24, height: 26)
+            .overlay(Rectangle().frame(width: 1).foregroundColor(Theme.border), alignment: .leading)
+        }
+        .frame(width: width, height: 26)
+        .background(Theme.card)
+        .overlay(Rectangle().stroke(Theme.border, lineWidth: 1))
+        .opacity(enabled ? 1 : 0.6)
+        .onAppear { text = "\(value)" }
+        .onChange(of: value) { v in if !focused { text = "\(v)" } }
+    }
+
+    private func commit() {
+        var n = min(range.upperBound, max(range.lowerBound, Int(text) ?? value))
+        if step > 1, n % step != 0 { n = min(top, n + step - n % step) }
+        value = n
+        text = "\(n)"
+    }
+}
+
+// The sizes the dropdowns offer.
+enum Sizes {
+    static let ram = [1, 2, 4, 6, 8, 12, 16, 20, 24, 32, 40, 48, 64, 96, 128, 192, 256, 384, 512]
+    static let disk = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096]
+    static func cores(_ max: Int) -> [Int] { max <= 1 ? [1] : Array(stride(from: 2, through: max, by: 2)) }
+    static func coreStep(_ max: Int) -> Int { max <= 1 ? 1 : 2 }
 }
 
 enum Icons {

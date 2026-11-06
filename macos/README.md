@@ -33,11 +33,11 @@ download link.
 | ![Virtual Machines](docs/images/your-systems.png) | ![Set up Fedora Workstation](docs/images/set-up.png) |
 | **Virtual Machines:** status, CPU, memory and disk use, console, start or power commands | **Set up:** name, memory and cores, and disk size |
 | ![Downloading the installer](docs/images/download.png) | ![Settings](docs/images/settings-general-tab.png) |
-| **Download:** the installer is checked against its SHA-256 checksum | **Settings > General:** display, resources, disk and a shared folder |
-| ![Settings, Devices](docs/images/settings-devices-tab.png) | ![Settings, Advanced](docs/images/settings-advanced-tab.png) |
-| **Settings > Devices:** sound, microphone and clipboard sharing | **Settings > Advanced:** Rosetta, graphics, network, install and updates |
-| ![Settings, Recovery](docs/images/settings-recovery-tab.png) | |
-| **Settings > Recovery:** back up, restore, snapshots, reset, boot an ISO, clean up and delete | |
+| **Download:** the installer is checked against its SHA-256 checksum | **Settings > General:** display, startup, shared folder, about and updates |
+| ![Settings, Hardware](docs/images/settings-hardware-tab.png) | ![Settings, Hardware, Disks](docs/images/settings-disks.png) |
+| **Settings > Hardware:** graphics, memory and CPU cores, disks, Rosetta | **Disks:** size, location, resize, add and remove disks |
+| ![Settings, Devices](docs/images/settings-devices-tab.png) | ![Settings, Recovery](docs/images/settings-recovery-tab.png) |
+| **Settings > Devices:** sound, clipboard, CD/DVD drive, network type | **Settings > Recovery:** backups, snapshots, storage, repair, delete |
 
 ## Requirements
 
@@ -60,7 +60,7 @@ download link.
      confirms it; click **Open** to start the installed copy. If you can't change
      `/Applications`, it uses the Applications folder in your home folder.
    - **Run** opens it from where it is, without installing. It won't ask again for
-     this version; you can install later from **Settings > Advanced > About**.
+     this version; you can install later from **Settings > General > About**.
    - Closing the window asks whether to quit, and Try Linux asks again next time.
 
 If a different version is already in Applications, the same prompt offers **Update**
@@ -95,17 +95,17 @@ notification with an **Update** button appears at the top of the window.
    systems are running, choose **Update when I quit**: the update downloads now and
    is installed the next time Try Linux quits.
 
-**Settings > Advanced > About** has **Check for updates** to check right away, and
+**Settings > General > About** has **Check for updates** to check right away, and
 **Check for updates automatically (once a day)** to turn the daily check off.
 
-<img src="docs/images/settings-about.png" alt="Settings, Advanced tab, About section: version, Install, Check for updates automatically, and Check for updates" width="560">
+<img src="docs/images/settings-about.png" alt="Settings, General tab, About section: version, Install, Check for updates automatically, and Check for updates" width="560">
 
 Versions before 1.0.1 don't have the Update button, so download the new version once
 by hand.
 
 ## Using it
 
-**Choose a Linux OS**, then **Next** and **Install**. Try Linux downloads and verifies the
+Click **Create**, choose a Linux OS, then **Next** and **Install**. Try Linux downloads and verifies the
 installer, creates a virtual disk and opens the system in its own window. Install Linux
 onto the virtual disk; your Mac's drive is never touched. To use an installer you
 already have, choose **Use your own installer**: pick an ISO file on your Mac, or paste
@@ -118,7 +118,7 @@ installed from, and columns for its **Status** (**Running**, **Paused**, **Off, 
 open** or **Ready to install**), **CPU**, **memory** and how much **disk** space it takes
 now. To rename a system, click the pencil after its name in Settings.
 
-<img src="docs/images/your-systems.png" alt="Virtual Machines with Dev box running: Status, CPU, MEM and DISK columns, and the Add a system, Settings, Console and Power buttons" width="560">
+<img src="docs/images/your-systems.png" alt="Virtual Machines with Dev box running: Status, CPU, MEM and DISK columns, and the Create, Settings, Console and Power buttons" width="560">
 
 - **Start** (or double-click) starts the selected system.
 - **Console** opens a running system's window. On a system that's off, it opens the
@@ -154,15 +154,30 @@ Restarting Linux from inside it turns the system off instead (see
 Power menu. Each one uses the memory its resource profile gives it: two **Balanced**
 systems fit, but two **Maximum** ones need more memory than your Mac has.
 
-**Settings** (for each system):
+**Settings** (for each system). Each tab is a list of sections; click one to open it. A
+closed section shows a summary of its settings.
 
-- **General:** fullscreen, resolution, open at login, resource profile (Balanced /
-  Maximum / Manual), disk capacity and a shared Mac folder.
-- **Devices:** sound, microphone and clipboard sharing.
-- **Advanced:** Rosetta for x86_64 Linux apps, graphics and network details, and
+- **General:** fullscreen, resolution, open at login, a shared Mac folder, and
   **About** with the version, Install and update checks.
-- **Recovery:** back up, restore as a copy, snapshots, reset, boot an ISO, clean up
-  downloads and delete.
+- **Hardware:**
+  - **Graphics:** what Linux's display can do.
+  - **Resources:** Balanced, Maximum or Manual. Memory and CPU cores (in steps of 2)
+    only go up to what's free: macOS keeps 2 cores and a quarter of the memory, and
+    other running systems keep theirs.
+  - **Disks:** each disk's current size, free space on the Mac, maximum size and
+    location. **Resize** grows or shrinks a disk.
+  - **Disk utilities:** **Add disk** creates a new disk or attaches an existing raw
+    `.img` file; **Remove** takes one out. Linux sees each disk as its own drive and
+    starts from Disk 1. Backups include every disk.
+  - **Rosetta** for x86_64 Linux apps.
+- **Devices:** sound and microphone, clipboard sharing, a **CD/DVD drive** for ISOs
+  such as drivers or rescue disks (Linux sees it from the next start), and **network
+  type** (shared with this Mac, or no network).
+- **Recovery:** back up, restore as a copy, snapshots, clean up downloads, repair
+  (reset, or boot an ISO) and delete.
+
+Memory, CPU cores and disk sizes are dropdowns of common sizes that you can also type
+into.
 
 **Reset**, **Delete**, **Clean up**, and reverting or deleting a snapshot ask first, and
 pressing Return picks **Cancel**:
@@ -185,7 +200,7 @@ include it; on Debian and openSUSE, install the `spice-vdagent` package.
 
 ### Rosetta
 
-With Rosetta turned on in Settings > Advanced, ARM64 Linux can run x86_64 Linux apps.
+With Rosetta turned on in Settings > Hardware, ARM64 Linux can run x86_64 Linux apps.
 In Linux:
 
 ```sh

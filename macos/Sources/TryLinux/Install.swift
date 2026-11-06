@@ -71,7 +71,7 @@ struct DialogView: View {
             HStack(alignment: .top, spacing: 16) {
                 Image(nsImage: Icons.image(size: 40)).resizable().frame(width: 40, height: 40)
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(title).font(Theme.mono(16, .bold)).foregroundColor(Theme.text)
+                    Text(title).font(Theme.display(18)).foregroundColor(Theme.text)
                         .fixedSize(horizontal: false, vertical: true)
                     if let text { paragraph(text) }
                     if let path {
@@ -220,7 +220,7 @@ enum Installer {
                                     after: "Update replaces it with version \(AppInfo.version) and opens it. Your Linux systems aren't affected.\nRun opens this copy without changing the installed one.",
                                     primary: "Update", secondary: "Run")
                 : ThemedDialog.show("Install Try Linux?", installText, path: Paths.display(dest.deletingLastPathComponent()),
-                                    after: "Run opens it from here without installing; you can install it later from Settings > Advanced > About.\n\nTo uninstall, quit Try Linux and drag it from Applications to the Trash.",
+                                    after: "Run opens it from here without installing; you can install it later from Settings > General > About.\n\nTo uninstall, quit Try Linux and drag it from Applications to the Trash.",
                                     primary: "Install", secondary: "Run")
             if choice == .primary { break }
             if choice == .secondary { defaults.set(AppInfo.version, forKey: "declinedInstall"); return }

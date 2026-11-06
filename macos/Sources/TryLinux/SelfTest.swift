@@ -50,6 +50,28 @@ enum SelfTest {
             lines.append("vm configuration\tvalid (disk capacity \(Disk.capacity(c.diskURL) >> 30) GB, used \(Disk.used(c.diskURL)) bytes)")
             try Snapshots.take(c)
             lines.append("snapshot\t\(Snapshots.list(c).count) taken")
+
+            // A second disk, a disc in the CD/DVD drive and no network, as an installed system starts.
+            var more = c
+            let name = more.newDiskName()
+            try Disk.create(more.dir.appendingPathComponent(name), gb: 32)
+            more.extraDisks = [name]
+            more.cd = iso.path
+            more.netType = 1
+            let conf = try VMBuilder.configuration(more, installer: false)
+            lines.append("vm configuration (2 disks, CD, no network)\tvalid: \(conf.storageDevices.count) storage devices, \(conf.networkDevices.count) network devices")
+            try Disk.resize(more.dir.appendingPathComponent(name), gb: 48)
+            lines.append("resize\tDisk 2 is now \(Disk.capacity(more.dir.appendingPathComponent(name)) >> 30) GB")
+            more.displayName = "Backup test"
+            try more.save()
+            let backups = storage.appendingPathComponent("backups", isDirectory: true)
+            try FileManager.default.createDirectory(at: backups, withIntermediateDirectories: true)
+            let saved = try Backups.backup(more, into: backups)
+            let restored = try Backups.restore(from: saved)
+            lines.append("backup and restore\t\(restored.allDisks.count) disks restored, all present: \(restored.allDisks.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })")
+            try? FileManager.default.removeItem(at: restored.dir)
+            try? FileManager.default.removeItem(at: more.dir.appendingPathComponent(name))
+            try c.save()
         } catch {
             lines.append("vm configuration\tERROR\t\(error.localizedDescription)")
         }
@@ -158,12 +180,23 @@ enum SelfTest {
                                        detail: "1.17 GB of 2.78 GB  ·  24.8 MB/s  ·  2 min left", cancellable: true)
         ProgressScreen.fixedTip = 0
         snap("progress", ProgressScreen())
-        for (i, name) in ["settings-general", "settings-devices", "settings-advanced", "settings-recovery"].enumerated() {
-            // General is captured taller so it shows everything without scrolling.
-            snap(name, SettingsView(config: c, tab: i), height: i == 0 ? 860 : 700)
+        // Each tab with a section or two open, and the others closed with their summaries.
+        let tabs: [(String, Int, Set<String>)] = [
+            ("settings-general", 0, ["Display and startup", "Shared folder"]),
+            ("settings-hardware", 1, ["Resources"]),
+            ("settings-disks", 1, ["Disks"]),
+            ("settings-devices", 2, ["CD/DVD drive", "Network"]),
+            ("settings-recovery", 3, ["Backup and restore", "Storage", "Repair"]),
+            ("settings-about", 0, ["About"]),
+            ("settings-closed", 2, []),
+        ]
+        c.cd = "/Users/you/Downloads/virtio-drivers.iso"
+        for (name, tab, open) in tabs {
+            SettingsView.opened = open
+            snap(name, SettingsView(config: c, tab: tab), height: name == "settings-disks" ? 900 : 760)
         }
-        // The About section at the bottom of Advanced, with the install and update controls.
-        snap("settings-about", SettingsView(config: c, tab: 2), height: 760)
+        SettingsView.opened = []
+        c.cd = ""
 
         func dialog<V: View>(_ name: String, _ view: V) {
             let root = view.preferredColorScheme(.dark)
@@ -183,7 +216,7 @@ enum SelfTest {
         }
         let apps = "/Applications"
         dialog("install-prompt", DialogView(title: "Install Try Linux?", text: Installer.installText, path: apps,
-            after: "Run opens it from here without installing; you can install it later from Settings > Advanced > About.\n\nTo uninstall, quit Try Linux and drag it from Applications to the Trash.",
+            after: "Run opens it from here without installing; you can install it later from Settings > General > About.\n\nTo uninstall, quit Try Linux and drag it from Applications to the Trash.",
             primary: "Install", secondary: "Run", danger: false, pick: { _ in }))
         dialog("installed", DialogView(title: "Try Linux is installed", text: "Try Linux is now available in your Applications folder.", path: nil, after: nil,
             primary: "Open", secondary: nil, danger: false, pick: { _ in }))
@@ -212,6 +245,8 @@ enum SelfTest {
         dialog("console-ask", DialogView(title: "\(sys) isn't running", text: "Would you like to power it on?",
             path: nil, after: nil, primary: "Power on", secondary: "Cancel", danger: false, pick: { _ in }))
         dialog("own-installer", OwnInstallerView(done: { _ in }))
+        dialog("resize-disk", DiskSizeView(name: "Disk 1", capacity: 64 << 30, used: 17 << 30, done: { _ in }))
+        dialog("add-disk", AddDiskView(done: { _ in }))
         Icons.writeIconset(to: dir.appendingPathComponent("AppIcon.iconset"))
 
         try? (lines.joined(separator: "\n") + "\n").write(to: dir.appendingPathComponent("results.txt"), atomically: true, encoding: .utf8)

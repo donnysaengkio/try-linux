@@ -46,8 +46,14 @@ struct VMConfig: Codable, Identifiable, Equatable {
     var rosetta = false
     var lastBoot = ""
     var macAddress = ""
+    // More disks after Disk 1: a file name inside the system's folder (made by Try Linux) or the full path
+    // of an attached disk image.
+    var extraDisks: [String] = []
+    var cd = ""                     // ISO in the CD/DVD drive; empty when the drive is empty
+    var netType = 0                 // 0 shared with this Mac (NAT), 1 no network
 
     static let profileNames = ["Balanced", "Maximum", "Manual"]
+    static let netTypeNames = ["Shared with this Mac (NAT)", "No network"]
 
     init(id: String, displayName: String) {
         self.id = id
@@ -78,10 +84,24 @@ struct VMConfig: Codable, Identifiable, Equatable {
         rosetta = get(.rosetta, false)
         lastBoot = get(.lastBoot, "")
         macAddress = get(.macAddress, "")
+        extraDisks = get(.extraDisks, [String]())
+        cd = get(.cd, "")
+        netType = min(1, max(0, get(.netType, 0)))
     }
 
     var dir: URL { Paths.vms.appendingPathComponent(id, isDirectory: true) }
     var diskURL: URL { dir.appendingPathComponent("disk.img") }
+
+    func diskFile(_ entry: String) -> URL { entry.hasPrefix("/") ? URL(fileURLWithPath: entry) : dir.appendingPathComponent(entry) }
+
+    // Disk 1 first, then the others in the order they were added.
+    var allDisks: [URL] { [diskURL] + extraDisks.map(diskFile) }
+
+    func newDiskName() -> String {
+        var n = 2
+        while extraDisks.contains("disk\(n).img") || FileManager.default.fileExists(atPath: dir.appendingPathComponent("disk\(n).img").path) { n += 1 }
+        return "disk\(n).img"
+    }
     var efiURL: URL { dir.appendingPathComponent("efi.vars") }
     var machineIdURL: URL { dir.appendingPathComponent("machine-id") }
     var configURL: URL { dir.appendingPathComponent("config.json") }
@@ -115,18 +135,28 @@ struct VMConfig: Codable, Identifiable, Equatable {
     static var hostCores: Int { previewHost?.cores ?? ProcessInfo.processInfo.processorCount }
     static var hostRamGB: Int { previewHost?.ramGB ?? max(2, Int(ProcessInfo.processInfo.physicalMemory >> 30)) }
 
+    // What a system can be given: macOS keeps 2 cores and a quarter of the memory (and Apple
+    // Virtualization has its own limits).
+    static var maxCores: Int {
+        let n = hostCores
+        let vz = previewHost == nil ? VZVirtualMachineConfiguration.maximumAllowedCPUCount : n
+        return max(min(2, n), min(n - 2, vz))
+    }
+    static var maxRamGB: Int {
+        let vz = previewHost == nil ? Int(VZVirtualMachineConfiguration.maximumAllowedMemorySize >> 30) : hostRamGB
+        return max(2, min(hostRamGB * 3 / 4, vz))
+    }
+
     func resources() -> (cores: Int, ramGB: Int) {
         let n = Self.hostCores, total = Self.hostRamGB
         var c: Int, r: Int
         switch profile {
-        case 1: c = max(2, n - 2); r = max(2, total * 3 / 4)
+        case 1: c = Self.maxCores; r = Self.maxRamGB
         case 2: c = cores; r = ramGB
         default: c = max(2, n / 2); r = max(2, min(16, total / 2))
         }
-        let maxCPU = Self.previewHost == nil ? VZVirtualMachineConfiguration.maximumAllowedCPUCount : n
-        let maxRam = Self.previewHost == nil ? Int(VZVirtualMachineConfiguration.maximumAllowedMemorySize >> 30) : total
-        c = min(max(1, c), min(n, maxCPU))
-        r = min(max(2, r), min(total, maxRam))
+        c = min(max(1, c), Self.maxCores)
+        r = min(max(2, r), Self.maxRamGB)
         return (c, r)
     }
 
@@ -160,6 +190,14 @@ enum Disk {
             try h.truncate(atOffset: want)
             try h.close()
         }
+    }
+
+    // Sets the disk's maximum size, larger or smaller. Shrinking cuts off the end of the disk, so
+    // Linux must have been shrunk to fit first.
+    static func resize(_ url: URL, gb: Int) throws {
+        let h = try FileHandle(forWritingTo: url)
+        try h.truncate(atOffset: UInt64(gb) << 30)
+        try h.close()
     }
 
     // Read sizes fresh each time: URL caches resource values, and a stale (smaller) size here
@@ -220,17 +258,30 @@ enum Snapshots {
 }
 
 enum Backups {
-    // A backup is a folder holding the disk, EFI variables, machine identity and settings.
+    // A backup is a folder holding the disks, EFI variables, machine identity and settings. Every disk
+    // is copied, attached ones too, as disk2.img, disk3.img and so on.
     static func backup(_ c: VMConfig, into folder: URL) throws -> URL {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
         let dest = folder.appendingPathComponent("\(c.id)-\(f.string(from: Date())).trylinux", isDirectory: true)
         if FileManager.default.fileExists(atPath: dest.path) { throw AppError("\(dest.lastPathComponent) already exists there.") }
         try FileManager.default.createDirectory(at: dest, withIntermediateDirectories: true)
-        for name in ["disk.img", "efi.vars", "machine-id", "config.json"] {
+        for name in ["disk.img", "efi.vars", "machine-id"] {
             let src = c.dir.appendingPathComponent(name)
             if FileManager.default.fileExists(atPath: src.path) { try FileManager.default.copyItem(at: src, to: dest.appendingPathComponent(name)) }
         }
+        var saved = c
+        saved.extraDisks = []
+        for (i, entry) in c.extraDisks.enumerated() {
+            let src = c.diskFile(entry)
+            guard FileManager.default.fileExists(atPath: src.path) else { continue }
+            let name = "disk\(i + 2).img"
+            try FileManager.default.copyItem(at: src, to: dest.appendingPathComponent(name))
+            saved.extraDisks.append(name)
+        }
+        let enc = JSONEncoder()
+        enc.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try enc.encode(saved).write(to: dest.appendingPathComponent("config.json"), options: .atomic)
         return dest
     }
 
@@ -250,6 +301,16 @@ enum Backups {
         for name in ["disk.img", "efi.vars", "machine-id"] {
             let src = folder.appendingPathComponent(name)
             if FileManager.default.fileExists(atPath: src.path) { try FileManager.default.copyItem(at: src, to: c.dir.appendingPathComponent(name)) }
+        }
+        // The other disks come back as files of the copy's own.
+        let extra = c.extraDisks.filter { !$0.hasPrefix("/") }
+        c.extraDisks = []
+        for name in extra {
+            let src = folder.appendingPathComponent(name)
+            guard FileManager.default.fileExists(atPath: src.path) else { continue }
+            let mine = c.newDiskName()
+            try FileManager.default.copyItem(at: src, to: c.dir.appendingPathComponent(mine))
+            c.extraDisks.append(mine)
         }
         try c.save()
         return c

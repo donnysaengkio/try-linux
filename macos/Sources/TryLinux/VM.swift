@@ -17,20 +17,29 @@ enum VMBuilder {
         boot.variableStore = try efiStore(c)
         conf.bootLoader = boot
 
-        var storage: [VZStorageDeviceConfiguration] = [
-            VZVirtioBlockDeviceConfiguration(attachment: try VZDiskImageStorageDeviceAttachment(url: c.diskURL, readOnly: false))
-        ]
+        // Disk 1 comes first, so it's the one EFI starts from; a missing extra disk is left out.
+        var storage: [VZStorageDeviceConfiguration] = []
+        for (i, url) in c.allDisks.enumerated() where i == 0 || FileManager.default.fileExists(atPath: url.path) {
+            storage.append(VZVirtioBlockDeviceConfiguration(attachment: try VZDiskImageStorageDeviceAttachment(url: url, readOnly: false)))
+        }
         if installer {
             // The installer ISO appears as a USB stick; the empty disk can't boot, so EFI starts from it.
             let iso = try VZDiskImageStorageDeviceAttachment(url: URL(fileURLWithPath: c.iso), readOnly: true)
             storage.append(VZUSBMassStorageDeviceConfiguration(attachment: iso))
+        } else if !c.cd.isEmpty, FileManager.default.fileExists(atPath: c.cd) {
+            // The CD/DVD drive: its disc, read-only. The disk still boots first.
+            let disc = try VZDiskImageStorageDeviceAttachment(url: URL(fileURLWithPath: c.cd), readOnly: true)
+            storage.append(VZUSBMassStorageDeviceConfiguration(attachment: disc))
         }
         conf.storageDevices = storage
 
-        let net = VZVirtioNetworkDeviceConfiguration()
-        net.attachment = VZNATNetworkDeviceAttachment()
-        if let mac = VZMACAddress(string: c.macAddress) { net.macAddress = mac }
-        conf.networkDevices = [net]
+        // No network: no network card at all, so Linux is fully offline.
+        if c.netType != 1 {
+            let net = VZVirtioNetworkDeviceConfiguration()
+            net.attachment = VZNATNetworkDeviceAttachment()
+            if let mac = VZMACAddress(string: c.macAddress) { net.macAddress = mac }
+            conf.networkDevices = [net]
+        }
 
         let gpu = VZVirtioGraphicsDeviceConfiguration()
         gpu.scanouts = [VZVirtioGraphicsScanoutConfiguration(widthInPixels: c.width, heightInPixels: c.height)]
