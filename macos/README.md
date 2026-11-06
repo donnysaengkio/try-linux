@@ -30,14 +30,16 @@ download link.
 
 | | |
 |---|---|
-| ![Virtual Machines](docs/images/your-systems.png) | ![Set up Fedora Workstation](docs/images/set-up.png) |
-| **Virtual Machines:** status, CPU, memory and disk use, console, start or power commands | **Set up:** name, memory and cores, and disk size |
+| ![Virtual Machines](docs/images/your-systems.png) | ![Create, Resources](docs/images/set-up.png) |
+| **Virtual Machines:** status, CPU, memory and disk use, console, start or power commands | **Create:** name, description and location, then resources and disk size, then a summary |
 | ![Downloading the installer](docs/images/download.png) | ![Settings](docs/images/settings-general-tab.png) |
-| **Download:** the installer is checked against its SHA-256 checksum | **Settings > General:** display, startup, shared folder, about and updates |
+| **Download:** the installer is checked against its SHA-256 checksum | **Settings > General:** info and description, display, startup, shared folder, appearance, about and updates |
 | ![Settings, Hardware](docs/images/settings-hardware-tab.png) | ![Settings, Hardware, Disks](docs/images/settings-disks.png) |
 | **Settings > Hardware:** graphics, memory and CPU cores, disks, Rosetta | **Disks:** size, location, resize, add and remove disks |
 | ![Settings, Devices](docs/images/settings-devices-tab.png) | ![Settings, Recovery](docs/images/settings-recovery-tab.png) |
 | **Settings > Devices:** sound, clipboard, CD/DVD drive, network type | **Settings > Recovery:** backups, snapshots, storage, repair, delete |
+| ![The Light theme](docs/images/theme-light.png) | ![The Blue theme](docs/images/theme-blue.png) |
+| **Light theme** (Settings > General > Appearance) | **Blue theme** |
 
 ## Requirements
 
@@ -84,9 +86,9 @@ them too. If you turned on **Open at login**, turn it off first in Settings > Ge
 Once a day, Try Linux checks GitHub for a new release. When there is one, a
 notification with an **Update** button appears at the top of the window.
 
-<img src="docs/images/update-button.png" alt="Virtual Machines with a notification: Try Linux 1.0.5 is available, with an Update button" width="560">
+<img src="docs/images/update-button.png" alt="Virtual Machines with a notification: Try Linux 1.0.6 is available, with an Update button" width="560">
 
-<img src="docs/images/update-prompt.png" alt="Update to Try Linux 1.0.5? prompt, with What's New and Update buttons" width="420">
+<img src="docs/images/update-prompt.png" alt="Update to Try Linux 1.0.6? prompt, with What's New and Update buttons" width="420">
 
 1. **What's New** opens the release notes; **Update** downloads the new version.
 2. Try Linux checks the download against the release's published SHA-256 checksum
@@ -105,13 +107,24 @@ by hand.
 
 ## Using it
 
-Click **Create**, choose a Linux OS, then **Next** and **Install**. Try Linux downloads and verifies the
-installer, creates a virtual disk and opens the system in its own window. Install Linux
-onto the virtual disk; your Mac's drive is never touched. To use an installer you
-already have, choose **Use your own installer**: pick an ISO file on your Mac, or paste
-a URL link to one.
+Click **Create** and choose a Linux OS, then:
 
-<img src="docs/images/own-installer.png" alt="Use your own installer: Choose an ISO file, or paste a URL link, with Cancel and Save buttons" width="420">
+1. **General:** the system's name, an optional description, and its location (the
+   storage folder, or tick **Choose a different location** and choose another).
+2. **Resources:** Balanced, Maximum or Manual memory and CPU cores, and the disk size,
+   with the free space on that drive. **Allocate the full size now** takes the disk's
+   whole size on the drive straight away instead of as Linux stores data.
+3. **Summary:** everything you chose. **Install** downloads and verifies the installer,
+   creates the virtual disk and opens the system in its own window.
+
+Install Linux onto the virtual disk; your Mac's drive is never touched.
+
+**Use Your Own Installer** comes before General: import an existing raw disk image
+(`.img` or `.raw`) that already has Linux on it, pick an ISO file on your Mac, or paste
+a URL link to one. An imported disk is copied (an APFS clone, so it's quick), and a
+Try Linux system's disk brings its name, description, memory and cores along.
+
+<img src="docs/images/own-installer.png" alt="Use Your Own Installer: Choose A Disk File, Choose An ISO File, or paste a URL link, with Back and Next buttons" width="560">
 
 **Virtual Machines** lists each system with its name, the OS and version it was
 installed from, and columns for its **Status** (**Running**, **Paused**, **Off, console
@@ -154,18 +167,25 @@ Restarting Linux from inside it turns the system off instead (see
 Power menu. Each one uses the memory its resource profile gives it: two **Balanced**
 systems fit, but two **Maximum** ones need more memory than your Mac has.
 
-**Settings** (for each system). Each tab is a list of sections; click one to open it. A
-closed section shows a summary of its settings.
+**Settings** (for each system). Each tab is a list of sections; click one to open it.
+Several can be open at once, and the one you opened last is highlighted. A closed
+section shows a summary of its settings; every section starts closed when you open
+Settings.
 
-- **General:** fullscreen, resolution, open at login, a shared Mac folder, and
+- **General:** **Info** (the description, the OS and where the system is kept),
+  fullscreen, resolution, open at login, a shared Mac folder, **Appearance**, and
   **About** with the version, Install and update checks.
+- **Appearance** is for Try Linux as a whole: **Dark** (grays with lavender, after
+  Firefox's dark theme), **Light** or **Blue** (both from Bitwarden's brand colors).
+  **Follow system** uses Light while macOS is in Light mode, and Dark otherwise. The
+  theme changes when you save.
 - **Hardware:**
   - **Graphics:** what Linux's display can do.
-  - **Resources:** Balanced, Maximum or Manual. Memory and CPU cores (in steps of 2)
-    only go up to what's free: macOS keeps 2 cores and a quarter of the memory, and
-    other running systems keep theirs.
-  - **Disks:** each disk's current size, free space on the Mac, maximum size and
-    location. **Resize** grows or shrinks a disk.
+  - **Resources:** Balanced, Maximum or Manual (memory and CPU cores can be changed
+    with Manual). They only go up to what's free: macOS keeps 2 cores and a quarter of
+    the memory, and other running systems keep theirs.
+  - **Disks:** each disk's current size, free space on the Mac, maximum size, location
+    and whether it's dynamic or preallocated. **Resize** grows or shrinks a disk.
   - **Disk utilities:** **Add Disk** creates a new disk or attaches an existing raw
     `.img` file; **Remove** takes one out. Linux sees each disk as its own drive and
     starts from Disk 1. Backups include every disk.

@@ -161,7 +161,9 @@ struct HomeView: View {
             // Four equal buttons across the 640-wide column, 12 apart.
             HStack(spacing: 12) {
                 Button("Create") { model.screen = .choose }.buttonStyle(FlatButton()).frame(width: 151, height: 42)
-                Button("Settings") { if let c = current { SettingsView.reset(); model.screen = .settings(c.id) } }   // every section starts closed.buttonStyle(FlatButton()).frame(width: 151, height: 42)
+                // Settings opens with every section closed.
+                Button("Settings") { if let c = current { SettingsView.reset(); model.screen = .settings(c.id) } }
+                    .buttonStyle(FlatButton()).frame(width: 151, height: 42)
                 // Console opens the system's window; for a system that's off, the window opens with it still off.
                 Button("Console") { if let c = current { model.openConsole(c) } }.buttonStyle(FlatButton()).frame(width: 151, height: 42)
                 if let c = current, model.isOn(c) {
