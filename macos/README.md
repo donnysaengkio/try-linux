@@ -84,21 +84,21 @@ them too. If you turned on **Open at login**, turn it off first in Settings > Ge
 Once a day, Try Linux checks GitHub for a new release. When there is one, a
 notification with an **Update** button appears at the top of the window.
 
-<img src="docs/images/update-button.png" alt="Virtual Machines with a notification: Try Linux 1.0.3 is available, with an Update button" width="560">
+<img src="docs/images/update-button.png" alt="Virtual Machines with a notification: Try Linux 1.0.5 is available, with an Update button" width="560">
 
-<img src="docs/images/update-prompt.png" alt="Update to Try Linux 1.0.3? prompt, with What's new and Update buttons" width="420">
+<img src="docs/images/update-prompt.png" alt="Update to Try Linux 1.0.5? prompt, with What's New and Update buttons" width="420">
 
-1. **What's new** opens the release notes; **Update** downloads the new version.
+1. **What's New** opens the release notes; **Update** downloads the new version.
 2. Try Linux checks the download against the release's published SHA-256 checksum
    and the app's signature. If either doesn't match, the update isn't used.
 3. Try Linux replaces itself and restarts. Linux runs inside Try Linux, so if
-   systems are running, choose **Update when I quit**: the update downloads now and
+   systems are running, choose **Update When I Quit**: the update downloads now and
    is installed the next time Try Linux quits.
 
-**Settings > General > About** has **Check for updates** to check right away, and
+**Settings > General > About** has **Check For Updates** to check right away, and
 **Check for updates automatically (once a day)** to turn the daily check off.
 
-<img src="docs/images/settings-about.png" alt="Settings, General tab, About section: version, Install, Check for updates automatically, and Check for updates" width="560">
+<img src="docs/images/settings-about.png" alt="Settings, General tab, About section: version, Install, Check for updates automatically, and Check For Updates" width="560">
 
 Versions before 1.0.1 don't have the Update button, so download the new version once
 by hand.
@@ -166,7 +166,7 @@ closed section shows a summary of its settings.
     other running systems keep theirs.
   - **Disks:** each disk's current size, free space on the Mac, maximum size and
     location. **Resize** grows or shrinks a disk.
-  - **Disk utilities:** **Add disk** creates a new disk or attaches an existing raw
+  - **Disk utilities:** **Add Disk** creates a new disk or attaches an existing raw
     `.img` file; **Remove** takes one out. Linux sees each disk as its own drive and
     starts from Disk 1. Backups include every disk.
   - **Rosetta** for x86_64 Linux apps.

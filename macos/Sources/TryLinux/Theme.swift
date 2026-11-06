@@ -489,7 +489,7 @@ struct ActionRow: View {
         HStack(spacing: 10) {
             Text(text).font(Theme.sans(13)).foregroundColor(Theme.text).lineLimit(1)
             Spacer(minLength: 0)
-            Button(button, action: action).buttonStyle(FlatButton(danger: danger)).frame(width: width, height: 30)
+            Button(SectionBar.titleCase(button), action: action).buttonStyle(FlatButton(danger: danger)).frame(width: width, height: 30)
         }
         .padding(.trailing, 12)
     }
@@ -497,7 +497,7 @@ struct ActionRow: View {
     // A button width that fits the longest of `titles`, with a little room each side.
     static func width(_ titles: [String]) -> CGFloat {
         let font = NSFont.systemFont(ofSize: 13, weight: .semibold)
-        let widest = titles.map { ($0 as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
+        let widest = titles.map { (SectionBar.titleCase($0) as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
         return max(80, ceil(widest) + 32)
     }
 }

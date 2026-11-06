@@ -144,11 +144,11 @@ struct SettingsView: View {
                    open: bar("About")) {
             Note(text: "Try Linux for Mac \(AppInfo.version)\nApple Virtualization on macOS \(ProcessInfo.processInfo.operatingSystemVersionString)\nStorage: \(Paths.display(Paths.root))")
             HStack(spacing: 10) {
-                Button("Open storage folder") {
+                Button("Open Storage Folder") {
                     try? FileManager.default.createDirectory(at: Paths.root, withIntermediateDirectories: true)
                     NSWorkspace.shared.open(Paths.root)
                 }
-                .buttonStyle(FlatButton()).frame(width: ActionRow.width(["Open storage folder"]), height: 30)
+                .buttonStyle(FlatButton()).frame(width: ActionRow.width(["Open Storage Folder"]), height: 30)
                 if !Installer.isInApplications {
                     Button("Install") { installFromSettings() }.buttonStyle(FlatButton()).frame(width: ActionRow.width(["Install"]), height: 30)
                 }
@@ -157,7 +157,7 @@ struct SettingsView: View {
             CheckRow(title: "Check for updates automatically (once a day)", on: $checkUpdates)
                 .onChange(of: checkUpdates) { Updater.enabled = $0 }
             HStack {
-                let title = checking ? "Checking…" : model.updateAvailable.map { "Update to \($0)" } ?? "Check for updates"
+                let title = checking ? "Checking…" : model.updateAvailable.map { "Update To \($0)" } ?? "Check For Updates"
                 Button(title) { checkNow() }
                     .buttonStyle(FlatButton()).frame(width: ActionRow.width([title]), height: 30).disabled(checking || model.stagedUpdate != nil)
                 Spacer()
@@ -404,14 +404,13 @@ struct SettingsView: View {
             CheckRow(title: "Allow microphone access (next start)", on: $c.mic).disabled(!c.sound)
             Note(text: "macOS asks for permission the first time Linux uses the microphone. Turning it off keeps sound playback.")
             HStack(spacing: 10) {
+                let w = ActionRow.width(["Sound Settings", "Microphone Privacy"])
+                Button("Sound Settings") { open("x-apple.systempreferences:com.apple.Sound-Settings.extension") }
+                    .buttonStyle(FlatButton()).frame(width: w, height: 30)
+                Button("Microphone Privacy") { open("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") }
+                    .buttonStyle(FlatButton()).frame(width: w, height: 30)
                 Spacer()
-                let w = ActionRow.width(["Sound settings", "Microphone privacy"])
-                Button("Sound settings") { open("x-apple.systempreferences:com.apple.Sound-Settings.extension") }
-                    .buttonStyle(FlatButton()).frame(width: w, height: 30)
-                Button("Microphone privacy") { open("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") }
-                    .buttonStyle(FlatButton()).frame(width: w, height: 30)
             }
-            .padding(.trailing, 12)
             Note(text: "Linux uses the Mac's current sound output and input.")
         }
 
@@ -729,7 +728,6 @@ struct AddDiskView: View {
                     HStack(spacing: 10) {
                         Text("Size (GB)").font(Theme.sans(13)).foregroundColor(Theme.text)
                         SizeField(value: $gb, presets: Sizes.disk, range: 1...4096)
-                        Text("grows only as you use it").font(Theme.sans(11.5)).foregroundColor(Theme.muted)
                     }
                     .padding(.top, 8)
                     HStack(spacing: 10) {
@@ -739,7 +737,7 @@ struct AddDiskView: View {
                     }
                     .padding(.vertical, 14)
                     Text("A disk image on this Mac").font(Theme.sans(13, .semibold)).foregroundColor(Theme.text)
-                    Button("Choose a disk image…") {
+                    Button("Choose A Disk Image…") {
                         if let url = Ask.file("Choose a raw disk image (.img)", iso: false) { file = url }
                     }
                     .buttonStyle(FlatButton()).frame(width: 200, height: 32).padding(.top, 8)
@@ -787,7 +785,7 @@ struct SnapshotsSheet: View {
             }
             .frame(height: 220, alignment: .top)
             HStack(spacing: 10) {
-                Button("Take snapshot") { act { try Snapshots.take(config) } }.buttonStyle(FlatButton(primary: true)).frame(width: 160, height: 34)
+                Button("Take Snapshot") { act { try Snapshots.take(config) } }.buttonStyle(FlatButton(primary: true)).frame(width: 160, height: 34)
                 Button("Revert") {
                     if let s = current, Ask.confirm("Revert to this snapshot?", "", "Revert", path: s.id,
                                                     after: "Changes made to \(config.displayName) since then are lost.", destructive: true) {

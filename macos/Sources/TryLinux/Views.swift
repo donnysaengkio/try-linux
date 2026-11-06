@@ -261,7 +261,7 @@ struct ChooseView: View {
             .modifier(BoxStyle())
             .padding(.top, 24)
             OptionRow(title: "Use your own installer", subtitle: "An .iso file already on this Mac, or a URL link to download one",
-                      selected: selected == -1)
+                      selected: selected == -1, twoLine: true)
                 .onTapGesture(count: 2) { selected = -1; next() }
                 .onTapGesture { selected = -1 }
                 .modifier(BoxStyle())
@@ -314,7 +314,7 @@ struct OwnInstallerView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     Text("Use your own installer").font(Theme.display(18)).foregroundColor(Theme.text)
                     Text("An ISO file on this Mac").font(Theme.sans(13, .semibold)).foregroundColor(Theme.text).padding(.top, 14)
-                    Button("Choose an ISO file…") { choose() }.buttonStyle(FlatButton()).frame(width: 200, height: 32).padding(.top, 8)
+                    Button("Choose An ISO File…") { choose() }.buttonStyle(FlatButton()).frame(width: 200, height: 32).padding(.top, 8)
                     Text(iso?.lastPathComponent ?? "No file chosen").font(Theme.sans(11.5))
                         .foregroundColor(iso == nil ? Theme.muted : Theme.highlight).padding(.top, 6)
                     // "OR", centred on a divider line.
@@ -407,10 +407,9 @@ struct ResourcePicker: View {
             FormRow(label: "CPU cores") {
                 SizeField(value: shownCores, presets: Sizes.cores(maxCores), range: 1...maxCores, step: Sizes.coreStep(maxCores))
                     .disabled(profile != 2)
-                Text("up to \(maxCores) of \(VMConfig.hostCores)" + (maxCores > 1 ? ", in steps of 2" : ""))
+                Text("up to \(maxCores) of \(VMConfig.hostCores)")
                     .font(Theme.sans(11.5)).foregroundColor(Theme.muted)
             }
-            Note(text: summary)
         }
         .onAppear {
             // Manual values saved by an older version may be odd or over the limit.
@@ -420,14 +419,6 @@ struct ResourcePicker: View {
                 if ramGB > maxRam { ramGB = maxRam }
             }
         }
-    }
-
-    private var summary: String {
-        let r = probe.resources()
-        let c = min(r.cores, maxCores), g = min(r.ramGB, maxRam)
-        return "Next start: \(c) \(c == 1 ? "core" : "cores") and \(g) GB of memory. Changes apply the next time it starts.\n"
-            + (otherRamGB > 0 ? "macOS keeps 2 cores and a quarter of the memory; other running systems use \(otherCores) cores and \(otherRamGB) GB."
-                              : "macOS keeps 2 cores and a quarter of the memory.")
     }
 }
 
@@ -449,7 +440,6 @@ struct SetupView: View {
                 ResourcePicker(profile: $profile, ramGB: $ramGB, cores: $cores)
                 FormRow(label: "Disk size (GB)") {
                     SizeField(value: $diskGB, presets: Sizes.disk, range: 16...2048)
-                    Text("grows only as you use it").font(Theme.sans(11.5)).foregroundColor(Theme.muted)
                 }
                 FormRow(label: "Storage") {
                     Text(storage).font(Theme.sans(11.5)).foregroundColor(Theme.muted).lineLimit(1).truncationMode(.middle)
