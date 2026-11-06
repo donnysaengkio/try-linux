@@ -422,6 +422,14 @@ struct SectionTitle: View {
     }
 }
 
+// Every word starting with a capital letter, as section titles and buttons show their text
+// ("Check for updates" becomes "Check For Updates"); the rest of each word is left as it is.
+func titleCase(_ s: String) -> String {
+    s.split(separator: " ", omittingEmptySubsequences: false)
+        .map { w in w.isEmpty ? "" : w.prefix(1).uppercased() + w.dropFirst() }
+        .joined(separator: " ")
+}
+
 // A smaller heading inside an open section ("Capacity", "Disk information").
 struct SubHeading: View {
     let text: String
@@ -440,17 +448,11 @@ struct SectionBar<Content: View>: View {
     @ViewBuilder let content: () -> Content
     @State private var hover = false
 
-    static func titleCase(_ s: String) -> String {
-        s.split(separator: " ", omittingEmptySubsequences: false)
-            .map { w in w.isEmpty ? "" : w.prefix(1).uppercased() + w.dropFirst() }
-            .joined(separator: " ")
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Button { open.toggle() } label: {
                 HStack(spacing: 0) {
-                    Text(Self.titleCase(title)).font(Theme.display(15)).foregroundColor(open ? Theme.highlight : Theme.text)
+                    Text(titleCase(title)).font(Theme.display(15)).foregroundColor(open ? Theme.highlight : Theme.text)
                         .lineLimit(1).fixedSize()
                     Spacer(minLength: 24)
                     if !open {
@@ -489,7 +491,7 @@ struct ActionRow: View {
         HStack(spacing: 10) {
             Text(text).font(Theme.sans(13)).foregroundColor(Theme.text).lineLimit(1)
             Spacer(minLength: 0)
-            Button(SectionBar.titleCase(button), action: action).buttonStyle(FlatButton(danger: danger)).frame(width: width, height: 30)
+            Button(titleCase(button), action: action).buttonStyle(FlatButton(danger: danger)).frame(width: width, height: 30)
         }
         .padding(.trailing, 12)
     }
@@ -497,7 +499,7 @@ struct ActionRow: View {
     // A button width that fits the longest of `titles`, with a little room each side.
     static func width(_ titles: [String]) -> CGFloat {
         let font = NSFont.systemFont(ofSize: 13, weight: .semibold)
-        let widest = titles.map { (SectionBar.titleCase($0) as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
+        let widest = titles.map { (titleCase($0) as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
         return max(80, ceil(widest) + 32)
     }
 }

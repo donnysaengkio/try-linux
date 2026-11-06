@@ -85,16 +85,16 @@ struct DialogView: View {
                 Spacer()
                 if let secondary {
                     if danger {
-                        Button(SectionBar.titleCase(secondary)) { pick(.secondary) }.buttonStyle(FlatButton()).frame(width: 150, height: 36)
+                        Button(titleCase(secondary)) { pick(.secondary) }.buttonStyle(FlatButton()).frame(width: 150, height: 36)
                             .keyboardShortcut(.defaultAction)
                     } else {
-                        Button(SectionBar.titleCase(secondary)) { pick(.secondary) }.buttonStyle(FlatButton()).frame(width: 150, height: 36)
+                        Button(titleCase(secondary)) { pick(.secondary) }.buttonStyle(FlatButton()).frame(width: 150, height: 36)
                     }
                 }
                 if danger {
-                    Button(SectionBar.titleCase(primary)) { pick(.primary) }.buttonStyle(FlatButton(danger: true)).frame(width: 150, height: 36)
+                    Button(titleCase(primary)) { pick(.primary) }.buttonStyle(FlatButton(danger: true)).frame(width: 150, height: 36)
                 } else {
-                    Button(SectionBar.titleCase(primary)) { pick(.primary) }.buttonStyle(FlatButton(primary: true)).frame(width: 150, height: 36)
+                    Button(titleCase(primary)) { pick(.primary) }.buttonStyle(FlatButton(primary: true)).frame(width: 150, height: 36)
                         .keyboardShortcut(.defaultAction)
                 }
             }
