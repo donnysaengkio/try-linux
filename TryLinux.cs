@@ -803,16 +803,38 @@ class SizeBox : ComboBox
         BeginInvoke((Action)(() => { if (!IsDisposed && !Focused) SelectionLength = 0; }));
     }
 
+    // Locked: shown dimmed and can't be changed (Balanced and Maximum fill in their own values).
+    // Disabling it instead would make Windows draw it light grey.
+    bool locked;
+    public bool Locked
+    {
+        get { return locked; }
+        set { locked = value; ForeColor = value ? Theme.Muted : Theme.Text; TabStop = !value; Invalidate(); }
+    }
+
+    protected override void OnDropDown(EventArgs e)
+    {
+        base.OnDropDown(e);
+        if (locked) BeginInvoke((Action)(() => DroppedDown = false));
+    }
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        if (locked) { e.Handled = e.SuppressKeyPress = true; return; }
         if (e.KeyCode == Keys.Enter) Commit();
         base.OnKeyDown(e);
     }
 
     protected override void OnKeyPress(KeyPressEventArgs e)
     {
-        if (!char.IsDigit(e.KeyChar) && !char.IsControl(e.KeyChar)) e.Handled = true;   // numbers only
+        if (locked || (!char.IsDigit(e.KeyChar) && !char.IsControl(e.KeyChar))) e.Handled = true;   // numbers only
         base.OnKeyPress(e);
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        base.WndProc(ref m);
+        if (m.Msg == DarkCombo.WM_PAINT) DarkCombo.Paint(this, locked || !Enabled);
     }
 
     // Snaps whatever was typed to a valid value (or back to the last one if it isn't a number).
@@ -820,6 +842,77 @@ class SizeBox : ComboBox
     {
         int v;
         Value = int.TryParse(Text.Trim(), out v) ? v : value;
+    }
+}
+
+// Dropdowns drawn like the Mac version's: a dark field with a thin border, and the arrow in its own
+// dark button behind a divider line. Windows draws the field first; this paints over its frame and button.
+static class DarkCombo
+{
+    public const int WM_PAINT = 0x000F;
+    [StructLayout(LayoutKind.Sequential)] struct RECT { public int L, T, R, B; }
+    [StructLayout(LayoutKind.Sequential)] struct COMBOBOXINFO { public int cbSize; public RECT rcItem, rcButton; public int stateButton; public IntPtr hwndCombo, hwndItem, hwndList; }
+    [DllImport("user32.dll")] static extern bool GetComboBoxInfo(IntPtr h, ref COMBOBOXINFO info);
+
+    public static void Paint(ComboBox c, bool dim)
+    {
+        if (!c.IsHandleCreated || c.Width < 10) return;
+        var info = new COMBOBOXINFO { cbSize = Marshal.SizeOf(typeof(COMBOBOXINFO)) };
+        if (!GetComboBoxInfo(c.Handle, ref info)) return;
+        int bw = Math.Max(Theme.D(22), info.rcButton.R - info.rcButton.L + 2);
+        var item = Rectangle.FromLTRB(info.rcItem.L, info.rcItem.T, Math.Min(info.rcItem.R, c.Width - bw - 1), info.rcItem.B);
+        var button = new Rectangle(c.Width - bw, 0, bw, c.Height);
+        using (var g = Graphics.FromHwnd(c.Handle))
+        {
+            // Everything but the text: the ring around it and the button.
+            g.ExcludeClip(item);
+            using (var b = new SolidBrush(Theme.Card)) g.FillRectangle(b, 0, 0, c.Width, c.Height);
+            g.ResetClip();
+            using (var p = new Pen(Theme.Border))
+            {
+                g.DrawLine(p, button.Left, 1, button.Left, c.Height - 2);
+                g.DrawRectangle(p, 0, 0, c.Width - 1, c.Height - 1);
+            }
+            // A chevron in the middle of the button.
+            int cx = button.Left + button.Width / 2, cy = c.Height / 2, s = Math.Max(3, Theme.D(4));
+            var mode = g.SmoothingMode;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using (var p = new Pen(dim ? Theme.Muted : Theme.Text, Math.Max(1.5f, Theme.Scale * 1.5f)))
+                g.DrawLines(p, new[] { new Point(cx - s, cy - s / 2), new Point(cx, cy + s / 2), new Point(cx + s, cy - s / 2) });
+            g.SmoothingMode = mode;
+        }
+    }
+}
+
+// A dropdown list (no typing), drawn like the others: the chosen item on the dark field, muted when disabled.
+class DarkList : ComboBox
+{
+    public DarkList()
+    {
+        DropDownStyle = ComboBoxStyle.DropDownList;
+        DrawMode = DrawMode.OwnerDrawFixed;
+        FlatStyle = FlatStyle.Flat;
+        BackColor = Theme.Card; ForeColor = Theme.Text; Font = Theme.Body;
+        ItemHeight = Theme.D(20);
+    }
+
+    protected override void OnDrawItem(DrawItemEventArgs e)
+    {
+        bool field = (e.State & DrawItemState.ComboBoxEdit) != 0;
+        bool chosen = !field && (e.State & DrawItemState.Selected) != 0;
+        using (var b = new SolidBrush(chosen ? Theme.CardSelected : Theme.Card)) e.Graphics.FillRectangle(b, e.Bounds);
+        if (e.Index >= 0)
+            TextRenderer.DrawText(e.Graphics, GetItemText(Items[e.Index]), Font, Rectangle.Inflate(e.Bounds, -Theme.D(3), 0),
+                Enabled ? (chosen ? Theme.Highlight : Theme.Text) : Theme.Muted,
+                TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+    }
+
+    protected override void OnEnabledChanged(EventArgs e) { base.OnEnabledChanged(e); Invalidate(); }
+
+    protected override void WndProc(ref Message m)
+    {
+        base.WndProc(ref m);
+        if (m.Msg == DarkCombo.WM_PAINT) DarkCombo.Paint(this, !Enabled);
     }
 }
 
@@ -1521,6 +1614,17 @@ static class Theme
     public static readonly Font RowTitle = new Font("Segoe UI Semibold", 10.5f);   // a system or distribution name in a list
 
     public static int D(int v) { return (int)Math.Round(v * Scale); }
+
+    // Every word starting with a capital letter, as buttons and section titles show their text
+    // ("Check for updates" is drawn "Check For Updates"); the rest of each word is left as it is.
+    public static string TitleCase(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return s;
+        var words = s.Split(' ');
+        for (int i = 0; i < words.Length; i++)
+            if (words[i].Length > 0 && char.IsLower(words[i][0])) words[i] = char.ToUpper(words[i][0]) + words[i].Substring(1);
+        return string.Join(" ", words);
+    }
 }
 
 static class Icons
@@ -1979,7 +2083,7 @@ class FlatBtn : Button
             border = Focused && ShowFocusCues ? Theme.Highlight : FlatAppearance.BorderColor;
         }
         Theme.Surface(g, ClientRectangle, behind, top, bottom, border, false);
-        TextRenderer.DrawText(g, Text, Font, ClientRectangle, fore,
+        TextRenderer.DrawText(g, Theme.TitleCase(Text), Font, ClientRectangle, fore,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
     }
 
@@ -2080,10 +2184,14 @@ class OptionRow : Control
             TextRenderer.DrawText(g, Sub, Theme.Small, new Rectangle(pad, half + Theme.D(3), textW, half - Theme.D(7)), Theme.Muted, flags);
             return;
         }
-        // Tall rows: title on top, description wrapped onto the lines below.
-        TextRenderer.DrawText(g, Title, Theme.RowTitle, new Rectangle(pad, Theme.D(9), Width - pad * 2, Theme.D(20)), Theme.Text, flags);
-        TextRenderer.DrawText(g, Sub, Theme.Small, new Rectangle(pad, Theme.D(35), Width - pad * 2, Height - Theme.D(38)), Theme.Muted,
-            TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+        // Tall rows: the title with the description wrapped below it, centred in the row together, so a
+        // one-line description has the same space above and below as a two-line one.
+        var wrap = TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
+        int w = Width - pad * 2, titleH = Theme.D(20), gap = Theme.D(6);
+        int subH = Math.Min(Height - titleH - gap - Theme.D(8), TextRenderer.MeasureText(g, Sub, Theme.Small, new Size(w, int.MaxValue), wrap).Height);
+        int top = Math.Max(Theme.D(4), (Height - titleH - gap - subH) / 2);
+        TextRenderer.DrawText(g, Title, Theme.RowTitle, new Rectangle(pad, top, w, titleH), Theme.Text, flags);
+        TextRenderer.DrawText(g, Sub, Theme.Small, new Rectangle(pad, top + titleH + gap, w, subH), Theme.Muted, wrap);
     }
 }
 
@@ -2177,7 +2285,8 @@ class Segmented : Control
             {
                 var mode = g.SmoothingMode;
                 g.SmoothingMode = SmoothingMode.AntiAlias;
-                using (var path = Theme.Shape(Rectangle.Inflate(r, -Theme.D(3), -Theme.D(3)), Math.Max(0, Theme.D(Theme.Radius) - Theme.D(3))))
+                // Flush with the edge, so it lines up with the fields below it (as on the Mac).
+                using (var path = Theme.Shape(r, Theme.D(Theme.Radius)))
                 using (var b = new LinearGradientBrush(r, Theme.Highlight, Theme.AccentHover, LinearGradientMode.Vertical)) g.FillPath(b, path);
                 g.SmoothingMode = mode;
             }
@@ -2274,17 +2383,17 @@ class ResourcePicker
 {
     Segmented profile;
     SizeBox ram, cores;
-    Label summary;
-
     public void Attach(Page p, int y, VmConfig c)
     {
-        p.Caption("Resources", 0, y, 180, 32);
-        profile = p.Add(new Segmented { Options = VmConfig.ProfileNames }, 190, y, 450, 32);
-        p.Caption("Memory GB", 190, y + 44, 100, 26, Theme.Small, Theme.Muted);
-        ram = p.Add(Sys.RamBox(Sys.MaxRamGB, c.RamGB), 290, y + 44, 90, 26);
-        p.Caption("Cores", 410, y + 44, 70, 26, Theme.Small, Theme.Muted);
-        cores = p.Add(Sys.CoreBox(Sys.MaxCores, c.Cores), 480, y + 44, 90, 26);
-        summary = p.Caption("", 190, y + 76, 450, 24, Theme.Small, Theme.Muted);
+        // Laid out like Settings > Hardware > Resources: a row each, with its limit beside it.
+        p.Caption("Resource profile", 0, y, 180, 30);
+        profile = p.Add(new Segmented { Options = VmConfig.ProfileNames }, 190, y, 410, 30);
+        p.Caption("Memory (GiB)", 0, y + 40, 180, 26);
+        ram = p.Add(Sys.RamBox(Sys.MaxRamGB, c.RamGB), 190, y + 40, 100, 26);
+        p.Caption("up to " + Sys.MaxRamGB + " of " + Sys.TotalRamGB + " GiB", 300, y + 40, 300, 26, Theme.Small, Theme.Muted);
+        p.Caption("CPU cores", 0, y + 74, 180, 26);
+        cores = p.Add(Sys.CoreBox(Sys.MaxCores, c.Cores), 190, y + 74, 100, 26);
+        p.Caption("up to " + cores.Maximum + " of " + Environment.ProcessorCount, 300, y + 74, 300, 26, Theme.Small, Theme.Muted);
         profile.Changed += delegate { Refresh(); };
         ram.ValueChanged += delegate { Refresh(); };
         cores.ValueChanged += delegate { Refresh(); };
@@ -2297,14 +2406,13 @@ class ResourcePicker
     {
         if (showing) return;
         bool manual = profile.SelectedIndex == 2;
-        ram.Enabled = cores.Enabled = manual;
+        ram.Locked = cores.Locked = !manual;
         var probe = new VmConfig();
         Store(probe);
         int n, gb;
         probe.Resources(out n, out gb);
         // Balanced and Maximum show what they'll give in the greyed-out fields; Manual starts from there.
         if (!manual) { showing = true; ram.Value = gb; cores.Value = n; showing = false; }
-        summary.Text = "Uses " + n + " of " + Environment.ProcessorCount + " cores and " + gb + " of " + Sys.TotalRamGB + " GB memory";
     }
 
     public void Store(VmConfig c)
@@ -2705,7 +2813,7 @@ partial class MainForm : Form
         // Two containers: the distributions, then your own installer (an ISO file on this PC or a URL link).
         // One selection across both: choosing in one clears the other.
         const int padIn = 6;
-        int distroH = Distro.Catalog.Length * 78 - 6, ownH = 54;
+        int distroH = Distro.Catalog.Length * 78 - 6, ownH = 72;   // the same row height in both
         int box1 = distroH + padIn * 2, box2 = ownH + padIn * 2;
         int top = 172;
         var p = new Page(top + box1 + 12 + box2 + 20 + 42);
@@ -2720,7 +2828,7 @@ partial class MainForm : Form
 
         var ownBox = p.Add(new BoxPanel(), 0, top + box1 + 12, 640, box2);
         // One option; Next asks whether the installer is an ISO file on this PC or a URL link.
-        var own = new OptionList { RowHeight = 54, BackColor = BoxPanel.Fill };
+        var own = new OptionList { RowHeight = 72, BackColor = BoxPanel.Fill };
         own.SetBounds(Theme.D(padIn), Theme.D(padIn), Theme.D(640 - padIn * 2), Theme.D(ownH));
         ownBox.Controls.Add(own);
         own.AddItem("Use your own installer", "An .iso file already on this PC, or a URL link to download one", "own");
@@ -2910,7 +3018,7 @@ partial class MainForm : Form
         var cfg = new VmConfig { Profile = 0, RamGB = 8, Cores = Math.Max(2, Environment.ProcessorCount / 2) };
         cfg.SshPort = existing.Count == 0 ? 2223 : Math.Max(2222, existing.Max(v => v.SshHostPort)) + 1;
 
-        var p = new Page(534);
+        var p = new Page(542);
         p.Caption("Name", 0, 120, 180, 26);
         // The name shown on Virtual Machines; the folder name is made from it.
         string suggested = plan.Distro != null ? plan.Distro.Name : plan.Label;
@@ -2921,29 +3029,28 @@ partial class MainForm : Form
         var res = new ResourcePicker();
         res.Attach(p, 162, cfg);
 
-        p.Caption("Disk size", 0, 274, 180, 26);
-        var disk = p.Add(Sys.DiskBox(16, 2048, plan.Distro != null ? plan.Distro.DiskGB : 64), 190, 274, 90, 26);
-        p.Caption("GB, grows only as you use it", 290, 274, 350, 26, Theme.Small, Theme.Muted);
+        p.Caption("Disk size (GiB)", 0, 282, 180, 26);
+        var disk = p.Add(Sys.DiskBox(16, 2048, plan.Distro != null ? plan.Distro.DiskGB : 64), 190, 282, 100, 26);
 
-        p.Caption("Storage", 0, 316, 180, 26);
+        p.Caption("Storage", 0, 324, 180, 26);
         TextBox storage = null;
         if (existing.Count == 0)
         {
-            storage = p.Input(AppSettings.Storage, 190, 316, 330);
-            var change = p.Add(new FlatBtn("Change"), 530, 314, 110, 30);
+            storage = p.Input(AppSettings.Storage, 190, 324, 330);
+            var change = p.Add(new FlatBtn("Change"), 530, 322, 110, 30);
             change.Click += delegate
             {
                 using (var dlg = new FolderBrowserDialog { Description = "Where should Try Linux keep its systems and downloads?" })
                     if (dlg.ShowDialog(this) == DialogResult.OK) storage.Text = Path.Combine(dlg.SelectedPath, "TryLinux");
             };
         }
-        else p.Caption(AppSettings.Storage, 190, 316, 450, 26, Theme.Small, Theme.Muted);
+        else p.Caption(AppSettings.Storage, 190, 324, 450, 26, Theme.Small, Theme.Muted);
 
-        p.Caption("The installer only sees a virtual disk. Your Windows drive is never touched.", 0, 366, 640, 40, Theme.Small, Theme.Muted);
+        p.Caption("The installer only sees a virtual disk. Your Windows drive is never touched.", 0, 374, 640, 40, Theme.Small, Theme.Muted);
 
-        var back = p.Add(new FlatBtn("Back"), 0, 444, 120, 42);
+        var back = p.Add(new FlatBtn("Back"), 0, 452, 120, 42);
         back.Click += delegate { ShowChoose(); };
-        var install = p.Add(new FlatBtn("Install", true), 500, 444, 140, 42);
+        var install = p.Add(new FlatBtn("Install", true), 500, 452, 140, 42);
         install.Click += delegate
         {
             string display = name.Text.Trim();

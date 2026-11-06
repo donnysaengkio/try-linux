@@ -343,7 +343,7 @@ class Sheet
     // A right-aligned button's width: its text with a little room each side, in design units.
     public static int SnugWidth(string text)
     {
-        return Math.Max(80, (int)Math.Ceiling(TextRenderer.MeasureText(text, Theme.Bold).Width / Theme.Scale) + 32);
+        return Math.Max(80, (int)Math.Ceiling(TextRenderer.MeasureText(Theme.TitleCase(text), Theme.Bold).Width / Theme.Scale) + 32);
     }
 
     // Room between right-aligned buttons and the bar's right edge, in design units.
@@ -367,7 +367,7 @@ class Sheet
 
     public static ComboBox Combo(params string[] items)
     {
-        var c = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, FlatStyle = FlatStyle.Flat, BackColor = Theme.Card, ForeColor = Theme.Text, Font = Theme.Body };
+        var c = new DarkList();
         c.Items.AddRange(items);
         if (items.Length > 0) c.SelectedIndex = 0;
         Native.DarkScrollbars(c);
@@ -436,7 +436,7 @@ class TabStrip : Control
 
 partial class MainForm
 {
-    public const string Version = "1.1.7";
+    public const string Version = "1.1.8";
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
     void ShowSettings(VmConfig cfg)
@@ -553,7 +553,7 @@ partial class MainForm
             (cfg.LastRender.Length > 0 ? cfg.LastRender : "not started yet") + ".", 3);
 
         hardware.Section("Resources");
-        var profile = hardware.Row("Resource profile", Sheet.Combo(VmConfig.ProfileNames), 100);   // as wide as Memory and CPU cores below it
+        var profile = hardware.Row("Resource profile", new Segmented { Options = VmConfig.ProfileNames }, 410, 30);   // buttons, as on Set up
         // What's left to assign: Windows keeps its share, and other running systems keep theirs.
         int otherCores = 0, otherRam = 0;
         foreach (var r in running.Values)
@@ -568,24 +568,20 @@ partial class MainForm
         hardware.RowOf("Memory (GiB)", Tuple.Create((Control)ram, 100), Tuple.Create((Control)limit("up to " + maxRam + " of " + Sys.TotalRamGB + " GiB"), 300));
         var cores = Sys.CoreBox(maxCores, cfg.Cores);
         maxCores = cores.Maximum;
-        hardware.RowOf("CPU cores", Tuple.Create((Control)cores, 100), Tuple.Create((Control)limit("up to " + maxCores + " of " + Environment.ProcessorCount + ", in steps of 2"), 300));
-        var estimate = hardware.Note("", 2);
+        hardware.RowOf("CPU cores", Tuple.Create((Control)cores, 100), Tuple.Create((Control)limit("up to " + maxCores + " of " + Environment.ProcessorCount), 300));
         bool showing = false;
         Action refreshEstimate = () =>
         {
             if (showing) return;
             bool manual = profile.SelectedIndex == 2;
-            ram.Enabled = cores.Enabled = manual;
+            ram.Locked = cores.Locked = !manual;
             var probe = new VmConfig { Profile = profile.SelectedIndex, RamGB = (int)ram.Value, Cores = (int)cores.Value };
             int n, gb;
             probe.Resources(out n, out gb);
             // Balanced and Maximum show what they'll give in the greyed-out fields; Manual starts from there.
             if (!manual) { showing = true; ram.Value = gb; cores.Value = n; showing = false; }
-            estimate.Text = "Next start: " + n + " cores and " + gb + " GiB of memory. Changes apply the next time it starts.\n" +
-                (otherRam > 0 ? "Windows keeps 2 cores and a quarter of the memory; other running systems use " + otherCores + " cores and " + otherRam + " GiB."
-                              : "Windows keeps 2 cores and a quarter of the memory.");
         };
-        profile.SelectedIndexChanged += delegate { refreshEstimate(); };
+        profile.Changed += delegate { refreshEstimate(); };
         ram.ValueChanged += delegate { refreshEstimate(); };
         cores.ValueChanged += delegate { refreshEstimate(); };
         profile.SelectedIndex = Math.Max(0, Math.Min(2, cfg.Profile));
@@ -778,7 +774,7 @@ partial class MainForm
         // What each closed Hardware section holds, on the right of its heading.
         hardware.Summary("Graphics", () => displays.Value + (displays.Value == 1 ? " display" : " displays") + "  ·  " +
             (rGpu.Checked ? "GPU" : rCpu.Checked ? "CPU" : "Automatic") + " rendering" + (venus.Checked ? "  ·  Vulkan, " + gpuMem.Value + " GiB" : ""));
-        hardware.Summary("Resources", () => profile.Text + "  ·  " + cores.Value + " cores  ·  " + ram.Value + " GiB");
+        hardware.Summary("Resources", () => VmConfig.ProfileNames[Math.Max(0, Math.Min(2, profile.SelectedIndex))] + "  ·  " + cores.Value + " cores  ·  " + ram.Value + " GiB");
         hardware.Summary("Disks", () =>
         {
             int n = cfg.AllDisks().Count;
@@ -796,7 +792,7 @@ partial class MainForm
         var inDev = devices.Row("Microphone", Sheet.Combo("Windows default"), 220);
         outDev.Enabled = inDev.Enabled = false;
         devices.Note("This graphics engine doesn't support separate audio choices.\nWindows defaults are used.", 2);
-        var soundBtns = devices.Buttons("Windows sound devices", "Microphone privacy");
+        var soundBtns = devices.Buttons(Sheet.Align.Left, "Windows sound devices", "Microphone privacy");
         devices.Note("Choose Windows playback and recording defaults before launching.\nIf a choice isn't picked up, restart " + who + ".", 2);
         sound.CheckedChanged += delegate { mic.Enabled = sound.Checked; };
         mic.Enabled = sound.Checked;

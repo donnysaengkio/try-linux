@@ -97,17 +97,17 @@ Once a day, Try Linux checks GitHub for a new release of Try Linux and of
 When one is available, a notice at the top of the home screen says so, with an
 **Update** button. Try Linux and WINQ-EMU updates each get their own notice.
 
-<img src="docs/images/update-button-home.png" alt="Virtual Machines screen with a notice above the list: Try Linux 1.1.7 is available. You have 1.1.6. Update button" width="560">
+<img src="docs/images/update-button-home.png" alt="Virtual Machines screen with a notice above the list: Try Linux 1.1.9 is available. You have 1.1.8. Update button" width="560">
 
 **Try Linux updates**
 
-<img src="docs/images/update-prompt-window.png" alt="Update to Try Linux 1.1.7? prompt, with What's new and Update buttons" width="420">
+<img src="docs/images/update-prompt-window.png" alt="Update to Try Linux 1.1.9? prompt, with What's New and Update buttons" width="420">
 
-1. **What's new** opens the release notes; **Update** downloads the new `TryLinux.exe`.
+1. **What's New** opens the release notes; **Update** downloads the new `TryLinux.exe`.
 2. Try Linux checks the download against the release's published SHA-256 checksum.
    If it doesn't match, the update isn't used.
 3. Try Linux replaces itself and restarts. If systems are running, choose **Restart
-   now** or **Update when I quit**; your systems keep running either way.
+   Now** or **Update When I Quit**; your systems keep running either way.
 
 Copies that aren't installed update themselves in place. Versions before 1.1.4 don't
 have the Update button, so download 1.1.4 once by hand.
@@ -115,16 +115,16 @@ have the Update button, so download 1.1.4 once by hand.
 **WINQ-EMU updates**
 
 1. **Update WINQ-EMU** shows your version and the new one. WINQ-EMU is an alpha, so
-   check **What's new** before updating.
+   check **What's New** before updating.
 2. Shut down running systems first; WINQ-EMU's files are in use while they run.
 3. Try Linux downloads the new installer from the WINQ-EMU releases page and runs it.
    Windows asks for permission, because it installs to `C:\WINQ-EMU`.
 
-**Settings > General > About** shows both versions, has **Check for updates** to
+**Settings > General > About** shows both versions, has **Check For Updates** to
 check right away, and **Check for updates automatically (once a day)** to turn the
 daily check off.
 
-<img src="docs/images/settings-about.png" alt="Settings, General tab, About section: versions, Check for updates automatically, and Check for updates" width="560">
+<img src="docs/images/settings-about.png" alt="Settings, General tab, About section: versions, Check for updates automatically, and Check For Updates" width="560">
 
 ## Using it
 
@@ -188,7 +188,7 @@ closed section shows a summary of its settings.
       deletes files** passes Linux's TRIM through, so deleted files' space is reused
       instead of growing the disk file. **Compact** gives a disk's unused space back to
       Windows.
-    - **Disk utilities:** **Add disk** creates a new disk or attaches an existing
+    - **Disk utilities:** **Add Disk** creates a new disk or attaches an existing
       `.qcow2` file; **Remove** takes one out (Linux sees each disk as its own drive and
       starts from Disk 1).
   - **Devices:** sound and microphone; a **CD/DVD drive** for ISOs such as drivers or
@@ -246,10 +246,10 @@ Setup can still download and prepare a system before you change the setting; cli
 **Install** on the home page afterwards.
 
 **"Turn on Windows Hypervisor Platform?"**
-Click **Turn on** and Try Linux turns it on; Windows asks for permission, then needs one
+Click **Turn On** and Try Linux turns it on; Windows asks for permission, then needs one
 restart.
 
-<img src="docs/images/troubleshoot-whp-prompt.png" alt="Try Linux prompt: Turn on Windows Hypervisor Platform? with Not now and Turn on buttons" width="420">
+<img src="docs/images/troubleshoot-whp-prompt.png" alt="Try Linux prompt: Turn on Windows Hypervisor Platform? with Not Now and Turn On buttons" width="420">
 
 Or do it yourself: press Win+R, type `optionalfeatures`, tick **Windows Hypervisor
 Platform**, click **OK**, then restart.
