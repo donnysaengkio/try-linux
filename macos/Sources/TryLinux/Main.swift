@@ -30,10 +30,11 @@ struct TryLinuxApp: App {
     var body: some Scene {
         Window("Try Linux", id: "main") {
             RootView()
+                .id(model.themeName)          // made again in a new theme
                 .environmentObject(model)
                 .frame(minWidth: 900, minHeight: 700)
                 .background(Theme.bg)
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(Theme.colorScheme)
         }
         .windowResizability(.contentMinSize)
         .commands { CommandGroup(replacing: .newItem) {} }
@@ -46,6 +47,8 @@ struct TryLinuxApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AppModel.shared.applyTheme()
+        AppModel.shared.watchSystemAppearance()
         DispatchQueue.main.async {
             Installer.offerAtLaunch()
             AppModel.shared.checkForUpdatesInBackground()

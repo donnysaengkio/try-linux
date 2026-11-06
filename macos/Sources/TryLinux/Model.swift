@@ -40,7 +40,8 @@ struct Notice: Identifiable {
 }
 
 final class AppModel: ObservableObject {
-    static let shared = AppModel()
+    // The saved theme is in place before anything is drawn.
+    static let shared: AppModel = { Theme.name = AppModel.wantedTheme; return AppModel() }()
 
     enum Screen: Equatable {
         case home, choose, progress
@@ -50,6 +51,42 @@ final class AppModel: ObservableObject {
     }
 
     @Published var screen: Screen = .home
+    // The theme in use (Theme.name); the window is made again when it changes.
+    @Published var themeName = AppModel.wantedTheme
+
+    // Settings > General > Appearance, for Try Linux as a whole: the theme (dark, light or blue), or
+    // macOS's own appearance with Follow system (Light in Light mode, Dark otherwise).
+    static var themeSetting: String {
+        get { UserDefaults.standard.string(forKey: "theme").flatMap { Theme.names.contains($0) ? $0 : nil } ?? "dark" }
+        set { UserDefaults.standard.set(newValue, forKey: "theme") }
+    }
+    static var followSystem: Bool {
+        get { UserDefaults.standard.bool(forKey: "followSystem") }
+        set { UserDefaults.standard.set(newValue, forKey: "followSystem") }
+    }
+    static var systemIsLight: Bool { UserDefaults.standard.string(forKey: "AppleInterfaceStyle") != "Dark" }
+    static var wantedTheme: String { followSystem ? (systemIsLight ? "light" : "dark") : themeSetting }
+
+    private var appearanceObserver: NSObjectProtocol?
+
+    // Uses the theme from Appearance now: colors, the window and macOS's menus and dialogs.
+    @MainActor
+    func applyTheme() {
+        let want = Self.wantedTheme
+        Theme.name = want
+        NSApp?.appearance = Theme.appearance
+        if themeName != want { themeName = want }
+    }
+
+    // With Follow system, macOS switching between light and dark switches Try Linux too.
+    @MainActor
+    func watchSystemAppearance() {
+        guard appearanceObserver == nil else { return }
+        appearanceObserver = DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("AppleInterfaceThemeChangedNotification"), object: nil, queue: .main) { _ in
+            Task { @MainActor in if AppModel.followSystem { AppModel.shared.applyTheme() } }
+        }
+    }
     @Published var systems: [VMConfig] = []
     @Published var running: [String: VMSession] = [:]
     @Published var progress = ProgressState()

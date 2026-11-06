@@ -195,7 +195,7 @@ enum SelfTest {
         model.previewDisk = ["fedora": "16.5 GB", "ubuntu": "9.2 GB"]
         lines.append("os labels\t\(model.osLabel(c)) / \(model.osLabel(ubuntu))")
         func snap<V: View>(_ name: String, _ view: V, height: CGFloat = 700) {
-            let root = view.environmentObject(model).frame(width: 980, height: height).background(Theme.bg).preferredColorScheme(.dark)
+            let root = view.environmentObject(model).frame(width: 980, height: height).background(Theme.bg).preferredColorScheme(Theme.colorScheme)
             let renderer = ImageRenderer(content: root)
             renderer.scale = 2
             if let img = renderer.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
@@ -205,7 +205,7 @@ enum SelfTest {
             // AppKit-backed controls (text fields, scroll views) only draw in a real window, so capture that too.
             let host = NSHostingView(rootView: root)
             let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 980, height: height), styleMask: [.titled], backing: .buffered, defer: false)
-            win.appearance = NSAppearance(named: .darkAqua)
+            win.appearance = Theme.appearance
             win.contentView = host
             win.orderFrontRegardless()
             host.layoutSubtreeIfNeeded()
@@ -265,12 +265,26 @@ enum SelfTest {
         SettingsView.reset()
         c.cd = ""
 
+        // The Light and Blue themes, on a few screens.
+        for t in ["light", "blue"] {
+            Theme.name = t
+            snap("home-" + t, HomeView())
+            snap("choose-" + t, ChooseView())
+            snap("setup-" + t, SetupView(plan: fedoraPlan, step: 1))
+            SettingsView.opened = ["Resources"]; SettingsView.lastOpened = "Resources"
+            snap("settings-hardware-" + t, SettingsView(config: c, tab: 1))
+            SettingsView.opened = ["Appearance"]; SettingsView.lastOpened = "Appearance"
+            snap("settings-appearance-" + t, SettingsView(config: c, tab: 0))
+        }
+        Theme.name = "dark"
+        SettingsView.reset()
+
         func dialog<V: View>(_ name: String, _ view: V) {
-            let root = view.preferredColorScheme(.dark)
+            let root = view.preferredColorScheme(Theme.colorScheme)
             let host = NSHostingView(rootView: root)
             let size = host.fittingSize
             let win = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled], backing: .buffered, defer: false)
-            win.appearance = NSAppearance(named: .darkAqua)
+            win.appearance = Theme.appearance
             win.contentView = host
             win.orderFrontRegardless()
             host.layoutSubtreeIfNeeded()

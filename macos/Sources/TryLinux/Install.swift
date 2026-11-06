@@ -33,10 +33,10 @@ enum ThemedDialog {
         panel.titlebarAppearsTransparent = true
         for b in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] { panel.standardWindowButton(b)?.isHidden = true }
         panel.isMovableByWindowBackground = true
-        panel.appearance = NSAppearance(named: .darkAqua)
+        panel.appearance = Theme.appearance
         panel.backgroundColor = NSColor(Theme.bg)
         panel.isReleasedWhenClosed = false
-        let host = NSHostingView(rootView: content { NSApp.stopModal() }.preferredColorScheme(.dark))
+        let host = NSHostingView(rootView: content { NSApp.stopModal() }.preferredColorScheme(Theme.colorScheme))
         host.frame.size = host.fittingSize
         panel.contentView = host
         panel.setContentSize(host.fittingSize)

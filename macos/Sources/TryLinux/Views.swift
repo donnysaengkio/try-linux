@@ -215,7 +215,7 @@ enum PowerMenu {
         menu.addItem(.separator())
         add("Force stop", danger: true) { model.forceStop(s) }
         add("Reset", danger: true) { model.reset(s) }
-        menu.appearance = NSAppearance(named: .darkAqua)
+        menu.appearance = Theme.appearance
         withExtendedLifetime(actions) { _ = menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil) }
     }
 }

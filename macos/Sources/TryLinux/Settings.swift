@@ -14,6 +14,8 @@ struct SettingsView: View {
     @State private var checking = false
     @State private var open: Set<String>
     @State private var lit: String?
+    @State private var themeIndex = max(0, Theme.names.firstIndex(of: AppModel.themeSetting) ?? 0)
+    @State private var followSystem = AppModel.followSystem
     @State private var diskIndex = 0
 
     static let resolutions = [(1280, 800), (1920, 1200), (2560, 1600)]
@@ -161,6 +163,16 @@ struct SettingsView: View {
             .padding(.trailing, 12)
             FormRow(label: "") { CheckRow(title: "Allow Linux to read and change this folder", on: $c.sharedWrite) }
             FormRow(label: "") { Note(text: "Off shares it read-only. In Linux: sudo mount -t virtiofs host /mnt/host") }
+        }
+
+        // Appearance: Try Linux's theme, for every system. Follow system uses Light while macOS is in Light
+        // mode and Dark otherwise; the theme list waits while it's on.
+        SectionBar(title: "Appearance",
+                   summary: followSystem ? "Follows macOS (\(AppModel.systemIsLight ? "Light" : "Dark"))" : Theme.titles[themeIndex],
+                   open: bar("Appearance")) {
+            FormRow(label: "Theme") { DropdownField(options: Theme.titles, selection: $themeIndex, width: 160).disabled(followSystem) }
+            CheckRow(title: "Follow system", on: $followSystem)
+            Note(text: "Follow system uses Light while macOS is in Light mode, and Dark otherwise.\nThe theme changes when you save.")
         }
 
         SectionBar(title: "About", summary: "Try Linux for Mac \(AppInfo.version)" + (model.updateAvailable.map { "  ·  \($0) available" } ?? ""),
@@ -591,7 +603,7 @@ struct SettingsView: View {
         HStack(spacing: 10) {
             Button("Back") { model.goHome() }.buttonStyle(FlatButton()).frame(width: 120, height: 42)
             Spacer()
-            Button("Save") { if save() { model.goHome() } }.buttonStyle(FlatButton(primary: true)).frame(width: 120, height: 42)
+            Button("Save") { if save() { model.goHome(); model.applyTheme() } }.buttonStyle(FlatButton(primary: true)).frame(width: 120, height: 42)
                 .keyboardShortcut(.defaultAction)
         }
         .padding(.top, 12)
@@ -611,6 +623,9 @@ struct SettingsView: View {
         if let fresh = VMConfig.load(c.dir) { toSave.extraDisks = fresh.extraDisks; toSave.diskGB = fresh.diskGB }
         do { try toSave.save() } catch { model.show("Couldn't save settings: \(error.localizedDescription)"); return false }
         if openAtLogin != AppModel.openAtLogin { AppModel.openAtLogin = openAtLogin }
+        // Appearance is for Try Linux as a whole, so it's kept in its own settings, then applied.
+        AppModel.themeSetting = Theme.names[min(Theme.names.count - 1, max(0, themeIndex))]
+        AppModel.followSystem = followSystem
         model.reload()
         return true
     }
@@ -665,7 +680,7 @@ enum ChoiceMenu {
             item.state = i == selected ? .on : .off
             menu.addItem(item)
         }
-        menu.appearance = NSAppearance(named: .darkAqua)
+        menu.appearance = Theme.appearance
         withExtendedLifetime(actions) { _ = menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil) }
     }
 }
