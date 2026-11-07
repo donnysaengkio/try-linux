@@ -386,6 +386,139 @@
       "base": "https://files.kde.org/neon/images/desktop/user/current/",
       "steps": ["~^neon-user-desk-.*\\.iso$"],
       "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "arch", "name": "Arch Linux",
+      "about": "A minimal, rolling-release distribution you build up yourself; installs from a text menu (archinstall) with the desktop of your choice",
+      "base": "https://geo.mirror.pkgbuild.com/iso/",
+      "steps": ["latest/", "~^archlinux-\\d{4}\\.\\d\\d\\.\\d\\d-x86_64\\.iso$"],
+      "checksum": "sha256sums.txt"
+    },
+    {
+      "id": "mx-xfce", "name": "MX Linux (Xfce)",
+      "about": "A popular, light Debian-based distribution with the Xfce desktop and its own handy MX Tools",
+      "base": "https://mirror.math.princeton.edu/pub/mxlinux-iso/MX/Final/Xfce/",
+      "steps": ["~^MX-[\\d.]+_Xfce_x64\\.iso$"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "mx-kde", "name": "MX Linux (KDE Plasma)",
+      "about": "MX Linux with the KDE Plasma desktop, on Debian's stable base",
+      "base": "https://mirror.math.princeton.edu/pub/mxlinux-iso/MX/Final/KDE/",
+      "steps": ["~^MX-[\\d.]+_KDE_x64\\.iso$"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "mx-fluxbox", "name": "MX Linux (Fluxbox)",
+      "about": "A very light MX Linux with the Fluxbox window manager, for older or smaller PCs",
+      "base": "https://mirror.math.princeton.edu/pub/mxlinux-iso/MX/Final/Fluxbox/",
+      "steps": ["~^MX-[\\d.]+_fluxbox_x64\\.iso$"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "antix", "name": "antiX",
+      "about": "A tiny, fast Debian-based distribution without systemd, with light window managers for old hardware",
+      "base": "https://mirror.math.princeton.edu/pub/mxlinux-iso/ANTIX/Final/",
+      "steps": ["~^antiX-\\d+(\\.\\d+)*/$", "~^antiX-[\\d.]+_x64-full\\.iso$"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "artix-plasma", "name": "Artix Linux (KDE Plasma)",
+      "about": "Arch Linux without systemd (OpenRC), with the KDE Plasma desktop",
+      "base": "https://mirror1.artixlinux.org/iso/",
+      "steps": ["~^artix-plasma-openrc-\\d{8}-x86_64\\.iso$"],
+      "checksum": "sha256sums"
+    },
+    {
+      "id": "artix-xfce", "name": "Artix Linux (Xfce)",
+      "about": "Arch Linux without systemd (OpenRC), with the Xfce desktop",
+      "base": "https://mirror1.artixlinux.org/iso/",
+      "steps": ["~^artix-xfce-openrc-\\d{8}-x86_64\\.iso$"],
+      "checksum": "sha256sums"
+    },
+    {
+      "id": "artix-lxqt", "name": "Artix Linux (LXQt)",
+      "about": "Arch Linux without systemd (OpenRC), with the light LXQt desktop",
+      "base": "https://mirror1.artixlinux.org/iso/",
+      "steps": ["~^artix-lxqt-openrc-\\d{8}-x86_64\\.iso$"],
+      "checksum": "sha256sums"
+    },
+    {
+      "id": "artix-mate", "name": "Artix Linux (MATE)",
+      "about": "Arch Linux without systemd (OpenRC), with the traditional MATE desktop",
+      "base": "https://mirror1.artixlinux.org/iso/",
+      "steps": ["~^artix-mate-openrc-\\d{8}-x86_64\\.iso$"],
+      "checksum": "sha256sums"
+    },
+    {
+      "id": "alpine", "name": "Alpine Linux",
+      "about": "A tiny, security-minded distribution built on musl and BusyBox; installs from a text prompt (setup-alpine)",
+      "base": "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/",
+      "steps": ["~^alpine-standard-(?<v>\\d+\\.\\d+\\.\\d+)-x86_64\\.iso$"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "gentoo", "name": "Gentoo (Live GUI)",
+      "about": "The source-based distribution you compile and tune yourself; this live image has KDE Plasma to install from",
+      "base": "https://distfiles.gentoo.org/releases/amd64/autobuilds/current-livegui-amd64/",
+      "steps": ["~^livegui-amd64-\\d{8}T\\d{6}Z\\.iso$"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "chimera-gnome", "name": "Chimera Linux (GNOME)",
+      "about": "An independent distribution with a FreeBSD userland, musl and LLVM, with the GNOME desktop",
+      "base": "https://repo.chimera-linux.org/live/latest/",
+      "steps": ["~^chimera-linux-x86_64-LIVE-\\d{8}-gnome\\.iso$"],
+      "checksum": "sha256sums.txt"
+    },
+    {
+      "id": "chimera-plasma", "name": "Chimera Linux (KDE Plasma)",
+      "about": "An independent distribution with a FreeBSD userland, musl and LLVM, with the KDE Plasma desktop",
+      "base": "https://repo.chimera-linux.org/live/latest/",
+      "steps": ["~^chimera-linux-x86_64-LIVE-\\d{8}-plasma\\.iso$"],
+      "checksum": "sha256sums.txt"
+    },
+    {
+      "id": "linux-lite", "name": "Linux Lite",
+      "about": "A light, Windows-friendly distribution based on Ubuntu's long-term releases, with Xfce and simple tools",
+      "base": "https://repo.linuxliteos.com/linuxlite/isos/",
+      "steps": ["~^\\d+\\.\\d+/$", "~^linux-lite-[\\d.]+-64bit\\.iso$"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "siduction-kde", "name": "siduction (KDE Plasma)",
+      "about": "A rolling distribution that follows Debian's unstable branch, with the KDE Plasma desktop",
+      "base": "https://mirrors.dotsrc.org/siduction/iso/",
+      "steps": ["~^[A-Za-z_]+/$", "kde/", "~^siduction-.*-kde-amd64-\\d+\\.iso$"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "siduction-xfce", "name": "siduction (Xfce)",
+      "about": "A rolling distribution that follows Debian's unstable branch, with the Xfce desktop",
+      "base": "https://mirrors.dotsrc.org/siduction/iso/",
+      "steps": ["~^[A-Za-z_]+/$", "xfce/", "~^siduction-.*-xfce-amd64-\\d+\\.iso$"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "synex-kde", "name": "Synex (KDE Plasma)",
+      "about": "A Debian-based distribution from Argentina, ready to use, with the KDE Plasma desktop",
+      "base": "https://repo.synex.ar/iso/stable/kde/",
+      "steps": ["~^synex-kde-.*-amd64\\.hybrid\\.iso$"],
+      "checksum": "{iso}.sha256sum"
+    },
+    {
+      "id": "synex-xfce", "name": "Synex (Xfce)",
+      "about": "A Debian-based distribution from Argentina, ready to use, with the Xfce desktop",
+      "base": "https://repo.synex.ar/iso/stable/xfce/",
+      "steps": ["~^synex-xfce-.*-amd64\\.hybrid\\.iso$"],
+      "checksum": "{iso}.sha256sum"
+    },
+    {
+      "id": "tuxedo-os", "name": "TUXEDO OS",
+      "about": "TUXEDO Computers' Ubuntu-based distribution with KDE Plasma, made to run well on any PC",
+      "base": "https://os.tuxedocomputers.com/",
+      "steps": ["~^TUXEDO-OS-\\d{12}\\.iso$"],
+      "checksum": "checksums/{iso}.sha256"
     }
   ]
 }

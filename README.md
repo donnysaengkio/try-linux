@@ -24,7 +24,7 @@ OpenGL / Vulkan graphics (VirGL and Venus) to the guest.
 | ![Settings, Devices tab](docs/images/settings-devices-tab.png) | ![Settings, Recovery tab](docs/images/settings-recovery-tab.png) |
 | **Settings, Devices:** sound, CD/DVD drive, network type, port forwards | **Settings, Recovery:** backups, snapshots, storage, repair, delete |
 | ![Search: KDE, with 14 results](docs/images/search.png) | ![Use Your Own Installer, with a VMware disk chosen](docs/images/own-installer.png) |
-| **Search:** over 55 more distributions, editions and atomic versions | **Use Your Own Installer:** an existing virtual disk, an ISO file or a link |
+| **Search:** over 70 more distributions, editions and atomic versions | **Use Your Own Installer:** an existing virtual disk, an ISO file or a link |
 | ![The Light theme: Choose a Linux OS](docs/images/theme-light.png) | ![Settings, General tab, Appearance section](docs/images/settings-appearance.png) |
 | **Light theme** | **Settings > General > Appearance:** Dark or Light, or follow Windows |
 
@@ -43,10 +43,12 @@ you install, so it doesn't need updating for new versions.
 
 ![Choose a Linux OS, searching for KDE: KDE neon, Kubuntu, Ubuntu Studio, Fedora KDE Plasma Desktop and Fedora Kinoite](docs/images/search.png)
 
-**Search** (above the list) finds more: over 50 other distributions, desktop
+**Search** (above the list) finds more: over 70 other distributions, desktop
 editions and immutable / atomic versions, such as Kubuntu, Xubuntu, Fedora KDE and
-Silverblue, Linux Mint Xfce, Debian KDE, openSUSE Tumbleweed, AlmaLinux, Rocky
-Linux, Bazzite, Bluefin, NixOS, Kali, Solus, Mageia, EndeavourOS and KDE neon.
+Silverblue, Linux Mint Xfce, Debian KDE, openSUSE Tumbleweed, MX Linux, Arch Linux,
+Artix, antiX, Alpine, Gentoo, Chimera Linux, Linux Lite, TUXEDO OS, siduction,
+AlmaLinux, Rocky Linux, Bazzite, Bluefin, NixOS, Kali, Solus, Mageia, EndeavourOS
+and KDE neon.
 Search by name, desktop or description, e.g. `KDE`, `Xfce` or `atomic`. The list
 comes from [`catalog/distros.json`](catalog/distros.json) in this repository and is
 refreshed at most once a day, so it grows without a new release. Each download is
