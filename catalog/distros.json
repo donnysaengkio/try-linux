@@ -593,6 +593,190 @@
       "base": "https://os.tuxedocomputers.com/",
       "steps": ["~^TUXEDO-OS-\\d{12}\\.iso$"],
       "checksum": "checksums/{iso}.sha256"
+    },
+    {
+      "id": "alt", "name": "ALT Linux",
+      "home": "https://www.basealt.ru/",
+      "about": "An independent distribution from Russia, with Cinnamon, MATE, Xfce",
+      "base": "https://mirror.yandex.ru/altlinux/p11/images/workstation/",
+      "steps": ["~^x\\d+_\\d+/$", "~^alt\\-workstation\\-\\d+\\.\\d+\\-x\\d+_\\d+\\.iso$"],
+      "checksum": "SHA512SUM"
+    },
+    {
+      "id": "backbox", "name": "BackBox Linux",
+      "home": "https://www.backbox.org/",
+      "about": "A distribution based on Ubuntu (LTS) from Italy, with Xfce",
+      "base": "https://mirror.backbox.org/",
+      "steps": ["~^backbox\\-\\d+\\-desktop\\-amd\\d+\\.iso$"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "bunsenlabs", "name": "BunsenLabs Linux",
+      "home": "https://www.bunsenlabs.org/",
+      "about": "A distribution based on Debian (Stable), with Openbox",
+      "base": "https://ddl.bunsenlabs.org/ddl/",
+      "steps": ["~^carbon\\-\\d+\\-\\d+\\-amd\\d+\\.hybrid\\.iso$"],
+      "checksum": "release.sha256.txt"
+    },
+    {
+      "id": "centos", "name": "CentOS Stream",
+      "home": "https://www.centos.org/",
+      "about": "A distribution based on Red Hat from USA, with GNOME",
+      "base": "https://mirror.cpsc.ucalgary.ca/mirror/centos-stream/10-stream/BaseOS/x86_64/iso/",
+      "steps": ["~^CentOS\\-Stream\\-\\d+\\-latest\\-x\\d+_\\d+\\-dvd\\d+\\.iso$"],
+      "checksum": "{iso}.SHA256SUM"
+    },
+    {
+      "id": "crux", "name": "CRUX",
+      "home": "https://crux.nu/",
+      "about": "An independent distribution from Sweden, with Openbox",
+      "base": "https://crux.mirror.garr.it/crux-3.8/iso/",
+      "steps": ["~^crux\\-\\d+\\.\\d+\\.iso$"],
+      "checksum": "~^crux\\-\\d+\\.\\d+\\.sha\\d+$"
+    },
+    {
+      "id": "garuda-kde", "name": "Garuda Linux (KDE Plasma)",
+      "home": "https://garudalinux.org/",
+      "about": "A distribution based on Arch from Germany, India, with KDE Plasma (the Dr460nized edition)",
+      "base": "https://iso.builds.garudalinux.org/iso/garuda/dr460nized/",
+      "steps": ["~^\\d+/$", "~^garuda\\-dr\\d+nized\\-linux\\-garuda\\-\\d+\\.iso$"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "garuda-gnome", "name": "Garuda Linux (GNOME)",
+      "home": "https://garudalinux.org/",
+      "about": "A distribution based on Arch from Germany, India, with GNOME",
+      "base": "https://iso.builds.garudalinux.org/iso/garuda/gnome/",
+      "steps": ["~^\\d+/$", "~^garuda\\-gnome\\-linux\\-garuda\\-\\d+\\.iso$"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "garuda-cinnamon", "name": "Garuda Linux (Cinnamon)",
+      "home": "https://garudalinux.org/",
+      "about": "A distribution based on Arch from Germany, India, with Cinnamon",
+      "base": "https://iso.builds.garudalinux.org/iso/garuda/cinnamon/",
+      "steps": ["~^\\d+/$", "~^garuda\\-cinnamon\\-linux\\-garuda\\-\\d+\\.iso$"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "neptune", "name": "Neptune",
+      "home": "https://neptuneos.com/",
+      "about": "A distribution based on Debian (Stable) from Germany, with KDE Plasma",
+      "base": "https://download.neptuneos.com/download/",
+      "steps": ["~^Neptune\\d+-(?<v>\\d{8})\\.iso$"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "pardus-xfce", "name": "Pardus (Xfce)",
+      "home": "https://pardus.org.tr/",
+      "about": "A distribution based on Debian (Stable) from Türkiye, with Xfce",
+      "base": "https://indir.pardus.org.tr/ISO/",
+      "steps": ["~^Pardus\\d+/$", "~^Pardus\\-\\d+\\.\\d+\\-XFCE\\-amd\\d+\\.iso$"],
+      "checksum": "SHA256SUMS"
+    },
+    {
+      "id": "pardus-gnome", "name": "Pardus (GNOME)",
+      "home": "https://pardus.org.tr/",
+      "about": "A distribution based on Debian (Stable) from Türkiye, with GNOME",
+      "base": "https://indir.pardus.org.tr/ISO/",
+      "steps": ["~^Pardus\\d+/$", "~^Pardus\\-\\d+\\.\\d+\\-GNOME\\-amd\\d+\\.iso$"],
+      "checksum": "SHA256SUMS"
+    },
+    {
+      "id": "parrot", "name": "Parrot",
+      "home": "https://parrotsec.org/",
+      "about": "A distribution based on Debian (Stable) from Italy, with KDE Plasma",
+      "base": "https://deb.parrot.sh/parrot/iso/",
+      "steps": ["~^\\d+\\.\\d+/$", "~^Parrot\\-home\\-\\d+\\.\\d+_amd\\d+\\.iso$"],
+      "checksum": "signed-hashes.txt"
+    },
+    {
+      "id": "pureos-gnome", "name": "PureOS (GNOME)",
+      "home": "https://pureos.net/",
+      "about": "A distribution based on Debian (Stable) from France, with GNOME",
+      "base": "https://storage.puri.sm/pureos/images/crimson/2026.05/gnome/",
+      "steps": ["~^pureos\\-\\d+\\-gnome\\-live\\-\\d+_amd\\d+\\.iso$"],
+      "checksum": "~^pureos\\-\\d+\\-gnome\\-live\\-\\d+_amd\\d+\\.checksums_sha\\d+\\.txt$"
+    },
+    {
+      "id": "pureos-plasma", "name": "PureOS (KDE Plasma)",
+      "home": "https://pureos.net/",
+      "about": "A distribution based on Debian (Stable) from France, with KDE Plasma",
+      "base": "https://storage.puri.sm/pureos/images/crimson/2026.05/plasma/",
+      "steps": ["~^pureos\\-\\d+\\-plasma\\-live\\-\\d+_amd\\d+\\.iso$"],
+      "checksum": "~^pureos\\-\\d+\\-plasma\\-live\\-\\d+_amd\\d+\\.checksums_sha\\d+\\.txt$"
+    },
+    {
+      "id": "redcore-kde", "name": "Redcore Linux (KDE Plasma)",
+      "home": "https://redcorelinux.org/",
+      "about": "A distribution based on Gentoo from Romania, with KDE Plasma",
+      "base": "https://mirror.math.princeton.edu/pub/redcorelinux/amd64/iso/",
+      "steps": ["~^Redcore\\.Linux\\.Hardened\\.\\d+\\.Vulpecula\\.KDE\\.amd\\d+\\.iso$"],
+      "checksum": "{iso}.sha256sum"
+    },
+    {
+      "id": "redcore-lxqt", "name": "Redcore Linux (LXQt)",
+      "home": "https://redcorelinux.org/",
+      "about": "A distribution based on Gentoo from Romania, with LXQt",
+      "base": "https://mirror.math.princeton.edu/pub/redcorelinux/amd64/iso/",
+      "steps": ["~^Redcore\\.Linux\\.Hardened\\.\\d+\\.Vulpecula\\.LXQT\\.amd\\d+\\.iso$"],
+      "checksum": "{iso}.sha256sum"
+    },
+    {
+      "id": "tileos-sway", "name": "TileOS (Sway)",
+      "home": "https://tile-os.com/",
+      "about": "A distribution based on Debian (Stable) from Russia, with Sway",
+      "base": "https://downloads.tile-os.com/stable/sway/",
+      "steps": ["~^tileos\\-sway\\-\\d+\\.\\d+\\-desktop\\-amd\\d+\\.iso$"],
+      "checksum": "~^tileos\\-sway\\-\\d+\\.\\d+\\-desktop\\-amd\\d+\\.sha\\d+\\.txt$"
+    },
+    {
+      "id": "tileos-river", "name": "TileOS (River)",
+      "home": "https://tile-os.com/",
+      "about": "A distribution based on Debian (Stable) from Russia, with River",
+      "base": "https://downloads.tile-os.com/stable/river/",
+      "steps": ["~^tileos\\-river\\-\\d+\\.\\d+\\-desktop\\-amd\\d+\\.iso$"],
+      "checksum": "~^tileos\\-river\\-\\d+\\.\\d+\\-desktop\\-amd\\d+\\.sha\\d+\\.txt$"
+    },
+    {
+      "id": "trisquel", "name": "Trisquel GNU/Linux",
+      "home": "https://trisquel.info/",
+      "about": "A distribution based on Ubuntu from Spain, with MATE, LXDE, KDE Plasma",
+      "base": "https://mirror.math.princeton.edu/pub/trisquel-iso/",
+      "steps": ["~^trisquel_\\d+\\.\\d+_amd\\d+\\.iso$"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "ubuntusway", "name": "Ubuntu Sway Remix",
+      "home": "https://ubuntusway.com/",
+      "about": "A distribution based on Ubuntu from Russia, with Sway",
+      "base": "https://downloads.ubuntusway.com/stable/26.04/",
+      "steps": ["~^amd\\d+/$", "~^ubuntusway\\-\\d+\\.\\d+\\-desktop\\-amd\\d+\\.iso$"],
+      "checksum": "~^ubuntusway\\-\\d+\\.\\d+\\-desktop\\-amd\\d+\\.sha\\d+\\.txt$"
+    },
+    {
+      "id": "ultramarine-budgie", "name": "Ultramarine Linux (Budgie)",
+      "home": "https://ultramarine-linux.org/",
+      "about": "A distribution based on Fedora from Thailand, with Budgie",
+      "base": "https://images.fyralabs.com/isos/ultramarine/",
+      "steps": ["~^\\d+/$", "~^ultramarine\\-budgie\\-\\d+\\-live\\-anaconda\\-x\\d+_\\d+\\.iso$"],
+      "checksum": "{iso}.sha256sum"
+    },
+    {
+      "id": "ultramarine-gnome", "name": "Ultramarine Linux (GNOME)",
+      "home": "https://ultramarine-linux.org/",
+      "about": "A distribution based on Fedora from Thailand, with GNOME",
+      "base": "https://images.fyralabs.com/isos/ultramarine/",
+      "steps": ["~^\\d+/$", "~^ultramarine\\-gnome\\-\\d+\\-live\\-anaconda\\-x\\d+_\\d+\\.iso$"],
+      "checksum": "{iso}.sha256sum"
+    },
+    {
+      "id": "vailuxos", "name": "VailuxOS",
+      "home": "https://www.vailux.de/",
+      "about": "A distribution based on Ubuntu (LTS) from Germany, with KDE Plasma",
+      "base": "https://downloads.vailux.de/",
+      "steps": ["~^VailuxOS\\-\\d+\\.\\d+\\-desktop\\-stable\\-amd\\d+\\.iso$"],
+      "checksum": "{iso}.sha256"
     }
   ]
 }
