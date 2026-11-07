@@ -1,5 +1,5 @@
 {
-  "about": "More distributions for Try Linux (Windows). Each entry is found and checked the same way as the built-in ones: 'base' is an official mirror folder, each step is added to it (a step starting with ~ is a regex matched against the folder's links, newest first), and 'checksum' names the official checksum file next to the ISO ({iso} is the ISO's file name; a leading ~ is a regex). SHA-256 and SHA-512 checksums are both checked. Only https mirrors are used.",
+  "about": "More distributions for Try Linux (Windows). Each entry is found and checked the same way as the built-in ones: 'base' is an official mirror folder, each step is added to it (a step starting with ~ is a regex matched against the folder's links, newest first), and 'checksum' names the official checksum file next to the ISO ({iso} is the ISO's file name; a leading ~ is a regex). SHA-256 and SHA-512 checksums are both checked. Only https mirrors are used. An entry with only 'home' (no 'base') is listed in search with a link to its home page; its ISO has to be downloaded from there and used with Use Your Own Installer.",
   "version": 2,
   "distros": [
     {
@@ -777,6 +777,2201 @@
       "base": "https://downloads.vailux.de/",
       "steps": ["~^VailuxOS\\-\\d+\\.\\d+\\-desktop\\-stable\\-amd\\d+\\.iso$"],
       "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "3cx", "name": "3CX Phone System",
+      "home": "https://www.3cx.com/",
+      "about": "A distribution based on Debian from Cyprus, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "4mlinux", "name": "4MLinux",
+      "home": "https://4mlinux.com/",
+      "about": "An independent distribution from Poland, with JWM"
+    },
+    {
+      "id": "hacktrack", "name": "<<Hack|Track GNU/Linux",
+      "home": "https://www.hacktrack-linux.org/",
+      "about": "A distribution based on Debian (Stable) from Indonesia, with MATE"
+    },
+    {
+      "id": "abeiros", "name": "AbeirOS",
+      "home": "https://abeiros.sourceforge.io/",
+      "about": "A distribution based on Void from Austria, with KDE Plasma"
+    },
+    {
+      "id": "abora", "name": "Abora OS",
+      "home": "https://www.aboraos.org/",
+      "about": "A distribution based on NixOS, with Awesome, bspwm, Budgie"
+    },
+    {
+      "id": "ac", "name": "Accessible-Coconut",
+      "home": "https://zendalona.com/accessible-coconut/",
+      "about": "A distribution based on Ubuntu (LTS) from India, with MATE"
+    },
+    {
+      "id": "aciah", "name": "ACIAH-Linux",
+      "home": "https://aciah.xyz/",
+      "about": "A distribution based on Debian (Stable), Mint from France, with Xfce"
+    },
+    {
+      "id": "acreetionos", "name": "AcreetionOS",
+      "home": "https://acreetionos.org/",
+      "about": "A distribution based on Arch from USA, with Cinnamon, GNOME, KDE Plasma"
+    },
+    {
+      "id": "aeon", "name": "Aeon Desktop",
+      "home": "https://aeondesktop.org/",
+      "about": "A distribution based on openSUSE from Germany, with GNOME"
+    },
+    {
+      "id": "aerynos", "name": "aerynOS",
+      "home": "https://aerynos.com/",
+      "about": "An independent distribution from Ireland, with Budgie, COSMIC, GNOME"
+    },
+    {
+      "id": "afagos", "name": "AfagOS",
+      "home": "https://sourceforge.net/projects/afagos/",
+      "about": "A distribution based on Void from Austria, with KDE Plasma"
+    },
+    {
+      "id": "agarimos", "name": "AgarimOS",
+      "home": "https://agarimos.sourceforge.io/",
+      "about": "A distribution based on Void from Austria, with Cinnamon, GNOME, KDE Plasma"
+    },
+    {
+      "id": "ai2", "name": "AI-2",
+      "home": "https://github.com/ProWoos-Devs/ai-2",
+      "about": "A distribution based on Arch, Artix from Germany, Spain, with Xfce"
+    },
+    {
+      "id": "alienos", "name": "Alien-OS",
+      "home": "https://sourceforge.net/projects/alien-os-nano/",
+      "about": "A distribution based on Debian (Stable) from Germany, with Regolith"
+    },
+    {
+      "id": "aio", "name": "All in One - System Rescue Toolkit",
+      "home": "https://paul.is-a-geek.org/aio-srt/",
+      "about": "A distribution based on Ubuntu (LTS) from USA, with LXQt"
+    },
+    {
+      "id": "alteros", "name": "AlterOS",
+      "home": "https://alter-os.ru/",
+      "about": "A distribution based on Red Hat from Russia, with Cinnamon"
+    },
+    {
+      "id": "anduin", "name": "AnduinOS",
+      "home": "https://www.anduinos.com/",
+      "about": "A distribution based on Ubuntu from Hong Kong, with GNOME"
+    },
+    {
+      "id": "anolis", "name": "Anolis OS",
+      "home": "https://openanolis.cn/anolisos",
+      "about": "A distribution based on Fedora, CentOS from China, with GNOME"
+    },
+    {
+      "id": "anthares", "name": "Anthares OS",
+      "home": "https://anthares-os-site-d616f7.gitlab.io/",
+      "about": "A distribution based on Debian (Stable) from Brazil, with Cinnamon"
+    },
+    {
+      "id": "anubitux", "name": "AnuBitux",
+      "home": "https://anubitux.org/",
+      "about": "A distribution based on Debian (Stable), with Cinnamon"
+    },
+    {
+      "id": "aosc", "name": "AOSC OS",
+      "home": "https://aosc.io/",
+      "about": "An independent distribution from China, with KDE Plasma, MATE"
+    },
+    {
+      "id": "apertis", "name": "Apertis",
+      "home": "https://www.apertis.org/",
+      "about": "A distribution based on Debian (Stable) from United Kingdom, with Xfce"
+    },
+    {
+      "id": "archbang", "name": "ArchBANG Linux",
+      "home": "https://archbang.org/",
+      "about": "A distribution based on Arch from Canada, with Mango"
+    },
+    {
+      "id": "archcraft", "name": "Archcraft",
+      "home": "https://archcraft.io/",
+      "about": "A distribution based on Arch from India, with bspwm, MATE, Openbox"
+    },
+    {
+      "id": "archez", "name": "ArchEZ",
+      "home": "https://github.com/SuperSonic65535/archez-linux-archiso",
+      "about": "A distribution based on Arch from United Kingdom, with IceWM, KDE Plasma, Xfce"
+    },
+    {
+      "id": "archiveos", "name": "ArchiveOS",
+      "home": "https://archive-os.github.io/",
+      "about": "A distribution based on Ubuntu (LTS) from Türkiye, with KDE Plasma"
+    },
+    {
+      "id": "archman", "name": "Archman Linux",
+      "home": "https://archman.org/",
+      "about": "A distribution based on Arch from Türkiye, with i3, Xfce"
+    },
+    {
+      "id": "arcos", "name": "arcOS",
+      "home": "https://arcos-linux.com/",
+      "about": "A distribution based on Debian, Mint from USA, with Cinnamon"
+    },
+    {
+      "id": "arcris", "name": "Arcris",
+      "home": "https://github.com/CodigoCristo/ArcrisGUI",
+      "about": "A distribution based on Arch from Peru, with Xfce"
+    },
+    {
+      "id": "argent", "name": "Argent Linux",
+      "home": "https://argentlinux.io/",
+      "about": "A distribution based on Gentoo from Romania, with KDE Plasma"
+    },
+    {
+      "id": "arkane", "name": "Arkane Linux",
+      "home": "https://arkanelinux.org/",
+      "about": "A distribution based on Arch from Netherlands, with GNOME"
+    },
+    {
+      "id": "armbian", "name": "Armbian",
+      "home": "https://www.armbian.com/",
+      "about": "A distribution based on Ubuntu from Slovenia, with Cinnamon, GNOME, i3"
+    },
+    {
+      "id": "asmi", "name": "Asmi Linux",
+      "home": "https://teejeetech.com/asmi/",
+      "about": "A distribution based on Debian (Stable), Ubuntu from India, with Xfce"
+    },
+    {
+      "id": "astros", "name": "AstrOS",
+      "home": "https://astros-linux.org/",
+      "about": "A distribution based on Arch, with COSMIC"
+    },
+    {
+      "id": "athena", "name": "Athena OS",
+      "home": "https://athenaos.org/",
+      "about": "A distribution based on Arch, NixOS from Switzerland, with bspwm, Cinnamon, GNOME"
+    },
+    {
+      "id": "atz", "name": "ATZ Linux",
+      "home": "https://www.atzlinux.com/",
+      "about": "A distribution based on Debian from China, with GNOME, KDE Plasma, MATE"
+    },
+    {
+      "id": "aurora", "name": "Aurora",
+      "home": "https://getaurora.dev/",
+      "about": "A distribution based on Fedora, with KDE Plasma"
+    },
+    {
+      "id": "avlinux", "name": "AV Linux",
+      "home": "https://www.bandshed.net/avlinux/",
+      "about": "A distribution based on Debian (Stable), MX Linux from Canada, with Enlightenment, Moksha"
+    },
+    {
+      "id": "axem", "name": "AXEM-SX",
+      "home": "https://www.axem-sx.org/",
+      "about": "A distribution based on openSUSE from Canada, with KDE Plasma, LXQt"
+    },
+    {
+      "id": "axos", "name": "AxOS",
+      "home": "https://www.axos-project.com/",
+      "about": "A distribution based on Arch from France, with Hyprland, Sleex"
+    },
+    {
+      "id": "b1ackos", "name": "B1ackOS",
+      "home": "https://os.b1ack.net/",
+      "about": "A distribution based on Debian (Unstable) from Georgia, with Cinnamon"
+    },
+    {
+      "id": "baruwa", "name": "Baruwa Enterprise Edition",
+      "home": "https://www.baruwa.com/",
+      "about": "A distribution based on Fedora, CentOS from South Africa, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "basalt", "name": "Basalt Linux",
+      "home": "https://basaltlinux.gitlab.io/",
+      "about": "A distribution based on Debian (Stable) from Pakistan, with Xfce"
+    },
+    {
+      "id": "bashcore", "name": "BashCore",
+      "home": "https://www.bashcore.org/",
+      "about": "A distribution based on Debian (Stable) from Italy, with GNOME, Xfce"
+    },
+    {
+      "id": "batocera", "name": "Batocera.linux",
+      "home": "https://batocera.org/",
+      "about": "An independent distribution from France, with Openbox"
+    },
+    {
+      "id": "bedrock", "name": "Bedrock Linux",
+      "home": "https://bedrocklinux.org/",
+      "about": "An independent distribution from USA, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "berry", "name": "Berry Linux",
+      "home": "https://berry-lab.net/berry.html",
+      "about": "A distribution based on Fedora from Japan, with LXDE"
+    },
+    {
+      "id": "berserkarch", "name": "Berserk Arch",
+      "home": "https://berserkarch.org/",
+      "about": "A distribution based on Arch from India, with dwm, GNOME, Hyprland"
+    },
+    {
+      "id": "besgnulinux", "name": "Besgnulinux",
+      "home": "https://besgnulinux.blogspot.com/",
+      "about": "A distribution based on Debian (Stable) from Türkiye, with JWM, Openbox"
+    },
+    {
+      "id": "bicom", "name": "Bicom Systems SERVERware",
+      "home": "https://www.bicomsystems.com/products/serverware/",
+      "about": "A distribution based on Gentoo from France, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "biglinux", "name": "BigLinux",
+      "home": "https://www.biglinux.com.br/",
+      "about": "A distribution based on Arch, Manjaro from Brazil, with KDE Plasma"
+    },
+    {
+      "id": "blade", "name": "Blade OS",
+      "home": "https://bladeos.xyz/",
+      "about": "A distribution based on Debian (Stable) from USA, with GNOME"
+    },
+    {
+      "id": "blankon", "name": "BlankOn",
+      "home": "https://blankonlinux.id/",
+      "about": "A distribution based on Debian (Unstable) from Indonesia, with GNOME"
+    },
+    {
+      "id": "blendos", "name": "blendOS",
+      "home": "https://blendos.co/",
+      "about": "A distribution based on Arch from India, with GNOME"
+    },
+    {
+      "id": "blueonyx", "name": "BlueOnyx",
+      "home": "https://www.blueonyx.it/",
+      "about": "A distribution based on AlmaLinux from Italy, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "bluestar", "name": "Bluestar Linux",
+      "home": "https://sourceforge.net/projects/bluestarlinux/",
+      "about": "A distribution based on Arch from Germany, with KDE Plasma, SonicDE"
+    },
+    {
+      "id": "blunux", "name": "Blunux",
+      "home": "https://blunux.com/",
+      "about": "A distribution based on Arch from South Korea, with KDE Plasma"
+    },
+    {
+      "id": "bros", "name": "Br OS",
+      "home": "https://br-os.com/",
+      "about": "A distribution based on Debian (Stable) from Brazil, with KDE Plasma"
+    },
+    {
+      "id": "brgv", "name": "BRGV-OS",
+      "home": "https://github.com/florintanasa/brgvos-void/",
+      "about": "A distribution based on Void from Romania, with GNOME"
+    },
+    {
+      "id": "butrelinux", "name": "butrelinux",
+      "home": "https://github.com/butrelinux/butrelinux",
+      "about": "A distribution based on CentOS, Bluefin, with KDE Plasma"
+    },
+    {
+      "id": "butterbian", "name": "Butterbian",
+      "home": "https://www.butterbian.org/",
+      "about": "A distribution based on Debian (Stable) from USA, with Xfce"
+    },
+    {
+      "id": "cachyos", "name": "CachyOS",
+      "home": "https://cachyos.org/",
+      "about": "A distribution based on Arch from Germany, with bspwm, Budgie, Cinnamon"
+    },
+    {
+      "id": "caine", "name": "CAINE",
+      "home": "https://www.caine-live.net/",
+      "about": "A distribution based on Ubuntu (LTS) from Italy, with MATE"
+    },
+    {
+      "id": "calam", "name": "Calam Arch Installer",
+      "home": "https://calam-arch-installer.sourceforge.io/",
+      "about": "A distribution based on Arch from Greece, with Xfce"
+    },
+    {
+      "id": "calamaroos", "name": "CalamaroOS",
+      "home": "https://calamaroos-site.resorno.workers.dev/",
+      "about": "A distribution based on Gentoo from Italy, with Cinnamon, GNOME, KDE Plasma"
+    },
+    {
+      "id": "calculate", "name": "Calculate Linux",
+      "home": "https://www.calculate-linux.org/",
+      "about": "A distribution based on Gentoo from Russia, with Cinnamon, KDE Plasma, LXQt"
+    },
+    {
+      "id": "canaima", "name": "Canaima GNU/Linux",
+      "home": "https://canaima.softwarelibre.gob.ve/",
+      "about": "A distribution based on Debian (Testing) from Venezuela, with Cinnamon, GNOME, KDE Plasma"
+    },
+    {
+      "id": "capivaraos", "name": "CapivaraOS",
+      "home": "https://www.capivaraos.org/",
+      "about": "A distribution based on Fedora from Brazil, with GNOME, KDE Plasma, Xfce"
+    },
+    {
+      "id": "caramos", "name": "CaramOS",
+      "home": "https://caramos.vietnamlinuxfamily.net/",
+      "about": "A distribution based on Debian, Mint from Vietnam, with Cinnamon"
+    },
+    {
+      "id": "carotos", "name": "CarotOS",
+      "home": "https://carotos.org/",
+      "about": "A distribution based on Debian (Stable) from Türkiye, with Xfce"
+    },
+    {
+      "id": "catbird", "name": "Catbird Linux",
+      "home": "https://catbirdlinux.com/",
+      "about": "A distribution based on Debian (Unstable) from USA, with dwm"
+    },
+    {
+      "id": "catos", "name": "CatOS",
+      "home": "https://catos.info/",
+      "about": "A distribution based on Arch from China, with KDE Plasma"
+    },
+    {
+      "id": "cerberix", "name": "Cerberix Linux",
+      "home": "https://cerberix.org/",
+      "about": "A distribution based on Arch from USA, with Xfce"
+    },
+    {
+      "id": "chimo", "name": "Chimo Linux",
+      "home": "https://chimoinc.webnode.page/",
+      "about": "A distribution based on Debian (Stable) from Argentina, with GNOME, KDE Plasma"
+    },
+    {
+      "id": "chromeos", "name": "ChromeOS Flex",
+      "home": "https://chromeos.google/intl/en_ca/products/chromeos-flex/",
+      "about": "A distribution based on Gentoo, ChromeOS from USA, with ChromeOS Desktop"
+    },
+    {
+      "id": "churros", "name": "ChurrOS",
+      "home": "https://www.churroslinux.org/",
+      "about": "A distribution based on Arch from Colombia, with niri, Xfce"
+    },
+    {
+      "id": "circle", "name": "Circle Linux",
+      "home": "https://cclinux.org/",
+      "about": "A distribution based on CentOS from China, with GNOME"
+    },
+    {
+      "id": "clearndr", "name": "Clear NDR",
+      "home": "https://www.stamus-networks.com/clear-ndr-community",
+      "about": "A distribution based on Debian from France, USA, with Xfce"
+    },
+    {
+      "id": "clonezilla", "name": "Clonezilla Live",
+      "home": "https://clonezilla.org/",
+      "about": "A distribution based on Ubuntu from Taiwan, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "cloudlinux", "name": "CloudLinux OS",
+      "home": "https://cloudlinux.com/",
+      "about": "A distribution based on Red Hat from USA, with GNOME"
+    },
+    {
+      "id": "cobaltx", "name": "CobaltX",
+      "home": "https://mrdomination.github.io/cobaltx/",
+      "about": "A distribution based on Arch from Russia, with KDE Plasma"
+    },
+    {
+      "id": "commodore", "name": "Commodore OS Vision",
+      "home": "https://www.commodoreusa.net",
+      "about": "A distribution based on Debian (Stable), antiX from USA, with MATE"
+    },
+    {
+      "id": "cookieos", "name": "CookieOS",
+      "home": "https://gaja-team.github.io/CookieOS/",
+      "about": "A distribution based on Debian (Stable) from Poland, with Cinnamon, GNOME, KDE Plasma"
+    },
+    {
+      "id": "coyote", "name": "Coyote Linux",
+      "home": "https://www.coyotelinux.com/",
+      "about": "An independent distribution from USA, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "cbpp", "name": "Crunchbangplusplus",
+      "home": "https://www.crunchbangplusplus.org/",
+      "about": "A distribution based on Debian from USA, with Openbox"
+    },
+    {
+      "id": "ctlos", "name": "Ctlos Linux",
+      "home": "https://ctlos.github.io/",
+      "about": "A distribution based on Arch from Belarus, with Xfce"
+    },
+    {
+      "id": "cuerdos", "name": "CuerdOS",
+      "home": "https://cuerdos.es",
+      "about": "A distribution based on Debian (Stable) from Spain, with GNOME, KDE Plasma, Sway"
+    },
+    {
+      "id": "cutefish", "name": "Cutefish",
+      "home": "https://cutefish.org/",
+      "about": "A distribution based on Debian (Stable) from China, with Cutefish"
+    },
+    {
+      "id": "d77void", "name": "d77void GNU/Linux",
+      "home": "https://d77void.sourceforge.io/",
+      "about": "A distribution based on Void from Portugal, with Awesome, bspwm, COSMIC"
+    },
+    {
+      "id": "daphile", "name": "Daphile",
+      "home": "https://www.daphile.com/",
+      "about": "A distribution based on Gentoo from Finland, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "datlinux", "name": "DAT Linux",
+      "home": "https://datlinux.com/",
+      "about": "A distribution based on Ubuntu (LTS) from Australia, with LXQt"
+    },
+    {
+      "id": "deblight", "name": "DebLight OS",
+      "home": "https://deblight.infos.st/",
+      "about": "A distribution based on Debian (Stable), Mint from France, with LXDE, Xfce"
+    },
+    {
+      "id": "deblinux", "name": "Deblinux",
+      "home": "https://www.andrealinux.it/deblinux6/",
+      "about": "A distribution based on Debian (Stable) from Italy, with Cinnamon, IceWM, KDE Plasma"
+    },
+    {
+      "id": "deepin", "name": "deepin",
+      "home": "https://deepin.org/",
+      "about": "A distribution based on Debian from China, with Deepin"
+    },
+    {
+      "id": "dekuve", "name": "DEKUVE",
+      "home": "https://dekuve.top/",
+      "about": "A distribution based on Debian (Stable) from Ukraine, with Xfce"
+    },
+    {
+      "id": "desert", "name": "DESERT OS Linux",
+      "home": "https://sites.google.com/view/desertoslinux",
+      "about": "A distribution based on Ubuntu (LTS) from Ukraine, with Xfce"
+    },
+    {
+      "id": "dharma", "name": "Dharma Linux",
+      "home": "https://dharmalinux.com.ar/",
+      "about": "A distribution based on Devuan from Argentina, with MATE"
+    },
+    {
+      "id": "dietpi", "name": "DietPi",
+      "home": "https://dietpi.com/",
+      "about": "A distribution based on Debian (Stable), Debian (Testing) from United Kingdom, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "ditana", "name": "Ditana",
+      "home": "https://ditana.org/",
+      "about": "A distribution based on Arch from Switzerland, with COSMIC, niri, Wayfire"
+    },
+    {
+      "id": "drparted", "name": "Dr.Parted Live",
+      "home": "https://dr-parted-live.sourceforge.io/",
+      "about": "A distribution based on Debian (Testing), with Openbox"
+    },
+    {
+      "id": "dragonos", "name": "DragonOS",
+      "home": "https://sourceforge.net/projects/dragonos-focal/",
+      "about": "A distribution based on Ubuntu (LTS) from USA, with LXQt"
+    },
+    {
+      "id": "drauger", "name": "Drauger OS",
+      "home": "https://draugeros.org/",
+      "about": "A distribution based on Ubuntu (LTS) from USA, with KDE Plasma"
+    },
+    {
+      "id": "easyos", "name": "EasyOS",
+      "home": "https://easyos.org/",
+      "about": "An independent distribution from Australia, with JWM"
+    },
+    {
+      "id": "ecoos", "name": "EcoOS",
+      "home": "https://seekers-adv-stormos.sourceforge.io/",
+      "about": "A distribution based on Arch from USA, with Xfce"
+    },
+    {
+      "id": "elegance", "name": "ELEGANCE",
+      "home": "https://tuxnmix.org/elegance/",
+      "about": "A distribution based on Arch, Manjaro from France, with Cinnamon"
+    },
+    {
+      "id": "elementary", "name": "elementary OS",
+      "home": "https://elementary.io/",
+      "about": "A distribution based on Ubuntu (LTS) from USA, with Pantheon"
+    },
+    {
+      "id": "elive", "name": "Elive",
+      "home": "https://www.elivecd.org/",
+      "about": "A distribution based on Debian (Stable) from Belgium, with Enlightenment"
+    },
+    {
+      "id": "elysiaos", "name": "ElysiaOS",
+      "home": "https://elysiaos.vercel.app/",
+      "about": "A distribution based on Arch, with Hyprland"
+    },
+    {
+      "id": "emmabuntus", "name": "Emmabuntüs",
+      "home": "https://emmabuntus.org/",
+      "about": "A distribution based on Debian (Stable) from France, with LXQt, Xfce"
+    },
+    {
+      "id": "enos", "name": "EN-OS",
+      "home": "https://en-os.ru/",
+      "about": "A distribution based on Arch from Russia, with KDE Plasma"
+    },
+    {
+      "id": "enchantment", "name": "Enchantment OS",
+      "home": "https://enchantment.sourceforge.io/",
+      "about": "A distribution based on Debian (Stable) from USA, with Xfce"
+    },
+    {
+      "id": "enderos", "name": "EnderOS",
+      "home": "https://sourceforge.net/projects/enderos/",
+      "about": "A distribution based on Arch from Bangladesh, with Xfce"
+    },
+    {
+      "id": "endless", "name": "Endless OS",
+      "home": "https://endlessos.com/",
+      "about": "A distribution based on Debian (Stable) from USA, with EOS Shell (GNOME)"
+    },
+    {
+      "id": "enigmarsos", "name": "EnigmarsOS",
+      "home": "https://enigmarsos.rishispace.dev/",
+      "about": "A distribution based on Arch from India, with KDE Plasma"
+    },
+    {
+      "id": "enux", "name": "ENux",
+      "home": "https://www.emirpasha.com/",
+      "about": "A distribution based on LFS from Türkiye, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "equestria", "name": "Equestria OS",
+      "home": "https://psyche-games.com/equestria-os.php",
+      "about": "A distribution based on Arch from Georgia, with KDE Plasma"
+    },
+    {
+      "id": "escuelas", "name": "Escuelas Linux",
+      "home": "https://escuelaslinux.sourceforge.io/",
+      "about": "A distribution based on Debian, Bodhi from Mexico, with Moksha (Enlightenment)"
+    },
+    {
+      "id": "essora", "name": "Essora Eos",
+      "home": "https://www.essora.org/",
+      "about": "A distribution based on Devuan from Argentina, with Fluxbox, JWM, KDE Plasma"
+    },
+    {
+      "id": "evernight", "name": "Evernight Vista",
+      "home": "https://evernightfedora.github.io/evernight-vista/",
+      "about": "A distribution based on Fedora from China, with KDE Plasma"
+    },
+    {
+      "id": "exe", "name": "Exe GNU/Linux",
+      "home": "https://exegnulinux.net/",
+      "about": "A distribution based on Debian (Stable), Devuan from United Kingdom, with Openbox, Trinity"
+    },
+    {
+      "id": "exherbo", "name": "Exherbo",
+      "home": "https://exherbolinux.org/",
+      "about": "An independent distribution from Denmark, with Awesome, Enlightenment, Fluxbox"
+    },
+    {
+      "id": "expirion", "name": "Expirion Linux",
+      "home": "https://expirion-linux.sourceforge.io/",
+      "about": "A distribution based on Devuan from USA, with Cinnamon, LXQt, Xfce"
+    },
+    {
+      "id": "extix", "name": "ExTiX",
+      "home": "https://www.extix.se/",
+      "about": "A distribution based on Debian, deepin, Ubuntu from Sweden, with Budgie, GNOME, Deepin"
+    },
+    {
+      "id": "exton", "name": "Exton Linux",
+      "home": "https://www.exton.se/",
+      "about": "A distribution based on Arch, CRUX, Debian, deepin, Fedora, Gentoo, openSUSE, Puppy, Slackware, Void from Sweden, with Budgie, Deepin, Enlightenment"
+    },
+    {
+      "id": "extrox", "name": "extrox",
+      "home": "https://extrox.com/",
+      "about": "A distribution based on Arch, Debian, MX Linux from Japan, with Xfce"
+    },
+    {
+      "id": "ezarcher", "name": "Ezarcher",
+      "home": "https://ezarch.sourceforge.io/",
+      "about": "A distribution based on Arch from USA, with Cinnamon, COSMIC, GNOME"
+    },
+    {
+      "id": "eznixos", "name": "EznixOS",
+      "home": "https://eznixos.sourceforge.io/",
+      "about": "A distribution based on Debian (Stable) from USA, with KDE Plasma, Xfce"
+    },
+    {
+      "id": "fatdog", "name": "Fatdog64 Linux",
+      "home": "https://distro.ibiblio.org/fatdog/web/",
+      "about": "A distribution based on LFS (formerly based on Puppy) from USA, with labwc, Openbox"
+    },
+    {
+      "id": "ferenos", "name": "Feren OS",
+      "home": "https://ferenos.weebly.com/",
+      "about": "A distribution based on Ubuntu from United Kingdom, with Cinnamon, KDE Plasma"
+    },
+    {
+      "id": "finnix", "name": "Finnix",
+      "home": "https://www.finnix.org/",
+      "about": "A distribution based on Debian (Testing) from USA, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "fishy", "name": "Fishy Linux",
+      "home": "https://nixovena.org/fishy/",
+      "about": "A distribution based on Debian (Stable) from Türkiye, with LXQt"
+    },
+    {
+      "id": "flatcar", "name": "Flatcar Container Linux",
+      "home": "https://www.flatcar.org/",
+      "about": "A distribution based on Gentoo from USA, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "flickos", "name": "FlickOS",
+      "home": "https://flickos.vercel.app/",
+      "about": "A distribution based on Debian (Stable) from Philippines, with labwc"
+    },
+    {
+      "id": "flora", "name": "Flora Linux-libre",
+      "home": "https://flora-linux-libre.sourceforge.io/",
+      "about": "A distribution based on Debian (Stable), MX Linux from Japan, with Cinnamon, GNOME, MATE"
+    },
+    {
+      "id": "fluff", "name": "Fluff Linux",
+      "home": "https://flufflinux.com/",
+      "about": "A distribution based on Arch from USA, with KDE Plasma"
+    },
+    {
+      "id": "freedombox", "name": "FreedomBox",
+      "home": "https://freedombox.org/",
+      "about": "A distribution based on Debian, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "freeloader", "name": "Freeloader Linux",
+      "home": "https://freeloaderlinux.live/",
+      "about": "A distribution based on Debian (Stable), Mint from Canada, with Cinnamon, MATE"
+    },
+    {
+      "id": "fu11m00n", "name": "fu11m00n",
+      "home": "https://oreivd96v420wee4.umso.co/",
+      "about": "A distribution based on Slackware, Porteus from USA, with LXQt"
+    },
+    {
+      "id": "funos", "name": "FunOS",
+      "home": "https://funos.org/",
+      "about": "A distribution based on Ubuntu, with JWM"
+    },
+    {
+      "id": "fuss", "name": "FUSS",
+      "home": "https://fuss.bz.it/",
+      "about": "A distribution based on Debian (Stable) from Italy, with Xfce"
+    },
+    {
+      "id": "fydeos", "name": "FydeOS",
+      "home": "https://fydeos.io/",
+      "about": "A distribution based on Gentoo, ChromeOS from United Kingdom, with ChromeOS Desktop"
+    },
+    {
+      "id": "gabee", "name": "gabeeOSLinux",
+      "home": "https://gabeeoslinux.sourceforge.io/",
+      "about": "A distribution based on Void from Argentina, with Hyprland, i3, Openbox"
+    },
+    {
+      "id": "galactic", "name": "Galactic Mandate Linux",
+      "home": "https://mr-richardson.com/galactic-mandate-linux/",
+      "about": "A distribution based on Ubuntu (LTS), with Budgie"
+    },
+    {
+      "id": "genuen", "name": "Genuen",
+      "home": "https://www.genuen.org/",
+      "about": "A distribution based on Devuan from Spain, with LXDE, Xfce"
+    },
+    {
+      "id": "glacia", "name": "Glacia OS",
+      "home": "https://glaciaos.com/",
+      "about": "A distribution based on Ubuntu from Portugal, with Unity"
+    },
+    {
+      "id": "glf", "name": "GLF OS",
+      "home": "https://glfos.org/",
+      "about": "A distribution based on NixOS from France, with GNOME, KDE Plasma"
+    },
+    {
+      "id": "gnomarchy", "name": "Gnomarchy",
+      "home": "https://gnomarchy.pages.dev/",
+      "about": "A distribution based on Arch from Hungary, with GNOME"
+    },
+    {
+      "id": "gnomeos", "name": "GNOME OS",
+      "home": "https://os.gnome.org/",
+      "about": "An independent distribution, with GNOME"
+    },
+    {
+      "id": "gnoppix", "name": "Gnoppix Linux",
+      "home": "https://gnoppix.org/",
+      "about": "A distribution based on Debian (Testing) from Singapore, with GNOME, KDE Plasma, Xfce"
+    },
+    {
+      "id": "kdu", "name": "GNU/Linux KDu",
+      "home": "https://www.linux-kdu.com.br/",
+      "about": "A distribution based on Ubuntu (LTS), KDE neon from Brazil, with KDE Plasma"
+    },
+    {
+      "id": "gnuslashlinux", "name": "GNUSlashLinux",
+      "home": "https://www.gnuslashlinux.com/",
+      "about": "A distribution based on Arch from Germany, with Mango, niri, Noctalia"
+    },
+    {
+      "id": "goblin", "name": "GobLin GNU/Linux",
+      "home": "https://distro.misiones.gob.ar/goblin/",
+      "about": "A distribution based on Debian (Stable), Devuan from Argentina, with Xfce"
+    },
+    {
+      "id": "gobmis", "name": "GobMis GNU/Linux",
+      "home": "https://distro.misiones.gob.ar/",
+      "about": "A distribution based on Debian (Stable), Devuan from Argentina, with Xfce"
+    },
+    {
+      "id": "gobo", "name": "GoboLinux",
+      "home": "https://www.gobolinux.org/",
+      "about": "An independent distribution from Brazil, with Awesome"
+    },
+    {
+      "id": "gooroom", "name": "Gooroom Platform",
+      "home": "https://gooroom.kr/",
+      "about": "A distribution based on Debian (Stable) from South Korea, with GNOME Flashback"
+    },
+    {
+      "id": "gparted", "name": "GParted Live",
+      "home": "https://gparted.org/livecd.php",
+      "about": "A distribution based on Debian from USA, with Fluxbox"
+    },
+    {
+      "id": "green", "name": "Green Linux",
+      "home": "https://greenlinux.ru/",
+      "about": "A distribution based on Debian, Mint from Russia, with Cinnamon, Xfce"
+    },
+    {
+      "id": "grml", "name": "Grml",
+      "home": "https://www.grml.org/",
+      "about": "A distribution based on Debian (Testing) from Austria, with Fluxbox"
+    },
+    {
+      "id": "guideos", "name": "GuideOS",
+      "home": "https://guideos.de/",
+      "about": "A distribution based on Debian (Stable) from Germany, with Cinnamon"
+    },
+    {
+      "id": "guixsd", "name": "Guix System",
+      "home": "https://www.gnu.org/software/guix/",
+      "about": "An independent distribution from France, with Awesome, Enlightenment, GNOME"
+    },
+    {
+      "id": "gxde", "name": "GXDE OS",
+      "home": "https://www.gxde.top/",
+      "about": "A distribution based on Debian (Testing) from China, with Deepin"
+    },
+    {
+      "id": "hackeros", "name": "HackerOS",
+      "home": "https://hackeros-linux-system.github.io/HackerOS-Website/Home-page.html",
+      "about": "A distribution based on Debian (Testing) from Poland, with GNOME, KDE Plasma, Xfce"
+    },
+    {
+      "id": "hamonikr", "name": "HamoniKR",
+      "home": "https://hamonikr.org/",
+      "about": "A distribution based on Debian, Mint from South Korea, with Cinnamon"
+    },
+    {
+      "id": "hardenwing", "name": "Hardenwing OS",
+      "home": "https://nixovena.org/hardenwing/",
+      "about": "A distribution based on Debian (Stable) from Türkiye, with GNOME"
+    },
+    {
+      "id": "heliumos", "name": "HeliumOS",
+      "home": "https://www.heliumos.org/",
+      "about": "A distribution based on AlmaLinux, with KDE Plasma"
+    },
+    {
+      "id": "helwan", "name": "Helwan Linux",
+      "home": "https://helwan-linux.github.io/helwanlinux/",
+      "about": "A distribution based on Arch from Egypt, with Cinnamon, GNOME, Xfce"
+    },
+    {
+      "id": "haos", "name": "Home Assistant OS (HAOS)",
+      "home": "https://www.home-assistant.io/",
+      "about": "An independent distribution from USA, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "hoopoelinux", "name": "HoopoeLinux",
+      "home": "https://hoopoelinux.org/",
+      "about": "A distribution based on Ubuntu (LTS) from Belgium, with Cinnamon"
+    },
+    {
+      "id": "hybridd77", "name": "hybrid-d77",
+      "home": "https://hybrid-d77.sourceforge.io/",
+      "about": "A distribution based on Chimera from Portugal, with niri, Sway"
+    },
+    {
+      "id": "ideal", "name": "iDeal OS",
+      "home": "https://ideal-os.xyz/",
+      "about": "A distribution based on Debian (Stable), MX Linux from Switzerland, with KDE Plasma"
+    },
+    {
+      "id": "infinity", "name": "Infinity Linux",
+      "home": "https://infinity-linux-arch.github.io/",
+      "about": "A distribution based on Arch from Nigeria, with KDE Plasma"
+    },
+    {
+      "id": "instantos", "name": "instantOS",
+      "home": "https://instantos.io/",
+      "about": "A distribution based on Arch from Germany, with instantWM"
+    },
+    {
+      "id": "ipfire", "name": "IPFire",
+      "home": "https://www.ipfire.org/",
+      "about": "An independent distribution from Germany, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "issabel", "name": "Issabel",
+      "home": "https://www.issabel.com/",
+      "about": "A distribution based on Fedora, Rocky from USA, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "jrescue", "name": "JRescue",
+      "home": "https://jrescue.sourceforge.io/",
+      "about": "A distribution based on Debian (Stable) from Chile, with LXQt"
+    },
+    {
+      "id": "jspeduca", "name": "JSP-Educa",
+      "home": "https://www.jsp-educa.es/",
+      "about": "A distribution based on Debian (Stable), Devuan from Spain, with JWM, Fluxbox, LXDE"
+    },
+    {
+      "id": "kader42", "name": "Kader⁴²",
+      "home": "https://kader42.de/",
+      "about": "A distribution based on Arch from Germany, with KDE Plasma"
+    },
+    {
+      "id": "kanotix", "name": "KANOTIX",
+      "home": "https://kanotix.com/",
+      "about": "A distribution based on Debian from Germany, with KDE, LXDE"
+    },
+    {
+      "id": "kaos", "name": "KaOS",
+      "home": "https://kaosx.us/",
+      "about": "An independent distribution from Netherlands, with niri, Noctalia"
+    },
+    {
+      "id": "kdelinux", "name": "KDE Linux",
+      "home": "https://kde.org/linux/",
+      "about": "An independent distribution, with KDE Plasma"
+    },
+    {
+      "id": "kibaos", "name": "KibaOS",
+      "home": "https://kibaos.com/",
+      "about": "A distribution based on Arch from USA, with Budgie"
+    },
+    {
+      "id": "kicksecure", "name": "Kicksecure",
+      "home": "https://www.kicksecure.com/",
+      "about": "A distribution based on Debian (Stable) from Canada, with labwc, LXQt"
+    },
+    {
+      "id": "kiro", "name": "Kiro",
+      "home": "https://kiroproject.be/",
+      "about": "A distribution based on Arch from Belgium, with Awesome, bspwm, Budgie"
+    },
+    {
+      "id": "klv", "name": "KLV-Airedale",
+      "home": "https://klv-airedale.rockedge.org/",
+      "about": "An independent distribution from USA, with Xfce"
+    },
+    {
+      "id": "kodachi", "name": "Kodachi OS",
+      "home": "https://kodachi.cloud/",
+      "about": "A distribution based on Debian (Stable) from Oman, with Xfce"
+    },
+    {
+      "id": "koozali", "name": "Koozali SME Server",
+      "home": "https://www.koozali.org/",
+      "about": "A distribution based on Fedora, Rocky from USA, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "kumander", "name": "Kumander Linux",
+      "home": "https://www.kumander.org/",
+      "about": "A distribution based on Debian (Stable) from Philippines, with Xfce"
+    },
+    {
+      "id": "kwort", "name": "Kwort Linux",
+      "home": "https://kwort.org/",
+      "about": "A distribution based on CRUX from Argentina, with Openbox"
+    },
+    {
+      "id": "lainos", "name": "LainOS",
+      "home": "https://lainos.net/",
+      "about": "A distribution based on Arch from USA, with Openbox, Sway"
+    },
+    {
+      "id": "lajtlinux", "name": "LajtLinux",
+      "home": "https://lajtlinux.sourceforge.io/",
+      "about": "A distribution based on Debian (Stable), Debian (Testing) from Poland, with labwc, LXQt, Mango"
+    },
+    {
+      "id": "lakka", "name": "Lakka",
+      "home": "https://www.lakka.tv/",
+      "about": "A distribution based on LibreELEC from France, with RetroArch"
+    },
+    {
+      "id": "lankeos", "name": "LankeOS",
+      "home": "https://lankeos.wtada233.top/",
+      "about": "A distribution based on LFS from China, with KDE Plasma, niri"
+    },
+    {
+      "id": "lastos", "name": "LastOSLinux",
+      "home": "https://sourceforge.net/projects/lastoslinux/",
+      "about": "A distribution based on Arch, CachyOS, Mint from Australia, with Cinnamon, KDE Plasma"
+    },
+    {
+      "id": "lazylinux", "name": "LazyLinux",
+      "home": "https://lazylinuxos.github.io/",
+      "about": "A distribution based on Void from Armenia, with Mango, skarwm, Xfce"
+    },
+    {
+      "id": "lcos", "name": "LCOS (Lunduke Computer Operating System)",
+      "home": "https://github.com/BryanLunduke/LCOS",
+      "about": "A distribution based on Devuan from USA, with Xfce"
+    },
+    {
+      "id": "legacy", "name": "Legacy OS",
+      "home": "https://legacyoslinux.net/",
+      "about": "A distribution based on Debian, antiX, Puppy from Australia, with IceWM"
+    },
+    {
+      "id": "lernstick", "name": "Lernstick",
+      "home": "https://www.lernstick.ch/",
+      "about": "A distribution based on Debian from Switzerland, with Cinnamon, Enlightenment, GNOME"
+    },
+    {
+      "id": "life", "name": "Li-f-e: Linux for Education",
+      "home": "https://sourceforge.net/projects/cyberorg-home/",
+      "about": "A distribution based on Ubuntu (LTS) from India, with MATE"
+    },
+    {
+      "id": "librazik", "name": "LibraZiK",
+      "home": "https://librazik.org/",
+      "about": "A distribution based on Debian (Stable) from France, with MATE"
+    },
+    {
+      "id": "libreelec", "name": "LibreELEC",
+      "home": "https://libreelec.tv/",
+      "about": "An independent distribution from USA, with Kodi"
+    },
+    {
+      "id": "lightwhale", "name": "Lightwhale",
+      "home": "https://lightwhale.asklandd.dk/",
+      "about": "An independent distribution from Denmark, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "lilidog", "name": "Lilidog",
+      "home": "https://sourceforge.net/projects/lilidog/",
+      "about": "A distribution based on Debian (Stable) from USA, with labwc, Noctalia, Openbox"
+    },
+    {
+      "id": "lingmo", "name": "Lingmo OS",
+      "home": "https://lingmo.org/",
+      "about": "A distribution based on Debian (Stable) from China, with LingmoUI"
+    },
+    {
+      "id": "lengtoolkit", "name": "Linux Engineer Toolkit Live (LengToolkit)",
+      "home": "https://nixovena.org/lengtoolkit/",
+      "about": "A distribution based on Debian (Stable) from Türkiye, with MATE"
+    },
+    {
+      "id": "lfs", "name": "Linux From Scratch",
+      "home": "https://www.linuxfromscratch.org/",
+      "about": "An independent distribution from Canada, with Fluxbox, IceWM, KDE Plasma"
+    },
+    {
+      "id": "kamarada", "name": "Linux Kamarada",
+      "home": "https://linuxkamarada.com/",
+      "about": "A distribution based on openSUSE from Brazil, with GNOME"
+    },
+    {
+      "id": "q83", "name": "Linux Q83",
+      "home": "https://linux-q83.sourceforge.net/",
+      "about": "A distribution based on Debian (Stable), Debian (Testing) from Poland, with Cinnamon, COSMIC"
+    },
+    {
+      "id": "linuxschools", "name": "Linux Schools",
+      "home": "https://www.linuxschools.com/",
+      "about": "A distribution based on Ubuntu (LTS) from United Kingdom, with Xfce"
+    },
+    {
+      "id": "linuxcnc", "name": "LinuxCNC",
+      "home": "https://www.linuxcnc.org/",
+      "about": "A distribution based on Debian (Stable) from Germany, with Xfce"
+    },
+    {
+      "id": "linuxconsole", "name": "LinuxConsole",
+      "home": "https://www.linuxconsole.org/",
+      "about": "An independent distribution from France, with MATE"
+    },
+    {
+      "id": "linuxhub", "name": "LinuxHub Prime",
+      "home": "https://linuxhub.link/",
+      "about": "A distribution based on Arch from USA, with Openbox"
+    },
+    {
+      "id": "linuxtv", "name": "LinuxTV",
+      "home": "https://github.com/guruswarupa/LinuxTV",
+      "about": "A distribution based on Debian (Stable) from India, with Openbox"
+    },
+    {
+      "id": "liveraizo", "name": "Live Raizo",
+      "home": "https://sourceforge.net/projects/live-raizo/",
+      "about": "A distribution based on Debian (Stable) from France, with Fluxbox"
+    },
+    {
+      "id": "liya", "name": "Liya Linux",
+      "home": "https://liyalinux.sdhsm128.workers.dev/",
+      "about": "A distribution based on Arch, with Cinnamon"
+    },
+    {
+      "id": "locos", "name": "Loc-OS",
+      "home": "https://loc-os.com/",
+      "about": "A distribution based on Devuan from Brazil, Uruguay, with LXDE"
+    },
+    {
+      "id": "luberri", "name": "Luberri Linux",
+      "home": "https://luberrilinux.eus/",
+      "about": "A distribution based on Ubuntu (LTS), Mint from Spain, with Cinnamon"
+    },
+    {
+      "id": "ludora", "name": "Ludora",
+      "home": "https://ludora.org/",
+      "about": "A distribution based on Fedora from Denmark, with KDE Plasma"
+    },
+    {
+      "id": "lumaos", "name": "LumaOS",
+      "home": "https://lumaoslinux.org/",
+      "about": "A distribution based on Ubuntu from Brazil, with niri"
+    },
+    {
+      "id": "lxpup", "name": "LxPup",
+      "home": "https://lx-pup.weebly.com/",
+      "about": "A distribution based on Puppy from United Kingdom, with JWM, LXDE, Openbox"
+    },
+    {
+      "id": "lyra", "name": "Lyra OS",
+      "home": "https://lyraos.com.br/",
+      "about": "A distribution based on openSUSE from Brazil, with GNOME"
+    },
+    {
+      "id": "mabox", "name": "Mabox Linux",
+      "home": "https://maboxlinux.org/",
+      "about": "A distribution based on Arch, Manjaro from Poland, with Openbox"
+    },
+    {
+      "id": "macaroni", "name": "Macaroni OS",
+      "home": "https://www.macaronios.org/",
+      "about": "A distribution based on Funtoo from Italy, with GNOME, i3, KDE Plasma"
+    },
+    {
+      "id": "maemoleste", "name": "Maemo Leste",
+      "home": "https://maemo-leste.github.io/",
+      "about": "A distribution based on Devuan, with Matchbox"
+    },
+    {
+      "id": "magos", "name": "MagOS Linux",
+      "home": "https://magos-linux.ru/",
+      "about": "A distribution based on ROSA from Russia, with KDE Plasma, LXQt"
+    },
+    {
+      "id": "mainstream", "name": "Mainstream OS",
+      "home": "https://mainstreamos.org/",
+      "about": "A distribution based on Arch, with Hyprland"
+    },
+    {
+      "id": "makowiecos", "name": "MakowiecOS",
+      "home": "https://gorczynskimarcel.wixsite.com/makowiecos",
+      "about": "A distribution based on Debian (Stable) from Poland, with Cinnamon"
+    },
+    {
+      "id": "makulu", "name": "MakuluLinux",
+      "home": "https://www.makululinux.com/",
+      "about": "A distribution based on Debian (Stable), Ubuntu (LTS) from Vietnam, with Cinnamon, MATE, Xfce"
+    },
+    {
+      "id": "manjaro", "name": "Manjaro Linux",
+      "home": "https://manjaro.org/",
+      "about": "A distribution based on Arch from Austria, France, Germany, with Cinnamon, GNOME, i3"
+    },
+    {
+      "id": "maple", "name": "Maple Linux",
+      "home": "https://maplelinux.ca/",
+      "about": "A distribution based on Debian (Stable) from Canada, with Cinnamon"
+    },
+    {
+      "id": "margine", "name": "Margine OS",
+      "home": "https://margine.dev/",
+      "about": "A distribution based on Fedora, Bluefin, with GNOME"
+    },
+    {
+      "id": "mariposa", "name": "Mariposa Rescue Disk",
+      "home": "https://www.blueseal.eu/mariposa/",
+      "about": "A distribution based on Debian (Stable) from Luxembourg, with Xfce"
+    },
+    {
+      "id": "mauna", "name": "Mauna Linux",
+      "home": "https://maunalinux.top/",
+      "about": "A distribution based on Debian (Stable) from Brazil, with Cinnamon, GNOME, LXQt"
+    },
+    {
+      "id": "max", "name": "MAX: Madrid_Linux",
+      "home": "https://www.educa2.madrid.org/web/max/inicio",
+      "about": "A distribution based on Ubuntu (LTS) from Spain, with MATE"
+    },
+    {
+      "id": "maze", "name": "Maze Linux",
+      "home": "https://mazelinux.berkkucukk.com.tr/",
+      "about": "A distribution based on Arch from Türkiye, with KDE Plasma"
+    },
+    {
+      "id": "melawy", "name": "Melawy Linux",
+      "home": "https://melawy.ru/",
+      "about": "A distribution based on Arch from Russia, with KDE Plasma"
+    },
+    {
+      "id": "milis", "name": "Milis Linux",
+      "home": "https://mls.akdeniz.edu.tr/",
+      "about": "An independent distribution from Türkiye, with labwc"
+    },
+    {
+      "id": "minios", "name": "MiniOS",
+      "home": "https://minios.dev/",
+      "about": "A distribution based on Debian (Stable) from Russia, with Xfce"
+    },
+    {
+      "id": "miracle", "name": "MIRACLE LINUX",
+      "home": "https://www.miraclelinux.com/",
+      "about": "A distribution based on Red Hat from Japan, with GNOME"
+    },
+    {
+      "id": "ml4w", "name": "ML4W OS",
+      "home": "https://ml4w.com/os/",
+      "about": "A distribution based on Arch from Germany, with Hyprland"
+    },
+    {
+      "id": "mobian", "name": "Mobian",
+      "home": "https://mobian-project.org/",
+      "about": "A distribution based on Debian (Stable), Debian (Testing), with Plasma Mobile, Phosh"
+    },
+    {
+      "id": "mocaccinoos", "name": "MocaccinoOS",
+      "home": "https://www.mocaccino.org/",
+      "about": "An independent distribution from Italy, with COSMIC, Fluxbox, GNOME"
+    },
+    {
+      "id": "modicia", "name": "MODICIA O.S.",
+      "home": "https://www.modiciaos.cloud/",
+      "about": "A distribution based on Debian (Stable) from Italy, with Cinnamon"
+    },
+    {
+      "id": "modos", "name": "MODOS",
+      "home": "https://sourceforge.net/projects/g0ll0z-smollos/",
+      "about": "A distribution based on Debian (Stable) from Germany, with Cinnamon, Fluxbox"
+    },
+    {
+      "id": "mulios", "name": "MuliOS",
+      "home": "https://github.com/MuliOS-dev/MuliOS-Arch",
+      "about": "A distribution based on Arch, with KDE Plasma"
+    },
+    {
+      "id": "nagisinnra", "name": "NagisinnraLinux",
+      "home": "https://nagisinnra.f5.si/",
+      "about": "A distribution based on Arch, Debian (Stable), Gentoo from Japan, with KDE Plasma, Xfce"
+    },
+    {
+      "id": "nakedeb", "name": "nakeDeb",
+      "home": "https://nakedeb.arpinux.org/",
+      "about": "A distribution based on Debian (Stable) from France, with i3, Fluxbox"
+    },
+    {
+      "id": "nawaos", "name": "NawaOS",
+      "home": "https://nawaos.com/",
+      "about": "A distribution based on Debian (Stable) from Bahrain, with Cinnamon"
+    },
+    {
+      "id": "nebios", "name": "NebiOS",
+      "home": "https://nebios.org/",
+      "about": "A distribution based on Ubuntu (LTS) from Türkiye, with NebiDE (Wayfire)"
+    },
+    {
+      "id": "nebula", "name": "Nebula Linux",
+      "home": "https://nebula-linux-os.github.io/Nebula-Linux/",
+      "about": "A distribution based on Arch, Debian (Stable) from India, with Dux Shell, KDE Plasma, niri"
+    },
+    {
+      "id": "nekovoid", "name": "Neko-Void",
+      "home": "https://www.neko-void-linux.online/",
+      "about": "A distribution based on Void from Venezuela, with i3, IceWM, JWM"
+    },
+    {
+      "id": "nemesis", "name": "Nemesis Linux",
+      "home": "https://nemesis-linux.sourceforge.io/",
+      "about": "A distribution based on Arch, Artix, with Cinnamon, LXDE, LXQt"
+    },
+    {
+      "id": "nethsecurity", "name": "NethSecurity",
+      "home": "https://nethsecurity.org/",
+      "about": "A distribution based on OpenWRT from Italy, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "nethserver", "name": "NethServer",
+      "home": "https://www.nethserver.org/",
+      "about": "A distribution based on Rocky from Italy, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "nethydra", "name": "NetHydra",
+      "home": "https://nethydra.github.io",
+      "about": "A distribution based on Debian (Stable) from Indonesia, with MATE, Xfce"
+    },
+    {
+      "id": "netrunner", "name": "Netrunner",
+      "home": "https://www.netrunner.com/",
+      "about": "A distribution based on Debian (Stable) from Germany, with KDE Plasma"
+    },
+    {
+      "id": "nst", "name": "Network Security Toolkit",
+      "home": "https://www.networksecuritytoolkit.org/",
+      "about": "A distribution based on Fedora from USA, with Fluxbox, MATE, Openbox"
+    },
+    {
+      "id": "nitrux", "name": "Nitrux",
+      "home": "https://nxos.org/",
+      "about": "A distribution based on Devuan from Mexico, with Hyprland"
+    },
+    {
+      "id": "nobara", "name": "Nobara Project",
+      "home": "https://nobaraproject.org/",
+      "about": "A distribution based on Fedora from USA, with GNOME, KDE Plasma"
+    },
+    {
+      "id": "noid", "name": "Noid Linux",
+      "home": "https://sourceforge.net/projects/noid-linux/",
+      "about": "A distribution based on Void from Algeria, with GNOME, KDE Plasma, Xfce"
+    },
+    {
+      "id": "nura", "name": "Nura",
+      "home": "https://nura.eco/",
+      "about": "A distribution based on Alpine from Netherlands, with COSMIC, GNOME, GNOME Mobile"
+    },
+    {
+      "id": "nutyx", "name": "NuTyX",
+      "home": "https://www.nutyx.org/",
+      "about": "A distribution based on LFS from Switzerland, with GNOME, KDE Plasma, Xfce"
+    },
+    {
+      "id": "nyarch", "name": "Nyarch Linux",
+      "home": "https://nyarchlinux.moe/",
+      "about": "A distribution based on Arch from Italy, with GNOME, KDE Plasma"
+    },
+    {
+      "id": "obarun", "name": "Obarun",
+      "home": "https://web.obarun.org/",
+      "about": "A distribution based on Arch from Switzerland, with JWM"
+    },
+    {
+      "id": "obsidianos", "name": "ObsidianOS",
+      "home": "https://obsidianos.xyz/",
+      "about": "A distribution based on Arch, with COSMIC, KDE Plasma"
+    },
+    {
+      "id": "omarchy", "name": "Omarchy",
+      "home": "https://omarchy.org/",
+      "about": "A distribution based on Arch from Denmark, with Hyprland"
+    },
+    {
+      "id": "omegalinux", "name": "OmegaLinux",
+      "home": "https://omega-linux.github.io/page/",
+      "about": "A distribution based on Arch, Debian, Ubuntu (LTS) from Chile, with LXDE"
+    },
+    {
+      "id": "onixos", "name": "OnixOS",
+      "home": "https://onix-project.com/",
+      "about": "A distribution based on Arch from Türkiye, with GNOME"
+    },
+    {
+      "id": "openeuler", "name": "openEuler",
+      "home": "https://www.openeuler.org/",
+      "about": "A distribution based on Fedora, Red Hat Enterprise Linux from China, with Deepin, GNOME, UKUI"
+    },
+    {
+      "id": "openkylin", "name": "openKylin",
+      "home": "https://www.openkylin.top/",
+      "about": "A distribution based on Debian from China, with Cinnamon, Cutefish, KDE Plasma"
+    },
+    {
+      "id": "openmamba", "name": "openmamba GNU/Linux",
+      "home": "https://openmamba.org/",
+      "about": "An independent distribution from Italy, with KDE Plasma, LXQt"
+    },
+    {
+      "id": "openmandriva", "name": "OpenMandriva Lx",
+      "home": "https://www.openmandriva.org/",
+      "about": "An independent distribution from France, with COSMIC, Cutefish, Enlightenment"
+    },
+    {
+      "id": "openmediavault", "name": "OpenMediaVault",
+      "home": "https://www.openmediavault.org/",
+      "about": "A distribution based on Debian (Stable) from Germany, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "oracle", "name": "Oracle Linux",
+      "home": "https://www.oracle.com/linux/",
+      "about": "A distribution based on Red Hat from USA, with GNOME"
+    },
+    {
+      "id": "oreon", "name": "Oreon",
+      "home": "https://oreonhq.com/",
+      "about": "A distribution based on AlmaLinux from USA, with GNOME"
+    },
+    {
+      "id": "osgeo", "name": "OSGeoLive",
+      "home": "https://live.osgeo.org/",
+      "about": "A distribution based on Debian, Lubuntu (LTS) from USA, with LXQt"
+    },
+    {
+      "id": "osintvm", "name": "OSINT VM",
+      "home": "https://www.tracelabs.org/initiatives/osint-vm",
+      "about": "A distribution based on Debian (Stable) from USA, with Xfce"
+    },
+    {
+      "id": "osolinux", "name": "OsoLinux",
+      "home": "https://oso.sourceforge.io/",
+      "about": "A distribution based on Fedora from China, with KDE Plasma"
+    },
+    {
+      "id": "ovios", "name": "OviOS Linux",
+      "home": "https://www.ovios.org/",
+      "about": "An independent distribution from Canada, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "paldo", "name": "paldo GNU/Linux",
+      "home": "https://www.paldo.org/",
+      "about": "An independent distribution from Switzerland, with GNOME, IceWM, Xfce"
+    },
+    {
+      "id": "pantherx", "name": "PantherX OS",
+      "home": "https://www.pantherx.org/",
+      "about": "A distribution based on Guix System from Germany, with Awesome, GNOME, i3"
+    },
+    {
+      "id": "parch", "name": "Parch GNU/Linux",
+      "home": "https://parchlinux.com/",
+      "about": "A distribution based on Arch from Iran, with GNOME, KDE Plasma, Xfce"
+    },
+    {
+      "id": "partedmagic", "name": "Parted Magic",
+      "home": "https://partedmagic.com/",
+      "about": "A distribution based on Slackware from USA, with Xfce"
+    },
+    {
+      "id": "pclinuxos", "name": "PCLinuxOS",
+      "home": "https://www.pclinuxos.com/",
+      "about": "An independent distribution from USA, with JWM, KDE Plasma, labwc"
+    },
+    {
+      "id": "pearl", "name": "Pearl Linux OS",
+      "home": "https://www.pearllinux.net/",
+      "about": "A distribution based on Debian (Stable), Ubuntu (LTS) from USA, with MATE, PDE, Xfce"
+    },
+    {
+      "id": "pearos", "name": "pearOS",
+      "home": "https://pearos.xyz/",
+      "about": "A distribution based on Arch from Romania, with KDE Plasma"
+    },
+    {
+      "id": "pelandukos", "name": "PelandukOS",
+      "home": "https://pelandukos.tunnelbiz.com/",
+      "about": "A distribution based on Debian (Testing) from Malaysia, with GNOME"
+    },
+    {
+      "id": "pelicanhpc", "name": "PelicanHPC GNU Linux",
+      "home": "https://sourceforge.net/projects/pelicanhpc/",
+      "about": "A distribution based on Debian from Algeria, with MATE, Xfce"
+    },
+    {
+      "id": "pentoo", "name": "Pentoo",
+      "home": "https://www.pentoo.ch/",
+      "about": "A distribution based on Gentoo from Switzerland, with Xfce"
+    },
+    {
+      "id": "peppermint", "name": "Peppermint OS",
+      "home": "https://peppermintos.com/",
+      "about": "A distribution based on Debian (Stable), Devuan from United Kingdom, with Xfce"
+    },
+    {
+      "id": "peropesis", "name": "Peropesis",
+      "home": "https://peropesis.org/",
+      "about": "An independent distribution from Lithuania, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "ph4ntxm", "name": "PH4NTXM",
+      "home": "https://ph4ntxmofficial.github.io/",
+      "about": "A distribution based on Debian (Stable), with Xfce"
+    },
+    {
+      "id": "pikaos", "name": "PikaOS Linux",
+      "home": "https://pika-os.com/",
+      "about": "A distribution based on Debian (Unstable) from United Kingdom, with COSMIC, GNOME, Hyprland"
+    },
+    {
+      "id": "pimersusos", "name": "PimersusOS",
+      "home": "https://pimersusos.sourceforge.io/",
+      "about": "A distribution based on Debian (Stable), MX Linux, antiX from Colombia, with IceWM, Xfce"
+    },
+    {
+      "id": "pisi", "name": "Pisi Linux",
+      "home": "https://www.pisilinux.org/",
+      "about": "An independent distribution from Türkiye, with KDE Plasma"
+    },
+    {
+      "id": "plamo", "name": "Plamo Linux",
+      "home": "https://www.plamolinux.org/",
+      "about": "A distribution based on Slackware from Japan, with labwc, LXDE, LXQt"
+    },
+    {
+      "id": "planetatecno", "name": "Planeta Tecno OS",
+      "home": "https://planetatecno.com.uy/planeta/",
+      "about": "A distribution based on Debian (Stable) from Uruguay, with MATE, Xfce"
+    },
+    {
+      "id": "pld", "name": "PLD Linux Distribution",
+      "home": "https://pld-linux.org/",
+      "about": "An independent distribution from Poland, with Blackbox, Fluxbox, GNOME"
+    },
+    {
+      "id": "plop", "name": "Plop Linux",
+      "home": "https://www.plop.at/",
+      "about": "An independent distribution from Austria, with Fluxbox, MATE, Xfce"
+    },
+    {
+      "id": "plurios", "name": "PluriOS",
+      "home": "https://plurios.openit.dev/",
+      "about": "A distribution based on Ubuntu (LTS) from Bolivia, with Cinnamon"
+    },
+    {
+      "id": "polonos", "name": "PolonOS",
+      "home": "https://github.com/przemekszlagor/PolonOS",
+      "about": "A distribution based on Debian (Testing) from Poland, with KDE Plasma"
+    },
+    {
+      "id": "popos", "name": "Pop!_OS",
+      "home": "https://system76.com/pop",
+      "about": "A distribution based on Ubuntu (LTS) from USA, with COSMIC, GNOME"
+    },
+    {
+      "id": "porteus", "name": "Porteus",
+      "home": "https://www.porteus.org/",
+      "about": "A distribution based on Slackware from Ireland, with Cinnamon, GNOME, KDE Plasma"
+    },
+    {
+      "id": "porteuskiosk", "name": "Porteus Kiosk",
+      "home": "https://porteus-kiosk.org/",
+      "about": "A distribution based on Gentoo from Ireland, with Firefox"
+    },
+    {
+      "id": "porteux", "name": "PorteuX",
+      "home": "https://github.com/porteux/porteux/",
+      "about": "A distribution based on Slackware, with Cinnamon, COSMIC, GNOME"
+    },
+    {
+      "id": "predator", "name": "Predator-OS",
+      "home": "https://predator-os.ir/",
+      "about": "A distribution based on Debian (Testing) from Iran, with KDE Plasma, LXDE, LXQt"
+    },
+    {
+      "id": "primtux", "name": "PrimTux",
+      "home": "https://primtux.fr/",
+      "about": "A distribution based on Debian, Mint from France, with Xfce"
+    },
+    {
+      "id": "prismlinux", "name": "PrismLinux",
+      "home": "https://www.prismlinux.org/",
+      "about": "A distribution based on Arch from Ukraine, with Cinnamon, GNOME, KDE Plasma"
+    },
+    {
+      "id": "proton", "name": "Proton OS",
+      "home": "https://www.protonos.org/",
+      "about": "A distribution based on Debian (Stable) from USA, with KDE Plasma"
+    },
+    {
+      "id": "proxmox", "name": "Proxmox",
+      "home": "https://www.proxmox.com/",
+      "about": "A distribution based on Debian (Stable) from Austria, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "pulsar", "name": "Pulsar OS",
+      "home": "https://os.inled.es/",
+      "about": "A distribution based on Arch, Debian (Stable) from Spain, with GNOME"
+    },
+    {
+      "id": "puppy", "name": "Puppy Linux",
+      "home": "https://puppylinux-woof-ce.github.io/",
+      "about": "An independent distribution from Australia, with JWM, labwc, Openbox"
+    },
+    {
+      "id": "q4os", "name": "Q4OS",
+      "home": "https://q4os.org/",
+      "about": "A distribution based on Debian (Stable) from Czechia, with KDE Plasma, Trinity"
+    },
+    {
+      "id": "qlustar", "name": "Qlustar",
+      "home": "https://qlustar.com/",
+      "about": "A distribution based on Ubuntu (LTS) from Germany, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "quarkos", "name": "Quarkos",
+      "home": "https://quark-os.sourceforge.io/",
+      "about": "A distribution based on Ubuntu (LTS) from Czechia, with KDE Plasma, Trinity"
+    },
+    {
+      "id": "qubes", "name": "Qubes OS",
+      "home": "https://qubes-os.org/",
+      "about": "A distribution based on Debian, Fedora from Poland, with Xfce"
+    },
+    {
+      "id": "quirinux", "name": "Quirinux",
+      "home": "https://quirinux.org/",
+      "about": "A distribution based on Devuan from Argentina, with Xfce"
+    },
+    {
+      "id": "rakuos", "name": "RakuOS",
+      "home": "https://rakuos.org/",
+      "about": "A distribution based on Fedora, with COSMIC, GNOME, Hyprland"
+    },
+    {
+      "id": "raspios", "name": "Raspberry Pi OS",
+      "home": "https://www.raspberrypi.com/software/",
+      "about": "A distribution based on Debian (Stable) from United Kingdom, with labwc, Raspberry Pi Desktop"
+    },
+    {
+      "id": "rebeccablackos", "name": "RebeccaBlackOS",
+      "home": "https://sourceforge.net/projects/rebeccablackos/",
+      "about": "A distribution based on Debian (Stable) from USA, with GNOME, KDE Plasma, labwc"
+    },
+    {
+      "id": "rebornos", "name": "RebornOS",
+      "home": "https://rebornos.org/",
+      "about": "A distribution based on Arch from USA, with Xfce"
+    },
+    {
+      "id": "recalbox", "name": "Recalbox",
+      "home": "https://www.recalbox.com/",
+      "about": "An independent distribution, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "recovery", "name": "recovery",
+      "home": "https://recovery.sourceforge.io/",
+      "about": "A distribution based on Debian (Stable) from France, with Xfce"
+    },
+    {
+      "id": "redhat", "name": "Red Hat Enterprise Linux",
+      "home": "https://www.redhat.com/",
+      "about": "A distribution based on Fedora from USA, with GNOME"
+    },
+    {
+      "id": "redos", "name": "RED OS",
+      "home": "https://redos.red-soft.ru/product/red-os/",
+      "about": "An independent distribution from Russia, with GNOME, KDE Plasma, MATE"
+    },
+    {
+      "id": "refracta", "name": "Refracta",
+      "home": "https://refracta.org/",
+      "about": "A distribution based on Debian (Stable), Devuan from USA, with Xfce"
+    },
+    {
+      "id": "refreshos", "name": "RefreshOS",
+      "home": "https://refreshos.org/",
+      "about": "A distribution based on Debian (Stable) from USA, with KDE Plasma"
+    },
+    {
+      "id": "regata", "name": "Regata OS",
+      "home": "https://www.regataos.com.br/",
+      "about": "A distribution based on openSUSE from Brazil, with KDE Plasma"
+    },
+    {
+      "id": "reignos", "name": "ReignOS",
+      "home": "https://reign-os.com/",
+      "about": "A distribution based on Arch from USA, with KDE Plasma, labwc, Openbox"
+    },
+    {
+      "id": "relianoid", "name": "RELIANOID",
+      "home": "https://www.relianoid.com/",
+      "about": "A distribution based on Debian (Stable) from USA, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "remnux", "name": "REMnux",
+      "home": "https://remnux.org/",
+      "about": "A distribution based on Ubuntu (LTS) from USA, with GNOME"
+    },
+    {
+      "id": "rengeos", "name": "RengeOS",
+      "home": "https://rengeos.github.io/rengeos-docs/",
+      "about": "A distribution based on Arch from Vietnam, with niri"
+    },
+    {
+      "id": "rescuezilla", "name": "Rescuezilla",
+      "home": "https://rescuezilla.com/",
+      "about": "A distribution based on Ubuntu (LTS) from Australia, with LXDE"
+    },
+    {
+      "id": "rhino", "name": "Rhino Linux",
+      "home": "https://rhinolinux.org/",
+      "about": "A distribution based on Ubuntu, with Lomiri, Xfce"
+    },
+    {
+      "id": "rockstor", "name": "Rockstor",
+      "home": "https://rockstor.com/",
+      "about": "A distribution based on openSUSE from USA, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "roshanos", "name": "RoshanOS",
+      "home": "https://esite.pk/roshan-os/",
+      "about": "A distribution based on Debian (Stable), MX Linux from Pakistan, with KDE Plasma"
+    },
+    {
+      "id": "ruscalinux", "name": "RuscaLinux",
+      "home": "https://www.ruscalinux.org/",
+      "about": "A distribution based on Debian (Stable) from Italy, with GNOME"
+    },
+    {
+      "id": "ryoku", "name": "Ryoku",
+      "home": "https://ryoku.dev/",
+      "about": "A distribution based on Arch, with Hyprland, niri, Wayfire"
+    },
+    {
+      "id": "salix", "name": "Salix",
+      "home": "https://www.salixos.org/",
+      "about": "A distribution based on Slackware from Europe, with Xfce"
+    },
+    {
+      "id": "sdesk", "name": "SDesk",
+      "home": "https://stevestudios.net/sdesk",
+      "about": "A distribution based on Arch from Canada, with GNOME"
+    },
+    {
+      "id": "securek", "name": "Secure-K OS",
+      "home": "https://github.com/LumIT-Labs/open-securekos",
+      "about": "A distribution based on Debian (Stable) from Italy, with GNOME"
+    },
+    {
+      "id": "secureblue", "name": "secureblue",
+      "home": "https://secureblue.dev/",
+      "about": "A distribution based on Fedora from USA, with GNOME, KDE Plasma, Sway"
+    },
+    {
+      "id": "securityonion", "name": "Security Onion",
+      "home": "https://securityonionsolutions.com/software",
+      "about": "A distribution based on Fedora, Oracle from USA, with GNOME"
+    },
+    {
+      "id": "senpai", "name": "Senpai Respins",
+      "home": "https://senpai-respins.sourceforge.io/",
+      "about": "A distribution based on Debian (Stable), Mint, MX Linux from Spain, with Budgie, Cinnamon, GNOME"
+    },
+    {
+      "id": "serbian", "name": "Serbian GNU/Linux",
+      "home": "https://www.debian-srbija.iz.rs/p/serbian.html",
+      "about": "A distribution based on Debian (Stable) from Serbia, with KDE Plasma, Openbox"
+    },
+    {
+      "id": "shadowfetch", "name": "Shadowfetch Linux",
+      "home": "https://www.shadowfetchlinux.org/",
+      "about": "A distribution based on Debian (Testing) from USA, with KDE Plasma"
+    },
+    {
+      "id": "shanios", "name": "Shanios",
+      "home": "https://shani.dev/",
+      "about": "A distribution based on Arch from India, with GNOME, KDE Plasma"
+    },
+    {
+      "id": "shebang", "name": "Shebang",
+      "home": "https://shebang-linux.github.io/",
+      "about": "A distribution based on Arch, Artix, with Openbox"
+    },
+    {
+      "id": "shredos", "name": "ShredOS",
+      "home": "https://github.com/PartialVolume/shredos.x86_64",
+      "about": "An independent distribution from United Kingdom, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "shrikelinux", "name": "ShrikeLinux",
+      "home": "https://shrikelinuxug.org/",
+      "about": "A distribution based on Arch from Uganda, with dk, i3, spectrwm"
+    },
+    {
+      "id": "side", "name": "Side GNU/Linux",
+      "home": "https://side.codeberg.page/",
+      "about": "An independent distribution, with Openbox, SDE"
+    },
+    {
+      "id": "skillfishos", "name": "SkillFishOS",
+      "home": "https://skillfishos.com/",
+      "about": "A distribution based on Debian (Unstable) from Italy, with KDE Plasma"
+    },
+    {
+      "id": "skorpion", "name": "Skorpion OS",
+      "home": "https://skossite.pages.dev/",
+      "about": "A distribution based on Debian (Stable) from Italy, with Cinnamon, i3"
+    },
+    {
+      "id": "skudonet", "name": "Skudonet",
+      "home": "https://www.skudonet.com/",
+      "about": "A distribution based on Debian from Spain, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "skywave", "name": "Skywave Linux",
+      "home": "https://skywavelinux.com/",
+      "about": "A distribution based on Debian (Unstable) from USA, with dwm"
+    },
+    {
+      "id": "slackware", "name": "Slackware Linux",
+      "home": "https://www.slackware.com/",
+      "about": "An independent distribution from USA, with Blackbox, Fluxbox, FVWM"
+    },
+    {
+      "id": "slimbookos", "name": "Slimbook OS",
+      "home": "https://slimbook.com/en/slimbook-os",
+      "about": "A distribution based on Ubuntu (LTS) from Spain, with GNOME"
+    },
+    {
+      "id": "slint", "name": "Slint",
+      "home": "https://slint-ng.org/en/home.html",
+      "about": "A distribution based on Slackware from France, with i3, LXQt, MATE"
+    },
+    {
+      "id": "slitaz", "name": "SliTaz GNU/Linux",
+      "home": "https://www.slitaz.org/",
+      "about": "An independent distribution from Switzerland, with Openbox"
+    },
+    {
+      "id": "slyos", "name": "SlyOS",
+      "home": "https://minaucro.fr/slyos/",
+      "about": "A distribution based on Arch, Artix from France, with GNOME, niri"
+    },
+    {
+      "id": "smoothwall", "name": "Smoothwall Express",
+      "home": "https://www.smoothwall.org/",
+      "about": "An independent distribution from United Kingdom, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "snal", "name": "Snal Linux",
+      "home": "https://jeremywakeman.net/snal",
+      "about": "A distribution based on Arch from USA, with i3"
+    },
+    {
+      "id": "solydxk", "name": "SolydXK",
+      "home": "https://solydxk.com/",
+      "about": "A distribution based on Debian (Stable) from Netherlands, with KDE, Xfce"
+    },
+    {
+      "id": "soplos", "name": "Soplos Linux",
+      "home": "https://soplos.org/",
+      "about": "A distribution based on Debian (Testing) from Spain, with GNOME, KDE Plasma, Xfce"
+    },
+    {
+      "id": "sourcemage", "name": "Source Mage GNU/Linux",
+      "home": "https://www.sourcemage.org/",
+      "about": "An independent distribution from USA, with AfterStep, Blackbox, Fluxbox"
+    },
+    {
+      "id": "spaced", "name": "Spaced Linux",
+      "home": "https://spacedlinux.com/",
+      "about": "A distribution based on Devuan (Unstable) from USA, with MATE"
+    },
+    {
+      "id": "sparky", "name": "SparkyLinux",
+      "home": "https://sparkylinux.org/",
+      "about": "A distribution based on Debian (Stable), Debian (Testing) from Poland, with KDE Plasma, labwc, LXQt"
+    },
+    {
+      "id": "starkos", "name": "starkOS",
+      "home": "https://stark-os.codeberg.page/",
+      "about": "An independent distribution, with Sway"
+    },
+    {
+      "id": "startos", "name": "StartOS",
+      "home": "https://github.com/Start9Labs/start-os",
+      "about": "A distribution based on Debian (Stable) from USA, with Firefox"
+    },
+    {
+      "id": "steamos", "name": "SteamOS",
+      "home": "https://store.steampowered.com/steamos/",
+      "about": "A distribution based on Arch from USA, with KDE Plasma"
+    },
+    {
+      "id": "stillos", "name": "stillOS",
+      "home": "https://stillhq.io/",
+      "about": "A distribution based on Fedora, AlmaLinux from USA, with GNOME"
+    },
+    {
+      "id": "stormos", "name": "StormOS",
+      "home": "https://techcafe757.wixsite.com/storm-os",
+      "about": "A distribution based on Arch from USA, with KDE Plasma, Xfce"
+    },
+    {
+      "id": "stratos", "name": "StratOS Linux",
+      "home": "https://stratos-linux.org/",
+      "about": "A distribution based on Arch from India, with GNOME, Hyprland, SwayFX"
+    },
+    {
+      "id": "superlite", "name": "Super Lite Linux",
+      "home": "https://gnu-super-lite-linux.sourceforge.io/",
+      "about": "A distribution based on Debian (Stable), antiX, with Fluxbox, IceWM, JWM"
+    },
+    {
+      "id": "sle", "name": "SUSE Linux Enterprise",
+      "home": "https://www.suse.com/",
+      "about": "A distribution based on openSUSE from Germany, with GNOME, IceWM"
+    },
+    {
+      "id": "sweetpotatos", "name": "SweetPotatOs",
+      "home": "https://sweetpotatos.sourceforge.io/",
+      "about": "A distribution based on Arch from France, Réunion, with Swirl"
+    },
+    {
+      "id": "syslinuxos", "name": "SysLinuxOS",
+      "home": "https://syslinuxos.com/",
+      "about": "A distribution based on Debian (Stable) from Italy, with GNOME, MATE"
+    },
+    {
+      "id": "systemrescue", "name": "SystemRescue",
+      "home": "https://www.system-rescue.org/",
+      "about": "A distribution based on Arch from France, with Xfce"
+    },
+    {
+      "id": "t2", "name": "T2 Linux SDE",
+      "home": "https://t2linux.com/",
+      "about": "A distribution based on ROCK from Germany, with AfterStep, Awesome, Blackbox"
+    },
+    {
+      "id": "t4n", "name": "T4n OS",
+      "home": "https://t4n-labs.github.io/t4n-os/",
+      "about": "A distribution based on Void from Indonesia, with Xfce"
+    },
+    {
+      "id": "tails", "name": "Tails",
+      "home": "https://tails.net/",
+      "about": "A distribution based on Debian (Stable) from Ireland, with GNOME"
+    },
+    {
+      "id": "talos", "name": "Talos Linux",
+      "home": "https://www.talos.dev/",
+      "about": "An independent distribution from USA, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "thinstation", "name": "Thinstation",
+      "home": "https://www.thinstation.org/",
+      "about": "A distribution based on Fedora from New Zealand, with Xfce"
+    },
+    {
+      "id": "thoros", "name": "ThorOS",
+      "home": "https://www.yggdrasilai.org/",
+      "about": "A distribution based on Debian (Stable) from USA, with GNOME"
+    },
+    {
+      "id": "tigeros", "name": "TigerOS",
+      "home": "https://tigeros.com.br/",
+      "about": "A distribution based on Ubuntu (LTS) from Brazil, with KDE Plasma"
+    },
+    {
+      "id": "titalcruiseos", "name": "TitalcruiseOS",
+      "home": "https://titalcruise.wixsite.com/titalcruise-oficial",
+      "about": "A distribution based on Debian (Stable), Debian (Testing) from Argentina, with GNOME"
+    },
+    {
+      "id": "tobbeos", "name": "TobbeOS",
+      "home": "https://tobbeos.lysakermoen.com/",
+      "about": "A distribution based on Arch from Norway, with Qtile"
+    },
+    {
+      "id": "tromjaro", "name": "TROMjaro",
+      "home": "https://www.tromjaro.com/",
+      "about": "A distribution based on Arch, Manjaro from Spain, with Xfce"
+    },
+    {
+      "id": "truenas", "name": "TrueNAS",
+      "home": "https://www.truenas.com/",
+      "about": "A distribution based on Debian (Stable) from France, USA, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "tsurugi", "name": "Tsurugi Linux",
+      "home": "https://tsurugi-linux.org/",
+      "about": "A distribution based on Ubuntu (LTS) from Italy, with MATE"
+    },
+    {
+      "id": "ttos", "name": "TTOS Linux",
+      "home": "https://www.ttoslinux.org/",
+      "about": "A distribution based on Debian (Stable) from USA, with KDE Plasma"
+    },
+    {
+      "id": "turnkey", "name": "TurnKey Linux",
+      "home": "https://www.turnkeylinux.org/",
+      "about": "A distribution based on Debian from USA, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "ublinux", "name": "UBLinux",
+      "home": "https://ublinux.ru/",
+      "about": "A distribution based on Arch from Russia, with Xfce"
+    },
+    {
+      "id": "ubuntudp", "name": "Ubuntu Pack",
+      "home": "https://ualinux.com/en/ubuntu-oem",
+      "about": "A distribution based on Ubuntu from Ukraine, with Budgie, Cinnamon, Deepin"
+    },
+    {
+      "id": "ufficiozero", "name": "Ufficio Zero Linux OS",
+      "home": "https://www.ufficiozero.org/",
+      "about": "A distribution based on Debian (Stable), Devuan, Mint, PCLinuxOS from Italy, with Cinnamon, MATE, Xfce"
+    },
+    {
+      "id": "ultimate", "name": "Ultimate Edition",
+      "home": "https://sourceforge.net/projects/ultimateedition/",
+      "about": "A distribution based on Arch from USA, with Cinnamon, KDE Plasma, MATE"
+    },
+    {
+      "id": "umbra", "name": "Umbra Linux",
+      "home": "https://umbralinux.org/",
+      "about": "A distribution based on LFS from Poland, with Xfce"
+    },
+    {
+      "id": "umbrelos", "name": "umbrelOS",
+      "home": "https://umbrel.com/umbrelos",
+      "about": "A distribution based on Debian (Stable) from USA, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "uncom", "name": "Uncom OS",
+      "home": "https://uncom.tech/",
+      "about": "A distribution based on Ubuntu (LTS) from Russia, with GNOME"
+    },
+    {
+      "id": "univention", "name": "Univention Corporate Server",
+      "home": "https://www.univention.com/products/ucs/",
+      "about": "A distribution based on Debian (Stable) from Germany, with Openbox"
+    },
+    {
+      "id": "unraid", "name": "Unraid OS",
+      "home": "https://unraid.net/",
+      "about": "An independent distribution from USA, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "uos", "name": "UOS",
+      "home": "https://www.chinauos.com/",
+      "about": "A distribution based on Debian, deepin from China, with Deepin"
+    },
+    {
+      "id": "valtux", "name": "Valtux OS",
+      "home": "https://mk-infolibre.ch/valtux-os/",
+      "about": "A distribution based on Debian (Stable) from Switzerland, with KDE Plasma"
+    },
+    {
+      "id": "vanilla", "name": "Vanilla OS",
+      "home": "https://vanillaos.org/",
+      "about": "A distribution based on Debian (Testing) from Italy, with GNOME"
+    },
+    {
+      "id": "vantum", "name": "Vantum",
+      "home": "https://hammad-hab.github.io/vantum-website/index.html",
+      "about": "A distribution based on Puppy, Ubuntu (LTS) from Pakistan, with JWM"
+    },
+    {
+      "id": "vasakos", "name": "VasakOS",
+      "home": "https://os.vasak.net.ar/",
+      "about": "A distribution based on Arch from Argentina, with Wayfire"
+    },
+    {
+      "id": "velox", "name": "Velox Linux",
+      "home": "https://thelinutubetltos.github.io/velox-linux.com/",
+      "about": "A distribution based on Arch, with Cinnamon, KDE Plasma, Xfce"
+    },
+    {
+      "id": "vendefoul", "name": "Vendefoul Wolf",
+      "home": "https://vendefoul-wolf-linux.sourceforge.io/",
+      "about": "A distribution based on Devuan (Unstable) from Spain, with bspwm, Budgie, Cinnamon"
+    },
+    {
+      "id": "venom", "name": "Venom Linux",
+      "home": "https://venomlinux.org/",
+      "about": "An independent distribution from Malaysia, with Fluxbox, labwc, Mango"
+    },
+    {
+      "id": "ventoy", "name": "Ventoy LiveCD",
+      "home": "https://www.ventoy.net/en/doc_livecd.html",
+      "about": "A distribution based on Porteus Kiosk from China, with Openbox"
+    },
+    {
+      "id": "vinari", "name": "Vinari OS",
+      "home": "https://vinarios.me/",
+      "about": "A distribution based on Debian (Stable) from Ecuador, with GNOME"
+    },
+    {
+      "id": "vincent", "name": "Vincent OS",
+      "home": "https://vincent-os.v38armageddon.net/",
+      "about": "A distribution based on Arch from France, with KDE Plasma"
+    },
+    {
+      "id": "vine", "name": "Vine Linux",
+      "home": "https://www.vinelinux.org/",
+      "about": "An independent distribution from Japan, with GNOME"
+    },
+    {
+      "id": "vipnix", "name": "Vipnix LiveCD",
+      "home": "https://vipnix.com.br/site/livecd-vipnix/",
+      "about": "A distribution based on Funtoo, Macaroni from Brazil, with LXQt"
+    },
+    {
+      "id": "vitalinux", "name": "Vitalinux",
+      "home": "https://docs.vitalinux.educa.aragon.es/",
+      "about": "A distribution based on Ubuntu (LTS) from Spain, with Xfce"
+    },
+    {
+      "id": "volumio", "name": "Volumio",
+      "home": "https://volumio.org/",
+      "about": "A distribution based on Debian (Stable) from Italy, with Openbox"
+    },
+    {
+      "id": "voyager", "name": "Voyager Live",
+      "home": "https://voyagerlive.org/",
+      "about": "A distribution based on Debian, Xubuntu from France, with GNOME, Xfce"
+    },
+    {
+      "id": "vuudo", "name": "Vuu-do",
+      "home": "https://vuu-do.sourceforge.io/",
+      "about": "A distribution based on Devuan from USA, with Openbox, MATE"
+    },
+    {
+      "id": "vyos", "name": "VyOS",
+      "home": "https://vyos.io/",
+      "about": "A distribution based on Debian (Stable), for servers and appliances (no desktop)"
+    },
+    {
+      "id": "whonix", "name": "Whonix",
+      "home": "https://www.whonix.org/",
+      "about": "A distribution based on Debian (Stable) from Canada, with labwc, LXQt, Sway"
+    },
+    {
+      "id": "wifislax", "name": "Wifislax",
+      "home": "https://www.wifislax.com/",
+      "about": "A distribution based on Slackware from Spain, with KDE Plasma, Xfce"
+    },
+    {
+      "id": "wmlive", "name": "Window Maker Live",
+      "home": "https://wmlive.sourceforge.net/",
+      "about": "A distribution based on Debian (Stable) from Spain, with Window Maker"
+    },
+    {
+      "id": "winux", "name": "Winux",
+      "home": "https://www.winux.is/",
+      "about": "A distribution based on Ubuntu (LTS) from Brazil, with KDE Plasma"
+    },
+    {
+      "id": "xcpng", "name": "XCP-ng",
+      "home": "https://xcp-ng.org/",
+      "about": "A distribution based on CentOS, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "xebian", "name": "Xebian",
+      "home": "https://xebian.org/",
+      "about": "A distribution based on Debian (Unstable), with Xfce"
+    },
+    {
+      "id": "xero", "name": "XeroLinux",
+      "home": "https://xerolinux.xyz/",
+      "about": "A distribution based on Arch from Lebanon, with KDE Plasma"
+    },
+    {
+      "id": "ximper", "name": "Ximper Linux",
+      "home": "https://ximperlinux.ru/",
+      "about": "A distribution based on ALT from Russia, with GNOME, Hyprland, Sway"
+    },
+    {
+      "id": "xivastudio", "name": "XIVA Studio",
+      "home": "https://xivastudio.org/",
+      "about": "A distribution based on Arch, Manjaro, BigLinux from Brazil, with KDE Plasma"
+    },
+    {
+      "id": "xpq4", "name": "XPQ4",
+      "home": "https://xpq4.sourceforge.io/",
+      "about": "A distribution based on Debian (Stable), with KDE Plasma, Trinity"
+    },
+    {
+      "id": "xray", "name": "Xray_OS",
+      "home": "https://xray-os.github.io/xray_os-website/",
+      "about": "A distribution based on Arch from Venezuela, with KDE Plasma, Xfce"
+    },
+    {
+      "id": "xxri", "name": "XXRI OS",
+      "home": "https://xxri.flows.best/",
+      "about": "A distribution based on Tiny Core from Indonesia, with XXRI"
+    },
+    {
+      "id": "yunohost", "name": "YunoHost",
+      "home": "https://yunohost.org/",
+      "about": "A distribution based on Debian from France, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "zelixos", "name": "ZelixOS",
+      "home": "https://zelixos.com/",
+      "about": "A distribution based on Arch from Türkiye, with KDE Plasma"
+    },
+    {
+      "id": "zenclora", "name": "Zenclora OS",
+      "home": "https://nixovena.org/zenclora",
+      "about": "A distribution based on Debian (Stable) from Türkiye, with GNOME, MATE"
+    },
+    {
+      "id": "zenlake", "name": "ZenLake OS",
+      "home": "https://teejeetech.com/zenlake/",
+      "about": "A distribution based on Debian (Stable), Ubuntu (LTS) from India, with GNOME"
+    },
+    {
+      "id": "zenned", "name": "Zenned",
+      "home": "https://zenned.gitlab.io/",
+      "about": "A distribution based on Arch, with KDE Plasma"
+    },
+    {
+      "id": "zentyal", "name": "Zentyal Server",
+      "home": "https://www.zentyal.org/",
+      "about": "A distribution based on Ubuntu (LTS) from Spain, for servers and appliances (no desktop)"
+    },
+    {
+      "id": "zenwalk", "name": "Zenwalk GNU Linux",
+      "home": "https://www.zenwalk.org/",
+      "about": "A distribution based on Slackware from France, with labwc, Xfce"
+    },
+    {
+      "id": "zephix", "name": "ZEPHIX",
+      "home": "https://zephix-linux.sourceforge.io/",
+      "about": "A distribution based on Debian (Stable) from Malta, with i3, LXDE"
+    },
+    {
+      "id": "zimaos", "name": "ZimaOS",
+      "home": "https://www.zimaspace.com/docs/zimaos/#ZimaOS",
+      "about": "An independent distribution from China, for servers and appliances (no desktop)"
     }
   ]
 }
