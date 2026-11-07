@@ -136,6 +136,9 @@ struct SettingsView: View {
             }
             .padding(.trailing, 12)
             FormRow(label: "Operating system") { Text(model.osLabel(c)).font(Theme.sans(13)).foregroundColor(Theme.text) }
+            if let home = Distro.find(c.distroId)?.home, let url = URL(string: home) {
+                FormRow(label: "Home page") { WebLink(url: url, text: home, size: 13) }
+            }
             FormRow(label: "Location") {
                 Text(Paths.display(c.dir)).font(Theme.sans(13)).foregroundColor(Theme.text).lineLimit(1).truncationMode(.middle)
             }
@@ -249,7 +252,7 @@ struct SettingsView: View {
 
     // MARK: Hardware
 
-    private var hardwareWidth: CGFloat { ActionRow.width(["Resize", "Add disk", "Remove", "Install Rosetta"]) }
+    private var hardwareWidth: CGFloat { ActionRow.width(["Resize", "Add Disk", "Remove", "Install Rosetta"]) }
 
     // What other running systems use, so Resources only offers what's left.
     private var others: (cores: Int, ramGB: Int) {
@@ -273,12 +276,6 @@ struct SettingsView: View {
         }
 
         SectionBar(title: "Disks", summary: disksSummary, open: bar("Disks")) { disksSection }
-
-        SectionBar(title: "Disk utilities", summary: "Add or remove disks", open: bar("Disk utilities")) {
-            ActionRow(text: "Add another disk to \(c.displayName).", button: "Add disk", width: hardwareWidth) { addDisk() }
-            ActionRow(text: "Take this disk out of \(c.displayName).", button: "Remove", width: hardwareWidth) { removeDisk() }
-                .disabled(diskIndex == 0)
-        }
 
         SectionBar(title: "Rosetta", summary: c.rosetta ? "On" : "Off", open: bar("Rosetta")) {
             CheckRow(title: "Run x86_64 Linux apps with Rosetta (next start)", on: $c.rosetta).disabled(rosettaState == .notSupported)
@@ -334,8 +331,14 @@ struct SettingsView: View {
                 .background(Theme.card).overlay(Rectangle().stroke(Theme.border, lineWidth: 1))
         }
         .padding(.trailing, 12)
+
+        // What can be done with the disks, under the disk's details (as on Windows).
+        SubHeading(text: "Disk Utilities")
         ActionRow(text: "Shrink or expand this disk's maximum size.", button: "Resize", width: hardwareWidth) { resizeDisk() }
             .disabled(!exists)
+        ActionRow(text: "Add another disk to \(c.displayName).", button: "Add Disk", width: hardwareWidth) { addDisk() }
+        ActionRow(text: "Take this disk out of \(c.displayName).", button: "Remove", width: hardwareWidth) { removeDisk() }
+            .disabled(diskIndex == 0)
     }
 
     private func size(_ bytes: UInt64) -> String {

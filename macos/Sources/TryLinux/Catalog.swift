@@ -12,28 +12,30 @@ struct Distro: Equatable {
     let steps: [String]
     let checksum: String?
     var diskGB = 64
+    // The distribution's home page, shown as "Website ↗" on Choose a Linux OS and in Settings > Info.
+    var home: String? = nil
 
     static let catalog: [Distro] = [
         Distro(id: "fedora", name: "Fedora Workstation",
                about: "A community distribution sponsored by Red Hat that ships new GNOME, kernel and Mesa releases soon after they come out",
                base: "https://mirrors.kernel.org/fedora/releases/",
                steps: [#"~^\d+/$"#, "Workstation/aarch64/iso/", #"~^Fedora-Workstation-Live-.*\.aarch64\.iso$"#],
-               checksum: "~CHECKSUM$"),
+               checksum: "~CHECKSUM$", home: "https://fedoraproject.org/"),
         Distro(id: "ubuntu", name: "Ubuntu Desktop",
                about: "The most widely used desktop Linux, made by Canonical, with long-term support releases and a large software catalog",
                base: "https://cdimage.ubuntu.com/releases/",
                steps: [#"~^\d\d\.\d\d(\.\d+)?/$"#, "release/", #"~^ubuntu-.*-desktop-arm64\.iso$"#],
-               checksum: "SHA256SUMS"),
+               checksum: "SHA256SUMS", home: "https://ubuntu.com/"),
         Distro(id: "debian", name: "Debian",
                about: "One of the oldest community distributions, known for stability and the base of Ubuntu, Mint and many others",
                base: "https://cdimage.debian.org/debian-cd/current/arm64/iso-cd/",
                steps: [#"~^debian-.*-arm64-netinst\.iso$"#],
-               checksum: "SHA256SUMS"),
+               checksum: "SHA256SUMS", home: "https://www.debian.org/"),
         Distro(id: "opensuse", name: "openSUSE Tumbleweed",
                about: "A rolling-release distribution from the openSUSE community that always has the newest KDE Plasma and kernel",
                base: "https://download.opensuse.org/ports/aarch64/tumbleweed/iso/",
                steps: ["openSUSE-Tumbleweed-KDE-Live-aarch64-Current.iso"],
-               checksum: "{iso}.sha256"),
+               checksum: "{iso}.sha256", home: "https://www.opensuse.org/"),
     ]
 
     static func find(_ id: String) -> Distro? { catalog.first { $0.id == id } }

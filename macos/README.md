@@ -20,6 +20,8 @@ This is the Mac edition of [Try Linux for Windows](https://github.com/donnysaeng
 | [Debian](https://www.debian.org/) | One of the oldest community distributions, known for stability and the base of Ubuntu, Mint and many others |
 | [openSUSE&nbsp;Tumbleweed](https://www.opensuse.org/#Tumbleweed) | A rolling-release distribution from the openSUSE community that always has the newest KDE Plasma and kernel |
 
+On **Choose a Linux OS**, each one has a **Website ↗** link to its home page.
+
 Macs with Apple silicon run ARM64 (aarch64) Linux, so only distributions that publish
 ARM64 installers are listed. You can also install from any ARM64 `.iso` file or
 download link.
@@ -35,7 +37,7 @@ download link.
 | ![Downloading the installer](docs/images/download.png) | ![Settings](docs/images/settings-general-tab.png) |
 | **Download:** the installer is checked against its SHA-256 checksum | **Settings > General:** info and description, display, startup, shared folder, appearance, about and updates |
 | ![Settings, Hardware](docs/images/settings-hardware-tab.png) | ![Settings, Hardware, Disks](docs/images/settings-disks.png) |
-| **Settings > Hardware:** graphics, memory and CPU cores, disks, Rosetta | **Disks:** size, location, resize, add and remove disks |
+| **Settings > Hardware:** graphics, memory and CPU cores, disks, Rosetta | **Disks:** size and location, then Disk Utilities: resize, add and remove disks |
 | ![Settings, Devices](docs/images/settings-devices-tab.png) | ![Settings, Recovery](docs/images/settings-recovery-tab.png) |
 | **Settings > Devices:** sound, clipboard, CD/DVD drive, network type | **Settings > Recovery:** backups, snapshots, storage, repair, delete |
 | ![Use Your Own Installer](docs/images/own-installer.png) | ![The Light theme](docs/images/theme-light.png) |
@@ -174,7 +176,7 @@ Several can be open at once, and the one you opened last is highlighted. A close
 section shows a summary of its settings; every section starts closed when you open
 Settings.
 
-- **General:** **Info** (the description, the OS and where the system is kept),
+- **General:** **Info** (the description, the OS, its home page and where the system is kept),
   fullscreen, resolution, open at login, a shared Mac folder, **Appearance**, and
   **About** with the version, Install and update checks.
 - **Appearance** is for Try Linux as a whole: **Dark** (grays with lavender, after
@@ -187,9 +189,9 @@ Settings.
     with Manual). They only go up to what's free: macOS keeps 2 cores and a quarter of
     the memory, and other running systems keep theirs.
   - **Disks:** each disk's current size, free space on the Mac, maximum size, location
-    and whether it's dynamic or preallocated. **Resize** grows or shrinks a disk.
-  - **Disk utilities:** **Add Disk** creates a new disk or attaches an existing raw
-    `.img` file; **Remove** takes one out. Linux sees each disk as its own drive and
+    and whether it's dynamic or preallocated. Under **Disk Utilities**, **Resize** grows
+    or shrinks a disk, **Add Disk** creates a new disk or attaches an existing raw
+    `.img` file, and **Remove** takes one out. Linux sees each disk as its own drive and
     starts from Disk 1. Backups include every disk.
   - **Rosetta** for x86_64 Linux apps.
 - **Devices:** sound and microphone, clipboard sharing, a **CD/DVD drive** for ISOs

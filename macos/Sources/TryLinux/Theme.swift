@@ -220,6 +220,9 @@ struct OptionRow: View {
     // A system's values (CPU, memory, disk), shown as columns on the right with the status in its own
     // column before them. The column headers are above the list (see StatHeaders).
     var stats: [String] = []
+    // A web page for the row (a distribution's home page), shown as "Website ↗" on the title line;
+    // clicking it opens the page, and the rest of the row still selects it.
+    var link: URL? = nil
     @State private var hover = false
 
     static let statusW: CGFloat = 76, statW: CGFloat = 86, gap: CGFloat = 10, trailing: CGFloat = 18
@@ -228,7 +231,13 @@ struct OptionRow: View {
         HStack(spacing: 0) {
             // The glow marks the selected row, so there's no stripe on its left.
             VStack(alignment: .leading, spacing: 7) {
-                Text(title).font(Theme.sans(14, .semibold)).foregroundColor(Theme.text).lineLimit(1)
+                HStack(spacing: 12) {
+                    Text(title).font(Theme.sans(14, .semibold)).foregroundColor(Theme.text).lineLimit(1)
+                    if let link {
+                        Spacer(minLength: 0)
+                        WebLink(url: link)
+                    }
+                }
                 Text(subtitle).font(Theme.sans(11.5)).foregroundColor(Theme.muted)
                     .lineLimit(twoLine ? 2 : 1)
                     .fixedSize(horizontal: false, vertical: true)
@@ -257,6 +266,23 @@ struct OptionRow: View {
         .surface(selected: selected, hover: hover)
         .contentShape(Rectangle())
         .onHover { hover = $0 }
+    }
+}
+
+// "Website ↗" (or other text): opens `url` in the browser, underlined under the pointer.
+struct WebLink: View {
+    let url: URL
+    var text = "Website ↗"
+    var size: CGFloat = 11.5
+    @State private var hover = false
+
+    var body: some View {
+        Text(text).font(Theme.sans(size)).underline(hover)
+            .foregroundColor(hover ? Theme.text : Theme.highlight)
+            .fixedSize()
+            .contentShape(Rectangle())
+            .onHover { hover = $0 }
+            .onTapGesture { NSWorkspace.shared.open(url) }
     }
 }
 

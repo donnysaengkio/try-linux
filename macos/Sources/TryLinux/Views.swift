@@ -256,7 +256,7 @@ struct ChooseView: View {
             VStack(spacing: 6) {
                 ForEach(Distro.catalog.indices, id: \.self) { i in
                     let d = Distro.catalog[i]
-                    OptionRow(title: d.name, subtitle: d.about, selected: i == selected, twoLine: true)
+                    OptionRow(title: d.name, subtitle: d.about, selected: i == selected, twoLine: true, link: d.home.flatMap(URL.init(string:)))
                         .onTapGesture(count: 2) { selected = i; next() }
                         .onTapGesture { selected = i }
                 }
