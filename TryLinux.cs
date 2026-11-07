@@ -55,6 +55,9 @@ static class Program
 class Distro
 {
     public string Id, Name, Blurb, Base, Checksum;
+    public string Home;   // the distribution's home page (as DistroWatch lists it), https only; null if unknown
+    // No download Try Linux can follow (no Base): the ISO has to be downloaded from the home page by hand.
+    public bool WebsiteOnly { get { return Base == null; } }
     // Each step is appended to Base. A step starting with ~ is a regex matched
     // against the links in the current directory listing; the newest match wins.
     public string[] Steps;
@@ -62,31 +65,31 @@ class Distro
 
     public static readonly Distro[] Catalog = {
         new Distro {
-            Id = "fedora", Name = "Fedora Workstation",
+            Id = "fedora", Name = "Fedora Workstation", Home = "https://fedoraproject.org/",
             Blurb = "A community distribution sponsored by Red Hat that ships new GNOME, kernel and Mesa releases soon after they come out",
             Base = "https://mirrors.kernel.org/fedora/releases/",
             Steps = new[] { @"~^\d+/$", "Workstation/x86_64/iso/", @"~^Fedora-Workstation-Live-.*\.iso$" },
             Checksum = "~CHECKSUM$" },
         new Distro {
-            Id = "ubuntu", Name = "Ubuntu Desktop",
+            Id = "ubuntu", Name = "Ubuntu Desktop", Home = "https://www.ubuntu.com/",
             Blurb = "The most widely used desktop Linux, made by Canonical, with long-term support releases and a large software catalog",
             Base = "https://releases.ubuntu.com/",
             Steps = new[] { @"~^\d\d\.\d\d(\.\d+)?/$", @"~^ubuntu-.*-desktop-amd64\.iso$" },
             Checksum = "SHA256SUMS" },
         new Distro {
-            Id = "debian", Name = "Debian (GNOME)",
+            Id = "debian", Name = "Debian (GNOME)", Home = "https://www.debian.org/",
             Blurb = "One of the oldest community distributions, known for stability and the base of Ubuntu, Mint and many others",
             Base = "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/",
             Steps = new[] { @"~^debian-live-.*-amd64-gnome\.iso$" },
             Checksum = "SHA256SUMS" },
         new Distro {
-            Id = "mint", Name = "Linux Mint (Cinnamon)",
+            Id = "mint", Name = "Linux Mint (Cinnamon)", Home = "https://linuxmint.com/",
             Blurb = "A beginner-friendly distribution based on Ubuntu, with the Windows-like Cinnamon desktop and media codecs available at install",
             Base = "https://mirrors.edge.kernel.org/linuxmint/stable/",
             Steps = new[] { @"~^\d+(\.\d+)?/$", @"~^linuxmint-.*-cinnamon-64bit\.iso$" },
             Checksum = "sha256sum.txt" },
         new Distro {
-            Id = "zorin", Name = "Zorin OS Core",
+            Id = "zorin", Name = "Zorin OS Core", Home = "https://zorin.com/os/",
             Blurb = "A polished distribution based on Ubuntu, designed to feel familiar to people moving from Windows",
             Base = "https://mirrors.edge.kernel.org/zorinos-isos/",
             Steps = new[] { @"~^\d+/$", @"~^Zorin-OS-(?<v>\d+(\.\d+)*)-Core-64-bit(-r\d+)?\.iso$" },
@@ -120,23 +123,57 @@ static class MoreDistros
         return loaded ?? new List<Distro>();
     }
 
-    // The list, fetched again if the cached one is a day old (or `force`); the cached one if that fails.
+    // The ETag GitHub gave the cached copy, kept beside it.
+    static string EtagFile { get { return Path.Combine(AppSettings.Storage, "catalog", "distros.etag"); } }
+
+    // The list, checked against GitHub each time Choose a Linux OS opens: a conditional request (If-None-Match,
+    // with the cached copy's ETag) gets a short "not modified" while the list is the same, and the new list as
+    // soon as it changes. `force` downloads it whatever. The cached copy is used if the check fails.
     public static List<Distro> Load(bool force)
     {
-        var updated = Updated;
-        if (!force && updated != null && (DateTime.Now - updated.Value).TotalHours < 24 && Cached().Count > 0) return Cached();
         try
         {
-            string text = Net.GetString(Source);
+            string etag = !force && Cached().Count > 0 && File.Exists(EtagFile) ? File.ReadAllText(EtagFile).Trim() : null;
+            string newEtag;
+            string text = Fetch(etag, out newEtag);
+            if (text == null) return Cached();   // not modified
             var list = Parse(text);
             Directory.CreateDirectory(Path.GetDirectoryName(CacheFile));
             File.WriteAllText(CacheFile, text);
+            if (newEtag != null) File.WriteAllText(EtagFile, newEtag); else if (File.Exists(EtagFile)) File.Delete(EtagFile);
             loaded = list;
             return list;
         }
         catch (Exception)
         {
             if (Cached().Count > 0) return Cached();
+            throw;
+        }
+    }
+
+    // The list's text, or null when the server says it hasn't changed since `etag`.
+    static string Fetch(string etag, out string newEtag)
+    {
+        newEtag = null;
+        if (!Source.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return Net.GetString(Source);   // a local file, for testing
+        var req = (HttpWebRequest)WebRequest.Create(Source);
+        req.UserAgent = Net.UserAgent;
+        req.Timeout = 30000;
+        req.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
+        if (etag != null) req.Headers[HttpRequestHeader.IfNoneMatch] = etag;
+        try
+        {
+            using (var resp = (HttpWebResponse)req.GetResponse())
+            using (var r = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
+            {
+                newEtag = resp.Headers[HttpResponseHeader.ETag];
+                return r.ReadToEnd();
+            }
+        }
+        catch (WebException ex)
+        {
+            var resp = ex.Response as HttpWebResponse;
+            if (resp != null && resp.StatusCode == HttpStatusCode.NotModified) { resp.Close(); return null; }
             throw;
         }
     }
@@ -154,14 +191,22 @@ static class MoreDistros
             var d = o as Dictionary<string, object>;
             if (d == null) continue;
             string id = str(d, "id"), name = str(d, "name"), baseUrl = str(d, "base");
+            string home = (str(d, "home") ?? "").StartsWith("https://", StringComparison.Ordinal) ? str(d, "home") : null;
             object steps; d.TryGetValue("steps", out steps);
-            if (id == null || name == null || baseUrl == null || !(steps is object[])) continue;
-            if (!Regex.IsMatch(id, "^[a-z0-9-]{1,40}$") || !baseUrl.StartsWith("https://", StringComparison.Ordinal)) continue;
+            if (id == null || name == null || !Regex.IsMatch(id, "^[a-z0-9-]{1,40}$")) continue;
             if (Distro.Catalog.Any(c => c.Id == id) || list.Any(c => c.Id == id)) continue;
+            // Website only: no download Try Linux can follow, just the home page to get the ISO from by hand
+            // (searchable; Next offers to open the page). Versions before 1.1.11 leave these out, as they need base.
+            if (baseUrl == null && steps == null)
+            {
+                if (home != null) list.Add(new Distro { Id = id, Name = name, Blurb = str(d, "about") ?? "", Home = home, Steps = new string[0] });
+                continue;
+            }
+            if (baseUrl == null || !(steps is object[]) || !baseUrl.StartsWith("https://", StringComparison.Ordinal)) continue;
             object disk; d.TryGetValue("diskGB", out disk);
             list.Add(new Distro {
                 Id = id, Name = name, Blurb = str(d, "about") ?? "", Base = baseUrl,
-                Steps = ((object[])steps).OfType<string>().ToArray(), Checksum = str(d, "checksum"),
+                Steps = ((object[])steps).OfType<string>().ToArray(), Checksum = str(d, "checksum"), Home = home,
                 DiskGB = disk is int ? Math.Max(16, Math.Min(2048, (int)disk)) : 64 });
         }
         return list;
@@ -1576,7 +1621,9 @@ static class Native
     public static void TextMargins(TextBox t, int designPx = 6)
     {
         int px = Theme.D(designPx);
-        Action set = () => SendMessage(t.Handle, 0xD3, (IntPtr)3, (IntPtr)(px | (px << 16)));   // EC_LEFTMARGIN | EC_RIGHTMARGIN
+        // EC_LEFTMARGIN | EC_RIGHTMARGIN; a NoteBox keeps its own right margin, which leaves room for its scroll bar.
+        int which = t is NoteBox ? 1 : 3;
+        Action set = () => SendMessage(t.Handle, 0xD3, (IntPtr)which, (IntPtr)(px | (px << 16)));
         if (t.IsHandleCreated) set();
         t.HandleCreated += delegate { set(); };
         t.FontChanged += delegate { if (t.IsHandleCreated) set(); };
@@ -2476,12 +2523,36 @@ class OptionRow : Control
     public OptionRow()
     {
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        SetStyle(ControlStyles.Selectable, false);   // clicking a row leaves the focus where it was (e.g. in search)
         Cursor = Cursors.Hand;
     }
 
     public bool Selected { get { return selected; } set { selected = value; Invalidate(); } }
     protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
-    protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
+    protected override void OnMouseLeave(EventArgs e) { hover = linkHover = false; Invalidate(); base.OnMouseLeave(e); }
+
+    // A web page for the row (a distribution's home page), shown as "Website ↗" on two-line rows; clicking it
+    // opens the page in the browser, and the rest of the row still selects it.
+    public string Link;
+    public string LinkText = "Website ↗";
+    static Font linkHoverFont;
+    static Font LinkHoverFont { get { return linkHoverFont ?? (linkHoverFont = new Font(Theme.Small, FontStyle.Underline)); } }
+    Rectangle linkRect;
+    bool linkHover;
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        bool over = !linkRect.IsEmpty && linkRect.Contains(e.Location);
+        if (over != linkHover) { linkHover = over; Invalidate(); }
+        base.OnMouseMove(e);
+    }
+
+    protected override void OnMouseUp(MouseEventArgs e)
+    {
+        base.OnMouseUp(e);
+        if (e.Button == MouseButtons.Left && !linkRect.IsEmpty && linkRect.Contains(e.Location) && Link.StartsWith("https://", StringComparison.Ordinal))
+            try { Process.Start(new ProcessStartInfo(Link) { UseShellExecute = true }); } catch { }
+    }
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -2537,21 +2608,473 @@ class OptionRow : Control
         int w = Width - pad * 2, titleH = Theme.D(20), gap = Theme.D(6);
         int subH = Math.Min(Height - titleH - gap - Theme.D(8), TextRenderer.MeasureText(g, Sub, Theme.Small, new Size(w, int.MaxValue), wrap).Height);
         int top = Math.Max(Theme.D(4), (Height - titleH - gap - subH) / 2);
-        TextRenderer.DrawText(g, Title, Theme.RowTitle, new Rectangle(pad, top, w, titleH), Theme.Text, flags);
+        // The distribution's home page, on the right of the title line; the title stops short of it.
+        int titleW = w;
+        linkRect = Rectangle.Empty;
+        if (!string.IsNullOrEmpty(Link))
+        {
+            var font = linkHover ? LinkHoverFont : Theme.Small;
+            var size = TextRenderer.MeasureText(g, LinkText, font, Size.Empty, TextFormatFlags.NoPrefix);
+            linkRect = new Rectangle(Width - pad - size.Width, top, size.Width, titleH);
+            TextRenderer.DrawText(g, LinkText, font, linkRect, linkHover ? Theme.Text : Theme.Highlight, flags);
+            titleW = w - size.Width - Theme.D(12);
+        }
+        TextRenderer.DrawText(g, Title, Theme.RowTitle, new Rectangle(pad, top, titleW, titleH), Theme.Text, flags);
         TextRenderer.DrawText(g, Sub, Theme.Small, new Rectangle(pad, top + titleH + gap, w, subH), Theme.Muted, wrap);
     }
 }
 
-class OptionList : Panel
+// The scroll bar drawn over a scrolling area's contents, like Windows 11's and Firefox's overlay scroll bars:
+// a thin rounded thumb at the right edge that leaves the contents their full width. With the pointer over
+// that edge it widens into a bar with a track and arrows, and narrows again a moment after the pointer leaves.
+static class OverlayBar
+{
+    public static int Thin { get { return Theme.D(6); } }        // the thumb, resting
+    public static int Wide { get { return Theme.D(14); } }       // the bar under the pointer
+    public static int WideThumb { get { return Theme.D(8); } }
+    public static int Margin { get { return Theme.D(3); } }
+    public static int Arrow { get { return Theme.D(14); } }
+
+    // A shade between the background and the text colour (0 is the background), so it suits every theme.
+    public static Color Mix(double t)
+    {
+        Func<int, int, int> m = (a, b) => (int)Math.Round(a + (b - a) * t);
+        return Color.FromArgb(m(Theme.Bg.R, Theme.Text.R), m(Theme.Bg.G, Theme.Text.G), m(Theme.Bg.B, Theme.Text.B));
+    }
+    public static Color Track { get { return Mix(0.09); } }
+    public static Color ThumbColor(bool wide, bool hot) { return Mix(hot ? 0.62 : wide ? 0.45 : 0.3); }
+    public static Color ArrowColor(bool hot) { return Mix(hot ? 0.9 : 0.55); }
+
+    public static GraphicsPath Rounded(Rectangle r)
+    {
+        var p = new GraphicsPath();
+        int d = Math.Max(2, Math.Min(r.Width, r.Height));
+        if (r.Height <= d) { p.AddEllipse(r); return p; }
+        p.AddArc(r.X, r.Y, d, d, 180, 180);
+        p.AddArc(r.X, r.Bottom - d, d, d, 0, 180);
+        p.CloseFigure();
+        return p;
+    }
+}
+
+// The overlay scroll bar's shape, hover and mouse handling, shared by ScrollPanel and NoteBox. Points are in
+// the host's client coordinates; the host says how much there is, how much shows and where it's scrolled to
+// (pixels for a panel, lines for a text box), and scrolls when told to.
+class OverlayScroll : IDisposable
+{
+    public Func<Size> Client;
+    public Func<int> Content, View, Pos;
+    public Action<int> Set;
+    public Func<Point, Point> ToClient;   // from screen coordinates
+    public Action Changed;                // the bar's look or place changed
+    public int Right;                     // the gap between the bar and the host's right edge
+    public int Line = 1;                  // how far an arrow click scrolls
+    public bool Wide { get; private set; }
+    public bool Dragging { get; private set; }
+    // The part under the pointer, and the part being pressed: 1 up arrow, 2 down arrow, 3 track above the
+    // thumb, 4 track below it, 5 the thumb; 0 none.
+    int over, pressed;
+    int startY, startPos;
+    Point pointer;   // where the pointer is while a button is held on the bar
+    readonly Timer collapse = new Timer { Interval = 900 }, repeat = new Timer();
+
+    public OverlayScroll()
+    {
+        collapse.Tick += delegate
+        {
+            if (Dragging || pressed != 0 || Strip.Contains(ToClient(Cursor.Position))) return;
+            collapse.Stop();
+            Wide = false; over = 0;
+            Changed();
+        };
+        repeat.Tick += delegate { repeat.Interval = 50; Step(); };
+    }
+
+    public void Dispose() { collapse.Dispose(); repeat.Dispose(); }
+
+    public bool Scrollable { get { return View() > 0 && Content() > View(); } }
+
+    // The strip along the right edge that the bar widens into.
+    public Rectangle Strip
+    {
+        get { var c = Client(); return new Rectangle(c.Width - OverlayBar.Wide - Right, 0, OverlayBar.Wide, c.Height); }
+    }
+
+    Rectangle Track
+    {
+        get
+        {
+            var c = Client();
+            if (Wide) return new Rectangle(Strip.X, OverlayBar.Arrow, OverlayBar.Wide, Math.Max(0, c.Height - OverlayBar.Arrow * 2));
+            return new Rectangle(c.Width - OverlayBar.Thin - Right, OverlayBar.Margin, OverlayBar.Thin, Math.Max(0, c.Height - OverlayBar.Margin * 2));
+        }
+    }
+
+    public Rectangle Thumb
+    {
+        get
+        {
+            int content = Content(), view = Math.Max(0, View());
+            var t = Track;
+            if (view <= 0 || content <= view || t.Height <= 0) return Rectangle.Empty;
+            int h = Math.Min(t.Height, Math.Max(Theme.D(28), (int)((long)t.Height * view / content)));
+            int y = t.Y + (int)((long)(t.Height - h) * Math.Max(0, Math.Min(Pos(), content - view)) / (content - view));
+            int w = Wide ? OverlayBar.WideThumb : OverlayBar.Thin;
+            return new Rectangle(t.X + (t.Width - w) / 2, y, w, h);
+        }
+    }
+
+    // What the bar covers now: just the thumb, or the whole strip while it's wide.
+    public Rectangle Bounds { get { return !Scrollable ? Rectangle.Empty : Wide ? Strip : Thumb; } }
+
+    Rectangle UpArrow { get { var s = Strip; return new Rectangle(s.X, 0, s.Width, OverlayBar.Arrow); } }
+    Rectangle DownArrow { get { var s = Strip; return new Rectangle(s.X, s.Bottom - OverlayBar.Arrow, s.Width, OverlayBar.Arrow); } }
+
+    int PartAt(Point p)
+    {
+        if (!Scrollable) return 0;
+        var th = Thumb;
+        if (Wide ? new Rectangle(Strip.X, th.Y, Strip.Width, th.Height).Contains(p) : th.Contains(p)) return 5;
+        if (!Wide || !Strip.Contains(p)) return 0;
+        if (UpArrow.Contains(p)) return 1;
+        if (DownArrow.Contains(p)) return 2;
+        return p.Y < th.Y ? 3 : 4;
+    }
+
+    // Whether a press at `p` would be taken by the bar (for the pointer's shape).
+    public bool Covers(Point p) { return Dragging || (Scrollable && (Wide ? Strip : Thumb).Contains(p)); }
+
+    // The pointer moved to `p`: widens the bar when it's over the right edge, and tracks which part it's over.
+    public void Hover(Point p)
+    {
+        if (Dragging || pressed != 0) return;
+        bool changed = false;
+        if (Scrollable && Strip.Contains(p))
+        {
+            if (!Wide) { Wide = true; changed = true; }
+            collapse.Stop(); collapse.Start();
+        }
+        int at = Wide ? PartAt(p) : 0;
+        if (at != over) { over = at; changed = true; }
+        if (changed) Changed();
+    }
+
+    public void Leave()
+    {
+        if (Dragging || pressed != 0 || over == 0) return;
+        over = 0;
+        Changed();
+    }
+
+    // A press at `p`: true when it's on the bar (and so not for the contents under it).
+    public bool Down(Point p)
+    {
+        int at = PartAt(p);
+        if (at == 0) return false;
+        pressed = at;
+        pointer = p;
+        if (at == 5) { Dragging = true; startY = p.Y; startPos = Pos(); Changed(); return true; }
+        Step();
+        repeat.Interval = 400;   // held down: repeats after a moment, like Windows' scroll bars
+        repeat.Start();
+        return true;
+    }
+
+    void Step()
+    {
+        int page = Math.Max(Line, View() - Line);
+        if (pressed == 1) Set(Pos() - Line);
+        else if (pressed == 2) Set(Pos() + Line);
+        else if (pressed == 3 || pressed == 4)
+        {
+            // Pages toward the pointer, stopping once the thumb reaches it.
+            var p = pointer;
+            var th = Thumb;
+            if (pressed == 3 && p.Y < th.Top) Set(Pos() - page);
+            else if (pressed == 4 && p.Y >= th.Bottom) Set(Pos() + page);
+        }
+        Changed();
+    }
+
+    // The pointer moved to `p` while a button is held on the bar: true when it is (the move is the bar's).
+    public bool Drag(Point p)
+    {
+        if (pressed == 0) return false;
+        pointer = p;
+        if (!Dragging) return true;   // held on an arrow or the track: repeats from where the pointer is
+        int travel = Track.Height - Thumb.Height;
+        if (travel > 0) Set(startPos + (int)((long)(p.Y - startY) * (Content() - View()) / travel));
+        Changed();
+        return true;
+    }
+
+    // The button came up: true when the bar had the press.
+    public bool Up()
+    {
+        if (pressed == 0) return false;
+        pressed = 0; Dragging = false;
+        repeat.Stop();
+        collapse.Stop(); collapse.Start();   // narrows once the pointer has left
+        Changed();
+        return true;
+    }
+
+    public void Paint(Graphics g)
+    {
+        if (!Scrollable) return;
+        var mode = g.SmoothingMode;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        if (Wide)
+        {
+            using (var b = new SolidBrush(OverlayBar.Track)) g.FillRectangle(b, Strip);
+            ArrowAt(g, UpArrow, true, over == 1 || pressed == 1);
+            ArrowAt(g, DownArrow, false, over == 2 || pressed == 2);
+        }
+        using (var path = OverlayBar.Rounded(Thumb))
+        using (var b = new SolidBrush(OverlayBar.ThumbColor(Wide, over == 5 || Dragging))) g.FillPath(b, path);
+        g.SmoothingMode = mode;
+    }
+
+    static void ArrowAt(Graphics g, Rectangle r, bool up, bool hot)
+    {
+        float s = Theme.D(4), cx = r.X + r.Width / 2f, cy = r.Y + r.Height / 2f;
+        var pts = up
+            ? new[] { new PointF(cx - s, cy + s / 2), new PointF(cx + s, cy + s / 2), new PointF(cx, cy - s / 2) }
+            : new[] { new PointF(cx - s, cy - s / 2), new PointF(cx + s, cy - s / 2), new PointF(cx, cy + s / 2) };
+        using (var b = new SolidBrush(OverlayBar.ArrowColor(hot))) g.FillPolygon(b, pts);
+    }
+}
+
+// The bar of a ScrollPanel: a small window of its own over the contents (the thumb, or the whole strip while
+// it's wide), so it gets the mouse before the contents under it.
+class OverlayStrip : Control
+{
+    readonly OverlayScroll bar;
+
+    public OverlayStrip(OverlayScroll bar)
+    {
+        this.bar = bar;
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        SetStyle(ControlStyles.Selectable, false);
+        Visible = false;
+    }
+
+    Point InHost(Point p) { return new Point(p.X + Left, p.Y + Top); }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        e.Graphics.Clear(Parent != null ? Parent.BackColor : Theme.Bg);
+        e.Graphics.TranslateTransform(-Left, -Top);
+        bar.Paint(e.Graphics);
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e) { base.OnMouseDown(e); if (e.Button == MouseButtons.Left) bar.Down(InHost(e.Location)); }
+    protected override void OnMouseMove(MouseEventArgs e) { base.OnMouseMove(e); if (!bar.Drag(InHost(e.Location))) bar.Hover(InHost(e.Location)); }
+    protected override void OnMouseUp(MouseEventArgs e) { base.OnMouseUp(e); bar.Up(); }
+    protected override void OnMouseCaptureChanged(EventArgs e) { base.OnMouseCaptureChanged(e); if (!Capture) bar.Up(); }
+    protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); bar.Leave(); }
+}
+
+// Tells each ScrollPanel where the pointer is, wherever it is over the window (over a row, a label...), so the
+// bar widens when the pointer reaches the panel's right edge.
+class OverlayHover : IMessageFilter
+{
+    static readonly List<WeakReference> panels = new List<WeakReference>();
+    static bool watching;
+
+    public static void Watch(ScrollPanel p)
+    {
+        if (!watching) { watching = true; Application.AddMessageFilter(new OverlayHover()); }
+        panels.Add(new WeakReference(p));
+    }
+
+    public bool PreFilterMessage(ref Message m)
+    {
+        if (m.Msg != 0x200) return false;   // WM_MOUSEMOVE
+        var under = Control.FromChildHandle(m.HWnd);
+        var form = under != null ? under.FindForm() : null;
+        var at = Cursor.Position;
+        for (int i = panels.Count - 1; i >= 0; i--)
+        {
+            var p = panels[i].Target as ScrollPanel;
+            if (p == null || p.IsDisposed) { panels.RemoveAt(i); continue; }
+            if (form != null && p.IsHandleCreated && p.Visible && p.FindForm() == form) p.Pointer(at);
+        }
+        return false;
+    }
+}
+
+// A panel that scrolls its contents itself (mouse wheel, or the overlay bar) instead of with Windows' scroll
+// bar, which takes its width from the contents. Child controls are placed as if unscrolled less ScrollY, the
+// way AutoScrollPosition worked.
+class ScrollPanel : Panel
+{
+    readonly OverlayScroll bar;
+    readonly OverlayStrip strip;
+    int scrollY;
+    bool shifting, updating;
+    Size regionFor = Size.Empty;
+    public bool Scrolls = true;
+    public int ScrollY { get { return scrollY; } }
+
+    public ScrollPanel()
+    {
+        bar = new OverlayScroll
+        {
+            Client = () => ClientSize,
+            Content = () => Scrolls ? ContentHeight : 0,
+            View = () => ClientSize.Height,
+            Pos = () => scrollY,
+            Set = ScrollTo,
+            ToClient = PointToClient,
+            Changed = UpdateBar,
+            Line = Theme.D(40),
+        };
+        strip = new OverlayStrip(bar);
+        Controls.Add(strip);
+        OverlayHover.Watch(this);
+    }
+
+    protected override void Dispose(bool disposing) { if (disposing) bar.Dispose(); base.Dispose(disposing); }
+
+    // The pointer is at `screen`, somewhere over this panel's window.
+    public void Pointer(Point screen)
+    {
+        var p = PointToClient(screen);
+        if (ClientRectangle.Contains(p) || bar.Wide) bar.Hover(p);
+    }
+
+    // The contents' full height: down to the lowest control showing, as if not scrolled.
+    public virtual int ContentHeight
+    {
+        get
+        {
+            int bottom = 0;
+            foreach (Control c in Controls) if (c != strip && c.Visible) bottom = Math.Max(bottom, c.Bottom);
+            return bottom + scrollY;
+        }
+    }
+
+    public int MaxScroll { get { return Scrolls ? Math.Max(0, ContentHeight - ClientSize.Height) : 0; } }
+
+    public void ScrollTo(int y)
+    {
+        y = Math.Max(0, Math.Min(y, MaxScroll));
+        if (y != scrollY)
+        {
+            int d = y - scrollY;
+            scrollY = y;
+            shifting = true;
+            try { Shift(d); } finally { shifting = false; }
+        }
+        UpdateBar();
+    }
+
+    // Back to the top without moving anything (the contents are about to be replaced).
+    protected void ResetScroll() { scrollY = 0; }
+
+    [DllImport("user32.dll")] static extern IntPtr BeginDeferWindowPos(int n);
+    [DllImport("user32.dll")] static extern IntPtr DeferWindowPos(IntPtr info, IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    [DllImport("user32.dll")] static extern bool EndDeferWindowPos(IntPtr info);
+
+    // Moves several child controls at once, in one step (so they never show half moved).
+    protected static void MoveAll(List<KeyValuePair<Control, Rectangle>> moves)
+    {
+        var windows = new List<KeyValuePair<Control, Rectangle>>();
+        foreach (var m in moves)
+            if (m.Key.IsHandleCreated) { if (m.Key.Bounds != m.Value) windows.Add(m); }
+            else m.Key.Bounds = m.Value;
+        if (windows.Count == 0) return;
+        IntPtr info = BeginDeferWindowPos(windows.Count);
+        foreach (var m in windows)
+        {
+            if (info == IntPtr.Zero) break;
+            info = DeferWindowPos(info, m.Key.Handle, IntPtr.Zero, m.Value.X, m.Value.Y, m.Value.Width, m.Value.Height, 0x0004 | 0x0010 | 0x0200);   // SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER
+        }
+        if (info != IntPtr.Zero) EndDeferWindowPos(info);
+        else foreach (var m in windows) m.Key.Bounds = m.Value;
+    }
+
+    // Moves the contents up by `d` pixels (down when negative).
+    protected virtual void Shift(int d)
+    {
+        var moves = new List<KeyValuePair<Control, Rectangle>>();
+        foreach (Control c in Controls)
+            if (c != strip) moves.Add(new KeyValuePair<Control, Rectangle>(c, new Rectangle(c.Left, c.Top - d, c.Width, c.Height)));
+        MoveAll(moves);
+    }
+
+    protected override void OnMouseWheel(MouseEventArgs e)
+    {
+        int lines = SystemInformation.MouseWheelScrollLines;
+        int step = (lines > 0 ? lines : 3) * Theme.D(20);
+        // Only taken when this panel can move that way; otherwise the wheel goes on to the panel around it.
+        if (MaxScroll > 0 && (e.Delta < 0 ? scrollY < MaxScroll : scrollY > 0))
+        {
+            ScrollTo(scrollY - e.Delta * step / 120);
+            var h = e as HandledMouseEventArgs;
+            if (h != null) h.Handled = true;
+        }
+        base.OnMouseWheel(e);
+    }
+
+    protected override void OnLayout(LayoutEventArgs e) { base.OnLayout(e); Clamp(); }
+    protected override void OnResize(EventArgs e) { base.OnResize(e); Clamp(); }
+    protected override void OnVisibleChanged(EventArgs e) { base.OnVisibleChanged(e); Clamp(); }
+
+    // After the contents or the size change: keeps the scroll position within the contents and the bar in step.
+    void Clamp()
+    {
+        if (shifting || updating || !Visible) return;
+        if (scrollY > MaxScroll) ScrollTo(MaxScroll); else UpdateBar();
+    }
+
+    public void UpdateBar()
+    {
+        if (updating) return;
+        updating = true;
+        try
+        {
+            var r = bar.Bounds;
+            if (r.IsEmpty) { strip.Visible = false; return; }
+            // Resting, the window is the thumb's rounded shape; wide, it's the whole strip.
+            var shape = bar.Wide ? Size.Empty : r.Size;
+            if (shape != regionFor)
+            {
+                regionFor = shape;
+                if (bar.Wide) strip.Region = null;
+                else using (var p = OverlayBar.Rounded(new Rectangle(Point.Empty, r.Size))) strip.Region = new Region(p);
+            }
+            if (strip.Bounds != r) strip.Bounds = r;
+            if (!strip.Visible) strip.Visible = true;
+            strip.BringToFront();
+            strip.Invalidate();
+        }
+        finally { updating = false; }
+    }
+
+    // Scrolls just enough to show the part from `top` to `bottom` (content coordinates, as if unscrolled).
+    public void ShowRange(int top, int bottom)
+    {
+        if (top < scrollY) ScrollTo(top);
+        else if (bottom > scrollY + ClientSize.Height) ScrollTo(bottom - ClientSize.Height);
+    }
+}
+
+// A list of rows. Only the rows in view are windows (the rest are just data), so a long list, such as
+// every match while typing in search, fills and scrolls quickly.
+class OptionList : ScrollPanel
 {
     readonly List<OptionRow> rows = new List<OptionRow>();
-    int selectedIndex = -1;
+    int selectedIndex = -1, updates;
     public event EventHandler SelectionChanged, Activated;
     public int RowHeight = 54;          // design units; 72 fits a two-line description
+    // Pixels kept clear right of the rows: a list that reaches into its box's padding, so the scroll bar sits
+    // at the box's edge rather than between the rows and the box's border.
+    public int RightInset;
 
     public OptionList()
     {
-        AutoScroll = true;
         BackColor = Theme.Bg;
     }
 
@@ -2563,29 +3086,59 @@ class OptionList : Panel
         row.MouseDown += delegate { SelectedIndex = index; };
         row.DoubleClick += delegate { if (Activated != null) Activated(this, EventArgs.Empty); };
         rows.Add(row);
-        Controls.Add(row);
-        LayoutRows();
+        if (updates == 0) LayoutRows();
         return row;
     }
 
+    // Around adding many rows: they're laid out once at the end.
+    public void BeginUpdate() { updates++; }
+    public void EndUpdate() { if (--updates == 0) LayoutRows(); }
+
     public void Clear()
     {
-        foreach (var r in rows) { Controls.Remove(r); r.Dispose(); }
+        foreach (var r in rows) { if (r.Parent == this) Controls.Remove(r); r.Dispose(); }
         rows.Clear();
         selectedIndex = -1;
-        LayoutRows();
+        ResetScroll();
+        if (updates == 0) LayoutRows();
     }
 
-    protected override void OnResize(EventArgs e) { base.OnResize(e); LayoutRows(); }
+    int H(OptionRow r) { return Theme.D(r.DesignHeight > 0 ? r.DesignHeight : RowHeight); }
+
+    public override int ContentHeight
+    {
+        get
+        {
+            int gap = Theme.D(6), total = 0;
+            foreach (var r in rows) total += H(r) + gap;
+            return rows.Count > 0 ? total - gap : 0;
+        }
+    }
+
+    protected override void OnResize(EventArgs e) { LayoutRows(); base.OnResize(e); }
+    protected override void Shift(int d) { LayoutRows(); }
 
     void LayoutRows()
     {
-        int gap = Theme.D(6);
-        Func<OptionRow, int> h = r => Theme.D(r.DesignHeight > 0 ? r.DesignHeight : RowHeight);
-        bool scroll = rows.Sum(r => h(r) + gap) - gap > ClientSize.Height;
-        int w = ClientSize.Width - (scroll ? SystemInformation.VerticalScrollBarWidth + Theme.D(4) : 0);
-        int y = AutoScrollPosition.Y;
-        foreach (var r in rows) { r.SetBounds(0, y, w, h(r)); y += h(r) + gap; }
+        if (updates > 0) return;
+        int gap = Theme.D(6), w = ClientSize.Width - RightInset, view = ClientSize.Height, y = -ScrollY;
+        var moves = new List<KeyValuePair<Control, Rectangle>>();
+        SuspendLayout();
+        foreach (var r in rows)
+        {
+            int h = H(r);
+            var place = new Rectangle(0, y, w, h);
+            if (y + h > 0 && y < view)
+            {
+                if (r.Parent == this) moves.Add(new KeyValuePair<Control, Rectangle>(r, place));
+                else { r.Bounds = place; Controls.Add(r); }
+            }
+            else if (r.Parent == this) Controls.Remove(r);
+            y += h + gap;
+        }
+        MoveAll(moves);   // the rows already showing move together
+        ResumeLayout(false);
+        UpdateBar();
     }
 
     public int SelectedIndex
@@ -2595,13 +3148,131 @@ class OptionList : Panel
         {
             selectedIndex = value;
             for (int i = 0; i < rows.Count; i++) rows[i].Selected = i == value;
-            if (value >= 0 && value < rows.Count) ScrollControlIntoView(rows[value]);
+            if (value >= 0 && value < rows.Count)
+            {
+                int top = 0, gap = Theme.D(6);
+                for (int i = 0; i < value; i++) top += H(rows[i]) + gap;
+                ShowRange(top, top + H(rows[value]));
+            }
             if (SelectionChanged != null) SelectionChanged(this, EventArgs.Empty);
         }
     }
 
     public object SelectedTag { get { return selectedIndex >= 0 ? rows[selectedIndex].Tag : null; } }
     public int Count { get { return rows.Count; } }
+}
+
+// A text box of several lines with the overlay scroll bar instead of Windows' one. The edit control still
+// scrolls itself (keys, typing); the wheel and the bar, painted in its right margin, scroll it from here.
+class NoteBox : TextBox
+{
+    [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, IntPtr l);
+    const int WM_PAINT = 0x0F, WM_SETCURSOR = 0x20, WM_MOUSEMOVE = 0x200, WM_LBUTTONDOWN = 0x201, WM_LBUTTONUP = 0x202,
+        WM_LBUTTONDBLCLK = 0x203, WM_MOUSEWHEEL = 0x20A, WM_CAPTURECHANGED = 0x215, WM_MOUSELEAVE = 0x2A3,
+        EM_GETFIRSTVISIBLELINE = 0xCE, EM_GETLINECOUNT = 0xBA, EM_LINESCROLL = 0xB6, EM_SETMARGINS = 0xD3;
+    readonly OverlayScroll bar;
+    Rectangle shown = Rectangle.Empty;
+    bool shownWide;
+    int wheel;
+
+    public NoteBox()
+    {
+        Multiline = true; AcceptsReturn = true; WordWrap = true;
+        ScrollBars = ScrollBars.None;
+        bar = new OverlayScroll
+        {
+            Client = () => ClientSize,
+            Content = () => LineCount,
+            View = () => View,
+            Pos = () => First,
+            Set = ScrollToLine,
+            ToClient = PointToClient,
+            Changed = () => { if (IsHandleCreated) Invalidate(Rectangle.Inflate(bar.Strip, 1, 1)); },
+            Right = OverlayBar.Margin,   // inside the box's border
+            Line = 1,
+        };
+    }
+
+    protected override void Dispose(bool disposing) { if (disposing) bar.Dispose(); base.Dispose(disposing); }
+
+    // Room on the right for the bar (even wide), so text never runs under it.
+    void RightMargin()
+    {
+        if (IsHandleCreated) SendMessage(Handle, EM_SETMARGINS, (IntPtr)2, (IntPtr)((OverlayBar.Wide + OverlayBar.Margin + Theme.D(4)) << 16));
+    }
+    protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); RightMargin(); }
+    protected override void OnFontChanged(EventArgs e) { base.OnFontChanged(e); RightMargin(); }
+
+    int First { get { return IsHandleCreated ? (int)SendMessage(Handle, EM_GETFIRSTVISIBLELINE, IntPtr.Zero, IntPtr.Zero) : 0; } }
+    int LineCount { get { return IsHandleCreated ? (int)SendMessage(Handle, EM_GETLINECOUNT, IntPtr.Zero, IntPtr.Zero) : 0; } }
+    int View { get { return Math.Max(1, ClientSize.Height / Math.Max(1, TextRenderer.MeasureText("A", Font, Size.Empty, TextFormatFlags.NoPadding).Height)); } }
+
+    void ScrollToLine(int line)
+    {
+        line = Math.Max(0, Math.Min(line, LineCount - View));
+        int d = line - First;
+        if (d != 0) SendMessage(Handle, EM_LINESCROLL, IntPtr.Zero, (IntPtr)d);
+        Check();
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        // The edit control's own messages (EM_*), including the ones asked here, go straight through.
+        if (!IsHandleCreated || (m.Msg >= 0xB0 && m.Msg <= 0xDA)) { base.WndProc(ref m); return; }
+        var pt = new Point((short)((long)m.LParam & 0xFFFF), (short)(((long)m.LParam >> 16) & 0xFFFF));
+        switch (m.Msg)
+        {
+            case WM_LBUTTONDOWN:
+            case WM_LBUTTONDBLCLK:
+                if (bar.Down(pt)) { Capture = true; return; }
+                break;
+            case WM_MOUSEMOVE:
+                if (bar.Drag(pt)) return;
+                bar.Hover(pt);
+                break;
+            case WM_LBUTTONUP:
+                if (bar.Up()) { Capture = false; return; }
+                break;
+            case WM_CAPTURECHANGED:
+                bar.Up();
+                break;
+            case WM_MOUSELEAVE:
+                bar.Leave();
+                break;
+            case WM_MOUSEWHEEL:
+                // Without Windows' scroll bar the edit control ignores the wheel, so it's scrolled here, by
+                // the usual number of lines a notch (touchpads send parts of a notch, which add up).
+                int lines = SystemInformation.MouseWheelScrollLines;
+                wheel += (short)(((long)m.WParam >> 16) & 0xFFFF) * (lines > 0 ? lines : 3);
+                int by = wheel / 120, first = First, to = Math.Max(0, Math.Min(LineCount - View, first - by));
+                wheel -= by * 120;
+                if (to != first) { ScrollToLine(to); m.Result = IntPtr.Zero; return; }
+                wheel = 0;
+                break;   // already at the end: the panel around it gets the wheel
+            case WM_SETCURSOR:
+                if (bar.Covers(PointToClient(Cursor.Position))) { Cursor.Current = Cursors.Default; m.Result = (IntPtr)1; return; }
+                break;
+        }
+        base.WndProc(ref m);
+        if (m.Msg == WM_PAINT) { PaintBar(); return; }
+        Check();
+        // Typing and editing redraw lines straight away (no WM_PAINT), which can paint over the bar.
+        if ((m.Msg >= 0x100 && m.Msg <= 0x109) || (m.Msg >= 0x300 && m.Msg <= 0x304) || m.Msg == 0x0C || m.Msg == 0x0B
+            || (m.Msg == WM_MOUSEMOVE && MouseButtons == MouseButtons.Left)) PaintBar();
+    }
+
+    // After anything that may have scrolled or changed the text: repaints the bar where it moved to.
+    void Check()
+    {
+        if (bar.Thumb != shown || bar.Wide != shownWide) Invalidate(Rectangle.Inflate(bar.Strip, 1, 1));
+    }
+
+    void PaintBar()
+    {
+        shown = bar.Thumb; shownWide = bar.Wide;
+        if (!bar.Scrollable) return;
+        using (var g = CreateGraphics()) bar.Paint(g);
+    }
 }
 
 class Segmented : Control
@@ -2669,7 +3340,7 @@ class BoxPanel : Panel
 }
 
 // A full-window page with a centered fixed-width column, like a setup screen.
-class Page : Panel
+class Page : ScrollPanel
 {
     public readonly Panel Col = new Panel();
     // Set for pages whose column fills the window height (it lays out the column's contents).
@@ -2682,7 +3353,7 @@ class Page : Panel
     {
         Dock = DockStyle.Fill;
         BackColor = Theme.Bg;
-        AutoScroll = logo;
+        Scrolls = logo;   // with the overlay scroll bar when the window is shorter than the page
         Col.BackColor = Theme.Bg;
         shift = logo ? LayoutLogoH - LogoH : 0;
         Col.Size = new Size(Theme.D(640), Theme.D(Math.Max(0, colHeight - shift)));
@@ -2697,11 +3368,10 @@ class Page : Panel
 
     protected override void OnResize(EventArgs e)
     {
-        base.OnResize(e);
         int x = Math.Max(0, (ClientSize.Width - Col.Width) / 2);
-        if (Fill != null) { Col.Location = new Point(x, 0); Fill(); }
-        else Col.Location = new Point(x, Math.Max(0, (ClientSize.Height - Col.Height) / 2));
-        PerformLayout();   // recompute the scroll area for the column's new place (e.g. after notifications shrink the page)
+        if (Fill != null) { Col.Location = new Point(x, -ScrollY); Fill(); }
+        else Col.Location = new Point(x, Math.Max(0, (ClientSize.Height - Col.Height) / 2) - ScrollY);
+        base.OnResize(e);   // keeps the scroll position within the column's new place (e.g. after notifications shrink the page)
     }
 
     public T Add<T>(T c, int x, int y, int w, int h) where T : Control
@@ -2726,12 +3396,10 @@ class Page : Panel
         return t;
     }
 
-    // A text box of several lines (e.g. a description), with a scrollbar when the text is longer.
+    // A text box of several lines (e.g. a description), with the overlay scroll bar when the text is longer.
     public TextBox Notes(string text, int x, int y, int w, int h)
     {
-        var t = Add(new TextBox { Text = text, Font = Theme.Body, BackColor = Theme.Card, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle,
-            Multiline = true, AcceptsReturn = true, ScrollBars = ScrollBars.Vertical, WordWrap = true }, x, y, w, h);
-        Native.DarkScrollbars(t);
+        var t = Add(new NoteBox { Text = text, Font = Theme.Body, BackColor = Theme.Card, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle }, x, y, w, h);
         Native.TextMargins(t);
         return t;
     }
@@ -3328,9 +3996,11 @@ partial class MainForm : Form
 
         var distroBox = p.Add(new BoxPanel(), 0, top, 640, box1);
         var list = new OptionList { RowHeight = rowH, BackColor = BoxPanel.Fill };
-        list.SetBounds(Theme.D(padIn), Theme.D(padIn), Theme.D(640 - padIn * 2), Theme.D(distroH));
+        // The list reaches across the box's right padding (to just inside its border) for the scroll bar.
+        int listW = Theme.D(640) - Theme.D(padIn) - 1;
+        list.SetBounds(Theme.D(padIn), Theme.D(padIn), listW, Theme.D(distroH));
+        list.RightInset = listW - Theme.D(640 - padIn * 2);
         distroBox.Controls.Add(list);
-        Native.DarkScrollbars(list);   // results can be longer than the box
         var hint = new Label { BackColor = BoxPanel.Fill, ForeColor = Theme.Muted, Font = Theme.Body, TextAlign = ContentAlignment.MiddleCenter, UseMnemonic = false };
         hint.SetBounds(Theme.D(padIn), Theme.D(padIn), Theme.D(640 - padIn * 2), Theme.D(distroH));
         distroBox.Controls.Add(hint);
@@ -3346,8 +4016,11 @@ partial class MainForm : Form
             var shown = words.Length == 0 ? Distro.Catalog.ToList()
                 : all().Where(d => words.All(w => (d.Name + " " + d.Blurb + " " + d.Id).ToLowerInvariant().Contains(w)))
                     .OrderByDescending(d => d.Name.StartsWith(q, StringComparison.OrdinalIgnoreCase)).ToList();
+            list.BeginUpdate();
             list.Clear();
-            foreach (var d in shown) list.AddItem(d.Name, d.Blurb, d);
+            foreach (var d in shown)
+                list.AddItem(d.Name, d.Blurb, d).Link = d.Home;
+            list.EndUpdate();
             if (shown.Count > 0) list.SelectedIndex = 0;
             heading.Text = words.Length == 0 ? "Recommended" : shown.Count + (shown.Count == 1 ? " result" : " results");
             hint.Visible = shown.Count == 0;
@@ -3355,7 +4028,7 @@ partial class MainForm : Form
         };
         search.TextChanged += delegate { refresh(); };
         refresh();
-        // A list over a day old is fetched again in the background; results update when it arrives.
+        // The list is checked against GitHub in the background each time this page opens; results update when a new one arrives.
         Task.Run(() => MoreDistros.Load(false)).ContinueWith(t => Ui(() => { if (page == p && !t.IsFaulted && !search.IsDisposed && search.Text.Trim().Length > 0) refresh(); }));
 
         var ownBox = p.Add(new BoxPanel(), 0, top + box1 + 12, 640, box2);
@@ -3409,6 +4082,20 @@ partial class MainForm : Form
         {
             var tag = list.SelectedTag ?? own.SelectedTag;
             if ((tag as string) == "own") { ShowOwnInstaller(); return; }
+            // A distribution Try Linux can't download itself: offer its website, then Use Your Own Installer
+            // for the ISO once it's downloaded.
+            var web = tag as Distro;
+            if (web != null && web.WebsiteOnly)
+            {
+                if (Ask("Download " + web.Name + " from its website?",
+                        "Try Linux can't fetch the " + web.Name + " ISO file itself. Open its website to download the ISO, then choose it in Use Your Own Installer (An ISO File On This PC) to install it.",
+                        "Open Website"))
+                {
+                    try { Process.Start(new ProcessStartInfo(web.Home) { UseShellExecute = true }); } catch { }
+                    ShowOwnInstaller();
+                }
+                return;
+            }
             if (tag != null) choose(tag);
         };
         next.Click += go;

@@ -23,8 +23,8 @@ OpenGL / Vulkan graphics (VirGL and Venus) to the guest.
 | **Settings, Hardware:** graphics, memory and CPU cores, disks | **Disks:** size, location, resize, reclaim free space, compact |
 | ![Settings, Devices tab](docs/images/settings-devices-tab.png) | ![Settings, Recovery tab](docs/images/settings-recovery-tab.png) |
 | **Settings, Devices:** sound, CD/DVD drive, network type, port forwards | **Settings, Recovery:** backups, snapshots, storage, repair, delete |
-| ![Search: KDE, with 14 results](docs/images/search.png) | ![Use Your Own Installer, with a VMware disk chosen](docs/images/own-installer.png) |
-| **Search:** over 70 more distributions, editions and atomic versions | **Use Your Own Installer:** an existing virtual disk, an ISO file or a link |
+| ![Search: KDE, with 134 results](docs/images/search.png) | ![Use Your Own Installer, with a VMware disk chosen](docs/images/own-installer.png) |
+| **Search:** over 90 more distributions, editions and atomic versions | **Use Your Own Installer:** an existing virtual disk, an ISO file or a link |
 | ![The Light theme: Choose a Linux OS](docs/images/theme-light.png) | ![Settings, General tab, Appearance section](docs/images/settings-appearance.png) |
 | **Light theme** | **Settings > General > Appearance:** Dark or Light, or follow Windows |
 
@@ -33,18 +33,26 @@ OpenGL / Vulkan graphics (VirGL and Venus) to the guest.
 Try Linux finds the newest release on each distribution's official mirror when
 you install, so it doesn't need updating for new versions.
 
-![Choose a Linux OS, searching for KDE: KDE neon, Kubuntu, Ubuntu Studio, Fedora KDE Plasma Desktop and Fedora Kinoite](docs/images/search.png)
+![Choose a Linux OS, searching for KDE: KDE neon, KDE Linux, Kubuntu, Ubuntu Studio and Fedora KDE Plasma Desktop, each with a Website link](docs/images/search.png)
 
-**Search** (above the list) finds more: over 70 other distributions, desktop
+**Search** (above the list) finds more: over 90 other distributions, desktop
 editions and immutable / atomic versions, such as Kubuntu, Xubuntu, Fedora KDE and
 Silverblue, Linux Mint Xfce, Debian KDE, openSUSE Tumbleweed, MX Linux, Arch Linux,
 Artix, antiX, Alpine, Gentoo, Chimera Linux, Linux Lite, TUXEDO OS, siduction,
+Garuda, Parrot, Pardus, PureOS, CentOS Stream, Trisquel, Ultramarine, ALT Linux,
 AlmaLinux, Rocky Linux, Bazzite, Bluefin, NixOS, Kali, Solus, Mageia, EndeavourOS
 and KDE neon.
 Search by name, desktop or description, e.g. `KDE`, `Xfce` or `atomic`. The list
 comes from [`catalog/distros.json`](catalog/distros.json) in this repository and is
-refreshed at most once a day, so it grows without a new release. Each download is
+checked each time you open Choose a Linux OS (only downloaded again when it has
+changed), so new entries appear without a new release. Each download is
 checked against the distribution's official SHA-256 or SHA-512 checksum.
+
+Search also lists over 400 more distributions from DistroWatch, such as Manjaro,
+Pop!_OS, elementary OS, deepin and Nobara, that Try Linux can't download itself.
+For these, Next offers to open the distribution's home page, where you download
+the ISO, then pick it in **Use Your Own Installer** (An ISO File On This PC).
+Every result has a **Website ↗** link to the distribution's home page.
 
 **Use Your Own Installer** installs from an `.iso` file on your PC or a download
 link, or imports an existing virtual disk (qcow2, vmdk, vhd, vhdx, vdi or raw) that
@@ -113,7 +121,7 @@ Once a day, Try Linux checks GitHub for a new release of Try Linux and of
 When one is available, a notice at the top of the home screen says so, with an
 **Update** button. Try Linux and WINQ-EMU updates each get their own notice.
 
-<img src="docs/images/update-button-home.png" alt="Virtual Machines screen with a notice above the list: Try Linux 1.2.0 is available. You have 1.1.9. Update button" width="560">
+<img src="docs/images/update-button-home.png" alt="Virtual Machines screen with a notice above the list: Try Linux 1.2.0 is available. You have 1.1.11. Update button" width="560">
 
 **Try Linux updates**
 
@@ -220,14 +228,12 @@ Settings.
       with Manual). They only go up to what's free: Windows keeps 2 cores and a quarter
       of the memory, and other running systems keep theirs.
     - **Disks:** each disk's current size, free space on its drive, maximum size,
-      location and whether it's dynamic or preallocated. **Resize** grows or shrinks a
-      disk. **Reclaim free space when Linux
-      deletes files** passes Linux's TRIM through, so deleted files' space is reused
-      instead of growing the disk file. **Compact** gives a disk's unused space back to
-      Windows.
-    - **Disk utilities:** **Add Disk** creates a new disk or attaches an existing
-      `.qcow2` file; **Remove** takes one out (Linux sees each disk as its own drive and
-      starts from Disk 1).
+      location and whether it's dynamic or preallocated. Under **Disk Utilities**:
+      **Reclaim free space when Linux deletes files** passes Linux's TRIM through, so
+      deleted files' space is reused instead of growing the disk file; **Resize** grows
+      or shrinks a disk; **Compact** gives a disk's unused space back to Windows;
+      **Add Disk** creates a new disk or attaches an existing `.qcow2` file; **Remove**
+      takes one out (Linux sees each disk as its own drive and starts from Disk 1).
   - **Devices:** sound and microphone; a **CD/DVD drive** for ISOs such as drivers or
     rescue disks, which you can change while the system runs; **network type** (shared
     with this PC, port forwards only, or no network); and port forwards (`tcp:2223:22`

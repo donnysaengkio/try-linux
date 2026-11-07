@@ -131,11 +131,10 @@ class SectionHeader : Control
 // Vertical form builder for one settings tab.
 class Sheet
 {
-    public readonly Panel Panel = new Panel { AutoScroll = true, BackColor = Theme.Bg, Dock = DockStyle.Fill, Visible = false };
+    public readonly ScrollPanel Panel = new ScrollPanel { BackColor = Theme.Bg, Dock = DockStyle.Fill, Visible = false };
     int y = 10;
     const int LabelW = 180, Field = 190, Width = 600;
 
-    public Sheet() { Native.DarkScrollbars(Panel); }
 
     T Place<T>(T c, int x, int top, int w, int h) where T : Control
     {
@@ -227,7 +226,7 @@ class Sheet
         Layout();
     }
 
-    // Bars span the tab area, the same width as the tabs above (less the scrollbar when there is one).
+    // Bars span the tab area, the same width as the tabs above (the scroll bar is drawn over them).
     void FitHeaders() { foreach (var g in groups) g.Header.Width = g.Body.Width = Panel.ClientSize.Width; }
 
     // Stacks the headings, showing each open section's contents under its heading.
@@ -237,7 +236,7 @@ class Sheet
         if (!fitting) { fitting = true; Panel.ClientSizeChanged += delegate { FitHeaders(); }; }
         FitHeaders();
         Panel.SuspendLayout();
-        int scroll = Panel.AutoScrollPosition.Y, yy = 10;
+        int scroll = -Panel.ScrollY, yy = 10;
         foreach (var g in groups)
         {
             g.Header.Top = Theme.D(yy) + scroll;
@@ -382,8 +381,8 @@ class Sheet
 
     public static TextBox Input(string text, bool multiline = false)
     {
-        var t = new TextBox { Text = text, Font = Theme.Body, BackColor = Theme.Card, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle, Multiline = multiline };
-        if (multiline) { t.ScrollBars = ScrollBars.Vertical; t.AcceptsReturn = true; Native.DarkScrollbars(t); }
+        var t = multiline ? new NoteBox() : new TextBox();   // several lines: with the overlay scroll bar
+        t.Text = text; t.Font = Theme.Body; t.BackColor = Theme.Card; t.ForeColor = Theme.Text; t.BorderStyle = BorderStyle.FixedSingle;
         return t;
     }
 
@@ -442,7 +441,7 @@ class TabStrip : Control
 
 partial class MainForm
 {
-    public const string Version = "1.1.10";
+    public const string Version = "1.1.11";
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
     void ShowSettings(VmConfig cfg)
@@ -531,6 +530,18 @@ partial class MainForm
         Func<string, Label> infoText = text => new Label { Text = text, Font = Theme.Body, ForeColor = Theme.Text, BackColor = Theme.Bg,
             UseMnemonic = false, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft };
         general.Row("Operating system", infoText(OsLabel(cfg)), 410);
+        // The distribution's home page (as DistroWatch lists it), for systems installed from the list.
+        var distro = Distro.Find(cfg.DistroId);
+        if (distro != null && distro.Home != null)
+        {
+            var home = general.Row("Home page", infoText(distro.Home), 410);
+            home.ForeColor = Theme.Highlight;
+            home.Cursor = Cursors.Hand;
+            home.AutoSize = false;
+            home.MouseEnter += delegate { home.Font = new Font(Theme.Body, FontStyle.Underline); };
+            home.MouseLeave += delegate { home.Font = Theme.Body; };
+            home.Click += delegate { try { Process.Start(new ProcessStartInfo(distro.Home) { UseShellExecute = true }); } catch { } };
+        }
         var infoLocation = general.Row("Location", infoText(cfg.Dir), 410);
         new ToolTip().SetToolTip(infoLocation, cfg.Dir);
         general.Summary("Info", () =>
@@ -629,14 +640,13 @@ partial class MainForm
         EventHandler fitLocation = delegate { location.Width = location.Parent.ClientSize.Width - Theme.D(Sheet.EdgePad) - location.Left; };
         location.Parent.Resize += fitLocation;
         fitLocation(null, EventArgs.Empty);
-        var resizeBtn = hardware.Action("Shrink or expand this disk's maximum size.", "Resize");
-
-        hardware.SubHeading("Free space");
+        // Disk Utilities: everything that changes the disks, under one heading in this section.
+        // The one setting comes first (it's for every disk); the actions for the chosen disk follow it.
+        hardware.SubHeading("Disk Utilities");
         var reclaim = hardware.Check("Reclaim free space when Linux deletes files", cfg.Reclaim);
         hardware.Note("Linux tells the disk which space it no longer uses (TRIM), so new files reuse it\ninstead of growing the file. Applies to every disk, from the next start.", 2);
+        var resizeBtn = hardware.Action("Shrink or expand this disk's maximum size.", "Resize");
         var compactBtn = hardware.Action("Give unused space in this disk's file back to Windows.", "Compact");
-
-        hardware.Section("Disk utilities");
         var addBtn = hardware.Action("Add another disk to " + who + ".", "Add disk");
         var removeBtn = hardware.Action("Take this disk out of " + who + ".", "Remove");
         DiskInfo disk = null;
@@ -808,7 +818,6 @@ partial class MainForm
             int n = cfg.AllDisks().Count;
             return n + (n == 1 ? " disk" : " disks") + "  ·  Disk " + (Math.Max(0, diskPick.SelectedIndex) + 1) + ": " + curSize.Text + (maxSize.Text.Length > 0 ? " of " + maxSize.Text : "");
         });
-        hardware.Summary("Disk utilities", () => "Add or remove disks");
         hardware.Layout();
 
         // ---- Devices
@@ -1577,7 +1586,7 @@ partial class MainForm
 class SnapshotDialog : Form
 {
     readonly VmConfig cfg;
-    readonly ListBox list = new ListBox();
+    readonly OptionList list = new OptionList();
     List<KeyValuePair<string, string>> snaps = new List<KeyValuePair<string, string>>();
 
     public SnapshotDialog(VmConfig cfg)
@@ -1598,11 +1607,6 @@ class SnapshotDialog : Form
             ForeColor = Theme.Muted, BackColor = Theme.Bg, Font = Theme.Small };
         note.SetBounds(Theme.D(16), Theme.D(12), Theme.D(488), Theme.D(40));
         list.SetBounds(Theme.D(16), Theme.D(56), Theme.D(488), Theme.D(250));
-        list.BackColor = Theme.Card;
-        list.ForeColor = Theme.Text;
-        list.BorderStyle = BorderStyle.FixedSingle;
-        list.Font = Theme.Body;
-        Native.DarkScrollbars(list);
         var take = new FlatBtn("Take snapshot", true);
         take.SetBounds(Theme.D(16), Theme.D(324), Theme.D(160), Theme.D(38));
         var revert = new FlatBtn("Revert");
@@ -1655,10 +1659,13 @@ class SnapshotDialog : Form
 
     void Reload()
     {
-        list.Items.Clear();
+        // One row per snapshot (its name, and when it was taken); a message row (no snapshot) otherwise.
+        list.Clear();
         try { snaps = DiskInfo.Read(cfg.Disk).Snapshots; }
-        catch (Exception ex) { snaps.Clear(); list.Items.Add("Couldn't read snapshots: " + ex.Message); return; }
-        foreach (var s in snaps) list.Items.Add(s.Value + "   " + s.Key);
-        if (snaps.Count == 0) list.Items.Add("No snapshots yet.");
+        catch (Exception ex) { snaps.Clear(); list.AddItem("Couldn't read snapshots", ex.Message, null); return; }
+        list.BeginUpdate();
+        foreach (var s in snaps) list.AddItem(s.Key, s.Value, s.Key);
+        if (snaps.Count == 0) list.AddItem("No snapshots yet", "Take a snapshot to save the disk as it is now.", null);
+        list.EndUpdate();
     }
 }
