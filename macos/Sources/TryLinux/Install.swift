@@ -248,8 +248,10 @@ enum Installer {
 // Looks for a newer release on GitHub at most once a day. A release carries the app zip and a
 // SHA256SUMS.txt; the zip is checked against it before the app is replaced.
 enum Updater {
-    static var api = URL(string: "https://api.github.com/repos/donnysaengkio/try-linux-macos/releases?per_page=10")!
-    static let releasesPage = URL(string: "https://github.com/donnysaengkio/try-linux-macos/releases")!
+    // The try-linux repository holds every edition; the Mac's releases are tagged macos-v1.2.3(-preview).
+    static var api = URL(string: "https://api.github.com/repos/donnysaengkio/try-linux/releases?per_page=50")!
+    static let releasesPage = URL(string: "https://github.com/donnysaengkio/try-linux/releases")!
+    static let tagPrefix = "macos-v"
 
     struct Release {
         var version: String
@@ -267,9 +269,9 @@ enum Updater {
     static func fetch() async throws -> Release {
         let data = try await Net.data(api)
         guard let list = try JSONSerialization.jsonObject(with: data) as? [[String: Any]],
-              let r = list.first(where: { ($0["draft"] as? Bool) != true }),
+              let r = list.first(where: { ($0["draft"] as? Bool) != true && (($0["tag_name"] as? String) ?? "").hasPrefix(tagPrefix) }),
               let tag = r["tag_name"] as? String else { throw AppError("GitHub didn't list any Try Linux for Mac releases.") }
-        var release = Release(version: tag.hasPrefix("v") ? String(tag.dropFirst()) : tag,
+        var release = Release(version: String(tag.dropFirst(tagPrefix.count)),
                               page: URL(string: r["html_url"] as? String ?? "") ?? releasesPage)
         for a in r["assets"] as? [[String: Any]] ?? [] {
             guard let name = a["name"] as? String, let url = URL(string: a["browser_download_url"] as? String ?? "") else { continue }

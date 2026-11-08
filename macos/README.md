@@ -6,11 +6,11 @@ distribution's published SHA-256 checksum, creates a virtual disk and boots it i
 window. It uses Apple's built-in Virtualization framework, so there's nothing else to
 install.
 
-This is the Mac edition of [Try Linux for Windows](https://github.com/donnysaengkio/try-linux).
-There's also [Try Linux for Linux](https://github.com/donnysaengkio/try-linux-linux) (preview).
+This is the Mac edition of [Try Linux for Windows](../windows/README.md). There's also
+[Try Linux for Linux](../linux/README.md) (preview), in this repository.
 
 > **Preview:** this first version is being tested. Please report problems in
-> [Issues](../../issues).
+> [Issues](https://github.com/donnysaengkio/try-linux/issues).
 
 ## Distributions
 
@@ -54,7 +54,7 @@ download link.
 
 ## Install
 
-1. Download `TryLinux-<version>-macOS.zip` from [Releases](../../releases) and open it.
+1. Download `TryLinux-<version>-macOS.zip` from [Releases](https://github.com/donnysaengkio/try-linux/releases?q=macos-v&expanded=true) (the `macos-v...` ones) and open it.
 2. Open **Try Linux.app**. The app isn't notarized by Apple, so macOS blocks it the
    first time. Open **System Settings > Privacy & Security**, scroll down, click
    **Open Anyway** next to "Try Linux", and confirm.

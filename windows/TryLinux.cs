@@ -285,7 +285,9 @@ class UpdateInfo
 // A release carries TryLinux.exe and SHA256SUMS.txt as separate files, so the download can be checked.
 static class Updater
 {
-    public static string Api = "https://api.github.com/repos/donnysaengkio/try-linux/releases/latest";   // tests point this at a local server
+    // The repository holds every edition; Windows releases are the ones tagged v1.2.3 (the Mac's are macos-v...,
+    // Linux's linux-v...). Tests point this at a local server.
+    public static string Api = "https://api.github.com/repos/donnysaengkio/try-linux/releases?per_page=30";
     public const string ReleasesPage = "https://github.com/donnysaengkio/try-linux/releases";
 
     // WINQ-EMU, which runs the systems, is checked at the same time. Its releases have no checksum file;
@@ -350,8 +352,14 @@ static class Updater
 
     public static UpdateInfo Fetch()
     {
-        var json = (Dictionary<string, object>)new System.Web.Script.Serialization.JavaScriptSerializer()
-            .DeserializeObject(Net.GetString(Api));
+        var parsed = new System.Web.Script.Serialization.JavaScriptSerializer().DeserializeObject(Net.GetString(Api));
+        // A list of releases (newest first): the first Windows one. A single release is taken as it is.
+        var json = parsed as Dictionary<string, object>;
+        if (json == null)
+            json = ((object[])parsed).Cast<Dictionary<string, object>>().FirstOrDefault(r =>
+                !(r.ContainsKey("draft") && r["draft"] is bool && (bool)r["draft"]) &&
+                Regex.IsMatch((string)r["tag_name"], @"^[vV]\d"));
+        if (json == null) throw new Exception("GitHub didn't list any Try Linux for Windows releases.");
         var info = new UpdateInfo
         {
             Version = ((string)json["tag_name"]).TrimStart('v', 'V'),

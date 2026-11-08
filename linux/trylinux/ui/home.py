@@ -38,10 +38,9 @@ class HomePage:
         self.app.nav.push(ChoosePage(self.app).page)
 
     def about(self):
-        from .. import VERSION
+        from .. import HOME_PAGE, VERSION
         a = Adw.AboutDialog(application_name="Try Linux", version=VERSION, developer_name="donnysaengkio",
-                            website="https://github.com/donnysaengkio/try-linux-linux",
-                            issue_url="https://github.com/donnysaengkio/try-linux-linux/issues",
+                            website=HOME_PAGE, issue_url="https://github.com/donnysaengkio/try-linux/issues",
                             license_type=Gtk.License.MIT_X11, application_icon="io.github.donnysaengkio.TryLinux",
                             comments="Try a Linux desktop in a virtual machine (QEMU/KVM), from the official installer, checked against its published checksum.")
         a.present(self.app.window)

@@ -4,7 +4,7 @@ import urllib.request
 
 from . import VERSION
 
-USER_AGENT = "TryLinux-Linux/" + VERSION + " (+https://github.com/donnysaengkio/try-linux-linux)"
+USER_AGENT = "TryLinux-Linux/" + VERSION + " (+https://github.com/donnysaengkio/try-linux)"
 TIMEOUT = 30
 
 

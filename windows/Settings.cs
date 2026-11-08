@@ -441,7 +441,7 @@ class TabStrip : Control
 
 partial class MainForm
 {
-    public const string Version = "1.1.11";
+    public const string Version = "1.1.12";
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
     void ShowSettings(VmConfig cfg)

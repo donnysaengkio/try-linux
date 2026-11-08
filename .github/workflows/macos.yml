@@ -1,10 +1,16 @@
-name: Build
+name: macOS
 
 on:
   push:
     branches: [main]
+    paths: ["macos/**", ".github/workflows/macos.yml"]
   pull_request:
+    paths: ["macos/**", ".github/workflows/macos.yml"]
   workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: macos
 
 jobs:
   build:
@@ -21,10 +27,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: TryLinux-macOS
-          path: build/TryLinux-*-macOS.zip
+          path: macos/build/TryLinux-*-macOS.zip
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: selftest
-          path: build/selftest
+          name: selftest-macos
+          path: macos/build/selftest

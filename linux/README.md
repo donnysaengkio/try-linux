@@ -7,8 +7,8 @@ a window. It uses QEMU with KVM, so systems run at close to native speed, with 3
 acceleration (VirGL) where your QEMU supports it.
 
 It runs on **x86_64** and **ARM64** (aarch64) PCs. This is the Linux edition of
-[Try Linux for Windows](https://github.com/donnysaengkio/try-linux) and
-[Try Linux for Mac](https://github.com/donnysaengkio/try-linux-macos), built with GTK 4 and
+[Try Linux for Windows](../windows/README.md) and
+[Try Linux for Mac](../macos/README.md), in this repository, built with GTK 4 and
 libadwaita.
 
 > **Preview:** this first version is being tested. It builds and passes its self-test on
@@ -16,7 +16,7 @@ libadwaita.
 > installer, the disk tools, every screen in both themes, and booting Alpine Linux to a
 > login prompt with Try Linux's own QEMU settings (in 4 seconds with KVM on x86_64). It
 > hasn't been clicked through on a real desktop yet. Please report problems in
-> [Issues](../../issues).
+> [Issues](https://github.com/donnysaengkio/try-linux/issues).
 
 ## Screenshots
 
@@ -44,7 +44,7 @@ On **ARM64** PCs, the recommended list is Fedora Workstation, Ubuntu Desktop, De
 openSUSE Tumbleweed (the ARM64 installers). Search also lists the distributions you
 download from their website; pick their ARM64 (aarch64) ISO.
 
-The list comes from [the Windows edition's catalog](https://github.com/donnysaengkio/try-linux/blob/main/catalog/distros.json)
+The list comes from [the shared catalog](../catalog/distros.json)
 and is checked each time you open Choose a Linux OS (downloaded again only when it has
 changed), so new entries appear without a new release. Every result has a **Website ↗**
 link to the distribution's home page. For a distribution Try Linux can't download itself,
@@ -101,7 +101,7 @@ command for your distribution.
 ## Install
 
 1. Download `TryLinux-<version>-preview-linux.tar.gz` from
-   [Releases](../../releases) (one download for x86_64 and ARM64) and extract it.
+   [Releases](https://github.com/donnysaengkio/try-linux/releases?q=linux-v&expanded=true) (the `linux-v...` ones; one download for x86_64 and ARM64) and extract it.
 2. Run `./install.sh` in the extracted folder. It installs Try Linux for you, without sudo:
    the app in `~/.local/share/try-linux`, the `try-linux` command in `~/.local/bin`, and
    **Try Linux** in your apps menu.

@@ -1,10 +1,16 @@
-name: Build
+name: Linux
 
 on:
   push:
     branches: [main]
+    paths: ["linux/**", "catalog/**", ".github/workflows/linux.yml"]
   pull_request:
+    paths: ["linux/**", "catalog/**", ".github/workflows/linux.yml"]
   workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: linux
 
 jobs:
   test:
@@ -38,8 +44,8 @@ jobs:
 
       - name: Self-test (checks and screenshots)
         run: |
-          curl -fsSL -o distros.json https://raw.githubusercontent.com/donnysaengkio/try-linux/main/catalog/distros.json
-          TRYLINUX_CATALOG="$PWD/distros.json" TRYLINUX_RESOLVE=1 TRYLINUX_SELFTEST_HOME=1 GSK_RENDERER=cairo NO_AT_BRIDGE=1 \
+          # The catalog in this commit (the one the apps download from main).
+          TRYLINUX_CATALOG="$(cd .. && pwd)/catalog/distros.json" TRYLINUX_RESOLVE=1 TRYLINUX_SELFTEST_HOME=1 GSK_RENDERER=cairo NO_AT_BRIDGE=1 \
             xvfb-run -a -s "-screen 0 1280x1024x24" dbus-run-session -- python3 try-linux --self-test selftest
           cat selftest/results.txt
           ! grep -q '^FAIL' selftest/results.txt
@@ -71,14 +77,13 @@ jobs:
         with:
           name: TryLinux-linux
           path: |
-            build/*.tar.gz
-            build/SHA256SUMS.txt
+            linux/build/*.tar.gz
+            linux/build/SHA256SUMS.txt
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: selftest-${{ matrix.arch }}
           path: |
-            selftest/*.png
-            selftest/*.txt
-            selftest/argtest/qemu.log
+            linux/selftest/*.png
+            linux/selftest/*.txt

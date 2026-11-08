@@ -8,7 +8,7 @@ import sys
 import tarfile
 import tempfile
 
-from . import REPO, VERSION, net
+from . import REPO, TAG_PREFIX, VERSION, net
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # holds trylinux/ and try-linux
 MARKER = os.path.join(APP_DIR, ".installed")                          # written by install.sh
@@ -21,7 +21,7 @@ def version_key(v):
 class Release:
     def __init__(self, data):
         self.tag = data["tag_name"]
-        self.version = re.sub(r"^v|-preview$", "", self.tag)
+        self.version = re.sub(r"^%s|-preview$" % re.escape(TAG_PREFIX), "", self.tag)
         self.url = data.get("html_url", "")
         self.notes = data.get("body", "")
         self.assets = {a["name"]: a["browser_download_url"] for a in data.get("assets", [])}
@@ -31,10 +31,10 @@ class Release:
         return next((n for n in self.assets if n.endswith("-linux.tar.gz")), None)
 
 
-def latest(api="https://api.github.com/repos/%s/releases?per_page=10" % REPO):
-    """The newest release (previews included), or None."""
+def latest(api="https://api.github.com/repos/%s/releases?per_page=50" % REPO):
+    """The newest Linux release (previews included), or None."""
     for r in json.loads(net.get_text(api)):
-        if not r.get("draft"):
+        if not r.get("draft") and r.get("tag_name", "").startswith(TAG_PREFIX):
             return Release(r)
     return None
 

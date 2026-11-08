@@ -9,8 +9,8 @@ Try Linux is a small launcher around [WINQ-EMU](https://github.com/cmspam/winq-e
 a QEMU build for Windows that uses the Windows Hypervisor Platform and forwards
 OpenGL / Vulkan graphics (VirGL and Venus) to the guest.
 
-Also available: [Try Linux for Mac](https://github.com/donnysaengkio/try-linux-macos) and
-[Try Linux for Linux](https://github.com/donnysaengkio/try-linux-linux) (preview).
+Also available: [Try Linux for Mac](../macos/README.md) and
+[Try Linux for Linux](../linux/README.md) (preview), in this repository.
 
 ![Choose a Linux OS](docs/images/choose-os.png)
 
@@ -79,7 +79,7 @@ On first setup Try Linux offers to:
 
 ## Install
 
-1. Download `TryLinux-<version>.zip` from [Releases](../../releases) and extract it.
+1. Download `TryLinux-<version>.zip` from [Releases](https://github.com/donnysaengkio/try-linux/releases/latest) and extract it.
 2. Run `TryLinux.exe`. The app isn't code-signed, so Windows may show
    **"Windows protected your PC"**. Click **More info**, then **Run anyway**:
 
