@@ -37,9 +37,9 @@ enum SelfTest {
         if FileManager.default.fileExists(atPath: catalogDir.appendingPathComponent("distros.json").path) {
             MoreDistros.localFolder = catalogDir
         }
-        let more = await MoreDistros.refresh()
-        lines.append("catalog\t\(more.filter { !$0.websiteOnly }.count) ARM64 downloads, \(more.filter { $0.websiteOnly }.count) website-only")
-        for d in more where !d.websiteOnly {
+        let listed = await MoreDistros.refresh()
+        lines.append("catalog\t\(listed.filter { !$0.websiteOnly }.count) ARM64 downloads, \(listed.filter { $0.websiteOnly }.count) website-only")
+        for d in listed where !d.websiteOnly {
             do {
                 let r = try await Resolver.resolve(d)
                 lines.append("resolve \(d.id)\t\(r.fileName)\t\(r.size >> 20) MB\t\(r.sha256.map { "sha\($0.count == 128 ? 512 : 256)" } ?? "no-checksum")")
