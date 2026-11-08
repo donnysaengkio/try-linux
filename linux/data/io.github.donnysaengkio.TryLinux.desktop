@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Try Linux
+GenericName=Virtual Machines
+Comment=Try a Linux distribution in a virtual machine, from its official installer
+Exec=try-linux
+Icon=io.github.donnysaengkio.TryLinux
+Terminal=false
+Categories=System;Emulator;
+Keywords=virtual machine;vm;qemu;kvm;linux;distribution;iso;
+StartupNotify=true

@@ -1,0 +1,84 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x86_64
+            qemu: qemu-system-x86
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+            qemu: qemu-system-arm qemu-efi-aarch64
+    runs-on: ${{ matrix.runner }}
+    name: Self-test (${{ matrix.arch }})
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GTK 4, libadwaita and QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 \
+            qemu-utils qemu-system-gui ${{ matrix.qemu }} xvfb xauth libgl1-mesa-dri dbus-x11 adwaita-icon-theme librsvg2-common
+
+      - name: Let the runner use KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm || true
+          ls -l /dev/kvm || echo "No /dev/kvm on this runner"
+
+      - name: Self-test (checks and screenshots)
+        run: |
+          curl -fsSL -o distros.json https://raw.githubusercontent.com/donnysaengkio/try-linux/main/catalog/distros.json
+          TRYLINUX_CATALOG="$PWD/distros.json" TRYLINUX_RESOLVE=1 TRYLINUX_SELFTEST_HOME=1 GSK_RENDERER=cairo NO_AT_BRIDGE=1 \
+            xvfb-run -a -s "-screen 0 1280x1024x24" dbus-run-session -- python3 try-linux --self-test selftest
+          cat selftest/results.txt
+          ! grep -q '^FAIL' selftest/results.txt
+
+      - name: Boot test (Alpine, to a login prompt)
+        continue-on-error: ${{ matrix.arch == 'aarch64' }}
+        timeout-minutes: 15
+        run: |
+          python3 - <<'EOF'
+          import sys; sys.path.insert(0, ".")
+          from trylinux import catalog, download
+          arch = "${{ matrix.arch }}"
+          d = catalog.Distro("alpine", "Alpine", "", "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/%s/" % arch,
+                             [r"~^alpine-virt-(?<v>[\d.]+)-%s\.iso$" % arch], "{iso}.sha256")
+          r = catalog.resolve(d)
+          print(r.url, r.sha)
+          assert r.sha, "no checksum"
+          print(download.fetch(r, "isos"))
+          EOF
+          python3 try-linux --boot-test isos/alpine-virt-*.iso selftest/boot.txt
+          cat selftest/boot.txt
+
+      - name: Package
+        if: matrix.arch == 'x86_64'
+        run: sh scripts/make-release.sh
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.arch == 'x86_64'
+        with:
+          name: TryLinux-linux
+          path: |
+            build/*.tar.gz
+            build/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selftest-${{ matrix.arch }}
+          path: |
+            selftest/*.png
+            selftest/*.txt
+            selftest/argtest/qemu.log
