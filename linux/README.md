@@ -12,8 +12,11 @@ It runs on **x86_64** and **ARM64** (aarch64) PCs. This is the Linux edition of
 libadwaita.
 
 > **Preview:** this first version is being tested. It builds and passes its self-test on
-> GitHub's x86_64 and ARM64 Linux runners, including booting a Linux ISO under KVM. Please
-> report problems in [Issues](../../issues).
+> GitHub's x86_64 and ARM64 Linux runners: finding and checking each distribution's
+> installer, the disk tools, every screen in both themes, and booting Alpine Linux to a
+> login prompt with Try Linux's own QEMU settings (in 4 seconds with KVM on x86_64). It
+> hasn't been clicked through on a real desktop yet. Please report problems in
+> [Issues](../../issues).
 
 ## Screenshots
 
@@ -47,6 +50,8 @@ changed), so new entries appear without a new release. Every result has a **Webs
 link to the distribution's home page. For a distribution Try Linux can't download itself,
 **Next** offers to open its website; download the ISO there, then pick it in **Use Your Own
 Installer > An ISO File On This PC**.
+
+<img src="docs/images/website-only-prompt.png" alt="Download Manjaro Linux from its website? Try Linux can't fetch the Manjaro Linux ISO file itself. Cancel and Open Website buttons" width="560">
 
 **Use Your Own Installer** installs from an `.iso` file or a download link, or imports an
 existing virtual disk (qcow2, vmdk, vhd, vhdx, vdi or raw) that already has Linux on it. An
