@@ -81,8 +81,9 @@ class QMP:
 
 
 class RunningVM:
-    def __init__(self, host, cfg, installer, changed=None, ended=None):
+    def __init__(self, host, cfg, installer, changed=None, ended=None, gl=None):
         self.host, self.cfg, self.installer = host, cfg, installer
+        self.gl = (cfg.gl and host.can_gl) if gl is None else gl
         self.changed, self.ended = changed, ended
         self.paused = False
         self.reset = False            # the last shutdown was a restart
@@ -93,7 +94,7 @@ class RunningVM:
         if os.path.exists(sock):
             os.remove(sock)
         qemu.prepare_firmware(host, cfg)
-        cmd = [host.qemu] + qemu.args(host, cfg, installer, qmp=sock)
+        cmd = [host.qemu] + qemu.args(host, cfg, installer, qmp=sock, gl=self.gl)
         log = open(os.path.join(cfg.dir, "qemu.log"), "w")
         log.write(" ".join(cmd) + "\n\n")
         log.flush()
@@ -165,6 +166,12 @@ class RunningVM:
             self._cmd("blockdev-change-medium", id="cd", filename=iso, format="raw")
         else:
             self._cmd("eject", id="cd", force=True)
+
+
+def gl_failed(err):
+    """Whether QEMU stopped because OpenGL (for 3D acceleration) couldn't start on this PC."""
+    low = err.lower()
+    return any(k in low for k in ("opengl is not available", "egl", "gl context", "virgl", "glx"))
 
 
 def friendly_error(err, cfg):

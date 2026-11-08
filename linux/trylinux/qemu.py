@@ -145,6 +145,8 @@ def args(host, cfg, installer=False, qmp=None, gl=None, display=None, serial=Non
     cores, ram = cfg.resources()
     arm = host.arch == "aarch64"
     gl = (cfg.gl and host.can_gl) if gl is None else gl
+    if display is not None and "gl=on" not in display:
+        gl = False   # the GL graphics device needs a window that shows OpenGL
     accel = "kvm" if host.kvm else "tcg"
     a = ["-name", cfg.display_name or cfg.id]
     if arm:

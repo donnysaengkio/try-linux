@@ -148,7 +148,7 @@ class App(Adw.Application):
 
     # ---- running
 
-    def start(self, c, installer=None, iso=None):
+    def start(self, c, installer=None, iso=None, gl=None):
         """Starts a system: from its installer while it's being installed, otherwise from its disk.
         `iso` starts it once from another ISO (Recovery > Repair)."""
         if c.id in self.running:
@@ -165,7 +165,7 @@ class App(Adw.Application):
         try:
             v = runner.RunningVM(self.host, c, installer,
                                  changed=lambda vm: W.ui(self.changed),
-                                 ended=lambda vm, code: W.ui(self.ended, vm, code))
+                                 ended=lambda vm, code: W.ui(self.ended, vm, code), gl=gl)
         except Exception as e:
             W.tell(self.window, "Can't start %s" % c.display_name, str(e))
             return
@@ -190,6 +190,12 @@ class App(Adw.Application):
             if time.time() - v.started > 20:
                 fresh.last_boot = config.now()
                 fresh.save()
+        elif v.gl and runner.gl_failed(v.err) and time.time() - v.started < 30:
+            # 3D acceleration couldn't start on this PC: start it again without, once.
+            self.toast("3D acceleration couldn't start, so %s runs without it. Turn it off in Settings > Hardware > Graphics." % c.display_name)
+            self.reload()
+            self.start(fresh, installer=v.installer, gl=False)
+            return
         else:
             W.tell(self.window, "%s stopped" % c.display_name, runner.friendly_error(v.err, c))
         self.reload()
