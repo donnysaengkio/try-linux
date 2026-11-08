@@ -110,9 +110,30 @@ command for your distribution.
 
 You can also run `./try-linux` from the extracted folder without installing.
 
-**Updates:** when a new version is out, the home screen shows **Update**. Try Linux downloads
-it, checks it against its published checksum and puts it in place. To uninstall, run
-`./install.sh --uninstall` (your systems are kept in `~/.local/share/TryLinux`).
+## Uninstall
+
+Quit Try Linux first (closing its window shuts running systems down). Then run:
+
+```bash
+~/.local/share/try-linux/install.sh --uninstall
+```
+
+This removes the app, the `try-linux` command, Try Linux from your apps menu, and any desktop
+shortcuts and **Start ... when I sign in** entries you made for your systems. Your systems
+and downloads are kept in `~/.local/share/TryLinux`, and Try Linux's settings in
+`~/.config/TryLinux`; delete those folders to remove them too.
+
+If you installed 1.0.3 or earlier, run `./install.sh --uninstall` from the folder you
+extracted instead (or download and extract the release again).
+
+If you ran `./try-linux` without installing, delete the extracted folder.
+
+## Updates
+
+When a new version is out, the home screen shows **Update**, and **Check for Updates** in
+the menu checks straight away. Try Linux downloads the update, checks it against its
+published checksum and puts it in place. Running systems keep running; the new version
+opens when you choose **Open**.
 
 ## Using it
 

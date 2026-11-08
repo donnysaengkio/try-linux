@@ -68,6 +68,19 @@ jobs:
           python3 try-linux --boot-test isos/alpine-virt-*.iso selftest/boot.txt
           cat selftest/boot.txt
 
+      - name: Install, then uninstall from the installed copy
+        run: |
+          sh install.sh
+          test -x ~/.local/share/try-linux/install.sh && test -L ~/.local/bin/try-linux
+          test -f ~/.local/share/applications/io.github.donnysaengkio.TryLinux.desktop
+          ~/.local/bin/try-linux --help > /dev/null
+          echo "[Desktop Entry]" > ~/.local/share/applications/trylinux-test.desktop
+          ~/.local/share/try-linux/install.sh --uninstall
+          ! test -e ~/.local/share/try-linux && ! test -e ~/.local/bin/try-linux
+          ! test -e ~/.local/share/applications/io.github.donnysaengkio.TryLinux.desktop
+          ! test -e ~/.local/share/applications/trylinux-test.desktop
+          echo "installed and uninstalled"
+
       - name: Package
         if: matrix.arch == 'x86_64'
         run: sh scripts/make-release.sh

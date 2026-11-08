@@ -95,7 +95,7 @@ def install(release, progress=None):
             shutil.rmtree(old, ignore_errors=True)
             os.rename(backup, old)
             raise
-        for f in ("try-linux", "README.md", "LICENSE"):
+        for f in ("try-linux", "install.sh", "README.md", "LICENSE"):
             if os.path.exists(os.path.join(src, f)):
                 shutil.copy2(os.path.join(src, f), os.path.join(APP_DIR, f))
         shutil.rmtree(backup, ignore_errors=True)

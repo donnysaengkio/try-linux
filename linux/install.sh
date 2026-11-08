@@ -1,7 +1,8 @@
 #!/bin/sh
 # Installs Try Linux for you (no sudo): the app in ~/.local/share/try-linux, the try-linux command in
-# ~/.local/bin, and Try Linux in your apps menu.   ./install.sh --uninstall removes them again (your
-# systems in ~/.local/share/TryLinux are kept).
+# ~/.local/bin, and Try Linux in your apps menu.
+#   ~/.local/share/try-linux/install.sh --uninstall   removes them again, with the desktop shortcuts and
+#   sign-in entries made for your systems (your systems in ~/.local/share/TryLinux are kept).
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 data=${XDG_DATA_HOME:-$HOME/.local/share}
@@ -11,15 +12,19 @@ id=io.github.donnysaengkio.TryLinux
 
 if [ "$1" = "--uninstall" ]; then
     rm -rf "$app" "$bin/try-linux" "$data/applications/$id.desktop" "$data/icons/hicolor/scalable/apps/$id.svg"
-    echo "Try Linux is uninstalled. Your systems are still in $data/TryLinux; delete that folder to remove them."
+    rm -f "$data"/applications/trylinux-*.desktop "${XDG_CONFIG_HOME:-$HOME/.config}"/autostart/trylinux-*.desktop
+    command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$data/applications" || true
+    echo "Try Linux is uninstalled. Your systems and downloads are still in $data/TryLinux; delete that folder to remove them."
     exit 0
 fi
 
 mkdir -p "$app" "$bin" "$data/applications" "$data/icons/hicolor/scalable/apps"
-rm -rf "$app/trylinux"
-cp -r "$here/trylinux" "$app/"
-cp "$here/try-linux" "$here/README.md" "$here/LICENSE" "$app/"
-chmod +x "$app/try-linux"
+if [ "$here" != "$app" ]; then
+    rm -rf "$app/trylinux"
+    cp -r "$here/trylinux" "$app/"
+fi
+[ "$here" = "$app" ] || cp "$here/try-linux" "$here/install.sh" "$here/README.md" "$here/LICENSE" "$app/"
+chmod +x "$app/try-linux" "$app/install.sh"
 touch "$app/.installed"            # lets Try Linux update itself here
 ln -sf "$app/try-linux" "$bin/try-linux"
 cp "$here/data/$id.svg" "$data/icons/hicolor/scalable/apps/$id.svg"
