@@ -9,6 +9,9 @@ Try Linux is a small launcher around [WINQ-EMU](https://github.com/cmspam/winq-e
 a QEMU build for Windows that uses the Windows Hypervisor Platform and forwards
 OpenGL / Vulkan graphics (VirGL and Venus) to the guest.
 
+Also available: [Try Linux for Mac](https://github.com/donnysaengkio/try-linux-macos) and
+[Try Linux for Linux](https://github.com/donnysaengkio/try-linux-linux) (preview).
+
 ![Choose a Linux OS](docs/images/choose-os.png)
 
 ## Screenshots
