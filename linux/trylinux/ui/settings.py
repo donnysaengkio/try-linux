@@ -6,7 +6,7 @@ import threading
 
 from gi.repository import Adw, Gtk
 
-from .. import VERSION, catalog, config, paths, qemu
+from .. import catalog, config, paths, qemu
 from . import widgets as W
 from .create import ResourcePicker
 
@@ -141,25 +141,6 @@ class SettingsPage:
         self.shared_write = Adw.SwitchRow(title="Allow Linux to read and change this folder", active=c.shared_write,
                                           subtitle="Off shares it read-only. In Linux: sudo mount -t 9p -o trans=virtio host /mnt")
         shared.add_row(self.shared_write)
-
-        s = self.app.settings
-        look = self.section(pg, "Appearance", ("Follow system" if s.follow_system else s.theme.title()))
-        self.theme = Adw.ComboRow(title="Theme", model=Gtk.StringList.new(["Dark", "Light"]))
-        self.theme.set_selected(1 if s.theme == "light" else 0)
-        self.follow = Adw.SwitchRow(title="Follow system", active=s.follow_system,
-                                    subtitle="Light while your desktop uses a light style, Dark otherwise. The theme changes when you save.")
-        look.add_row(self.theme)
-        look.add_row(self.follow)
-
-        about = self.section(pg, "About", "Try Linux %s" % VERSION)
-        about.add_row(_value_row("Try Linux", VERSION))
-        about.add_row(_value_row("QEMU", self.host.version or "Not installed"))
-        about.add_row(_value_row("KVM", "Available" if self.host.kvm else ("No access to /dev/kvm" if self.host.kvm_exists else "Not available")))
-        self.check_updates = Adw.SwitchRow(title="Check for updates automatically", active=s.check_updates)
-        about.add_row(self.check_updates)
-        chk = Adw.ActionRow(title="Check for updates now")
-        chk.add_suffix(W.button("Check For Updates", lambda: threading.Thread(target=self.app.check_updates, args=(True,), daemon=True).start()))
-        about.add_row(chk)
 
     def _autostart_file(self):
         return os.path.join(paths.AUTOSTART, "trylinux-%s.desktop" % self.c.id)
@@ -617,12 +598,6 @@ class SettingsPage:
                 f.write(self._desktop_entry())
         elif os.path.exists(auto):
             os.remove(auto)
-        s = self.app.settings
-        s.theme = "light" if self.theme.get_selected() == 1 else "dark"
-        s.follow_system = self.follow.get_active()
-        s.check_updates = self.check_updates.get_active()
-        s.save()
-        self.app.apply_theme()
         self.app.reload()
         if self.running:
             self.app.toast("Saved. Most changes take effect the next time %s starts." % name)

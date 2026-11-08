@@ -134,9 +134,9 @@ def boot_test(iso, log, timeout=600):
 # ---- screenshots
 
 
-def snap(app, name, out):
+def snap(app, name, out, window=None):
     from gi.repository import Graphene, Gtk
-    w = app.window
+    w = window or app.window
     width, height = w.get_width(), w.get_height()
     paintable = Gtk.WidgetPaintable.new(w)
     s = Gtk.Snapshot()
@@ -258,7 +258,7 @@ def run(app):
             push(lambda: create.SummaryPage(app, plan).page)
             shot("create-summary")
         home()
-        for tab, opened, name in (("general", {"Info", "Appearance"}, "settings-general"),
+        for tab, opened, name in (("general", {"Info", "Display and startup"}, "settings-general"),
                                   ("hardware", {"Resources", "Disks"}, "settings-hardware"),
                                   ("devices", {"Network", "CD/DVD drive"}, "settings-devices"),
                                   ("recovery", {"Snapshots", "Storage"}, "settings-recovery")):
@@ -291,6 +291,27 @@ def run(app):
                 shot("settings-disk-2")
             home()
     step(lambda: (setattr(app.settings, "theme", "dark"), app.apply_theme()), 300)
+
+    # The main menu's windows: Preferences, About and Keyboard Shortcuts, and the shortcuts themselves.
+    from .ui import menu
+    shown = {}
+
+    def accels():
+        missing = [a for _, items in menu.SHORTCUTS for a, keys, _ in items
+                   if a and (not app.lookup_action(a.split(".", 1)[1]) or app.get_accels_for_action(a) != keys)]
+        assert not missing, "not set up: " + ", ".join(missing)
+        return "; ".join("%s %s" % (a, app.get_accels_for_action(a)[0]) for _, items in menu.SHORTCUTS for a, _, _ in items if a)
+    step(lambda: check("keyboard shortcuts", accels), 100)
+    home()
+    step(lambda: shown.__setitem__("d", menu.preferences(app)), 900)
+    shot("preferences")
+    step(lambda: shown["d"].close(), 500)
+    step(lambda: shown.__setitem__("d", menu.about(app)), 900)
+    shot("about")
+    step(lambda: shown["d"].close(), 500)
+    step(lambda: shown.__setitem__("w", menu.shortcuts(app)), 1200)
+    step(lambda: snap(app, "keyboard-shortcuts", out, shown["w"]), 300)
+    step(lambda: shown["w"].close(), 300)
 
     def reopened_closed():
         # Settings opened again (after leaving it with sections open) starts with every section closed.

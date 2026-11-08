@@ -148,12 +148,25 @@ opens when you choose **Open**.
 
 Closing a system's window doesn't turn it off; use **Power > Shut Down**.
 
+## The main menu
+
+The ☰ button on Virtual Machines:
+
+- **Check for Updates** (Ctrl+U).
+- **Preferences** (Ctrl+,) for Try Linux as a whole: **Appearance** (Dark or Light, or follow
+  your desktop's style; it changes straight away) and **Updates** (check automatically when
+  Try Linux starts, or check now).
+- **Keyboard Shortcuts** (Ctrl+?): Create (Ctrl+N), search distributions (Ctrl+F on Choose a
+  Linux OS), Back (Alt+←) and the ones here.
+- **About Try Linux**: its version, QEMU's version, whether KVM is available, and
+  **Troubleshooting** details to copy into a bug report.
+- **Quit Try Linux** (Ctrl+Q). With systems running, it asks first and shuts them down.
+
 ## Settings
 
 - **General:** **Info** (name, description, the OS, its home page and where it's kept),
-  **Display and startup** (fullscreen, a desktop shortcut, start when you sign in),
-  **Shared folder** (in Linux: `sudo mount -t 9p -o trans=virtio host /mnt`),
-  **Appearance** (Dark or Light, or follow the system) and **About** (versions, updates).
+  **Display and startup** (fullscreen, a desktop shortcut, start when you sign in) and
+  **Shared folder** (in Linux: `sudo mount -t 9p -o trans=virtio host /mnt`).
 - **Hardware:** **Graphics** (3D acceleration with VirGL), **Resources**, and **Disks**:
   each disk's size, free space and location, then **Disk Utilities**: reclaim free space
   when Linux deletes files (TRIM), **Resize**, **Compact**, **Add Disk** and **Remove**.

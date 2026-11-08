@@ -9,16 +9,9 @@ class HomePage:
     def __init__(self, app):
         self.app = app
         create = W.button("Create", lambda: self.create(), primary=True)
-        menu = Gio.Menu()
-        menu.append("Check for Updates", "app.check-updates")
-        menu.append("About Try Linux", "app.about")
-        more = Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu, tooltip_text="Menu")
-        for name, fn in (("check-updates", lambda *_: __import__("threading").Thread(
-                target=app.check_updates, args=(True,), daemon=True).start()),
-                         ("about", lambda *_: self.about())):
-            a = Gio.SimpleAction.new(name, None)
-            a.connect("activate", fn)
-            app.add_action(a)
+        from . import menu
+        more = Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu.model(), tooltip_text="Main Menu")
+        self.menu_button = more
 
         self.notices = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
@@ -60,14 +53,6 @@ class HomePage:
     def create(self):
         from .choose import ChoosePage
         self.app.nav.push(ChoosePage(self.app).page)
-
-    def about(self):
-        from .. import HOME_PAGE, VERSION
-        a = Adw.AboutDialog(application_name="Try Linux", version=VERSION, developer_name="donnysaengkio",
-                            website=HOME_PAGE, issue_url="https://github.com/donnysaengkio/try-linux/issues",
-                            license_type=Gtk.License.MIT_X11, application_icon="io.github.donnysaengkio.TryLinux",
-                            comments="Try a Linux desktop in a virtual machine (QEMU/KVM), from the official installer, checked against its published checksum.")
-        a.present(self.app.window)
 
     def open(self, c):
         from .settings import SettingsPage

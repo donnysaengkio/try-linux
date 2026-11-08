@@ -29,6 +29,8 @@ class App(Adw.Application):
         power = Gio.SimpleAction.new("power", GLib.VariantType.new("s"))
         power.connect("activate", lambda _a, v: self.power(*v.get_string().split("|", 1)))
         self.add_action(power)
+        from . import menu
+        menu.install(self)   # the main menu's actions and the keyboard shortcuts
 
     # ---- start-up
 
