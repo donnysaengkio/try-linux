@@ -27,7 +27,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 \
-            qemu-utils qemu-system-gui ${{ matrix.qemu }} xvfb xauth libgl1-mesa-dri dbus-x11 adwaita-icon-theme
+            qemu-utils qemu-system-gui ${{ matrix.qemu }} xvfb xauth libgl1-mesa-dri dbus-x11 adwaita-icon-theme librsvg2-common
 
       - name: Let the runner use KVM
         run: |
