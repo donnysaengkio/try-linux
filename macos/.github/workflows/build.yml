@@ -1,0 +1,30 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build app
+        run: bash scripts/build-app.sh
+
+      - name: Self-test (catalog, VM configuration, screenshots)
+        run: '"build/Try Linux.app/Contents/MacOS/TryLinux" --self-test build/selftest'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TryLinux-macOS
+          path: build/TryLinux-*-macOS.zip
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selftest
+          path: build/selftest
