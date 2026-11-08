@@ -26,9 +26,25 @@ class HomePage:
         self.list.connect("row-activated", lambda _l, row: self.open(row.cfg))
         self.empty = Adw.StatusPage(title="No virtual machines yet", description="Create one to try a Linux distribution.",
                                     icon_name="computer-symbolic")
-        title = Gtk.Label(label="Virtual Machines", xalign=0)
+        # Column headers for the rows' status and stats, on the title row. Each column is in a size group with
+        # its cells in the rows (and the rows' buttons with a blank of the same width), so they line up.
+        self.columns = [Gtk.SizeGroup(mode=Gtk.SizeGroupMode.HORIZONTAL) for _ in range(5)]
+        title_row = Gtk.Box(spacing=6, margin_end=12)
+        title = Gtk.Label(label="Virtual Machines", xalign=0, hexpand=True)
         title.add_css_class("title-3")
-        scroller, self.box = W.column(W.logo(7), self.notices, title, self.list, self.empty, spacing=14)
+        title_row.append(title)
+        self.headers = Gtk.Box(spacing=18, valign=Gtk.Align.END)
+        for i, text in enumerate(("STATUS", "CPU", "MEM", "DISK")):
+            h = Gtk.Label(label=text, xalign=0)
+            h.add_css_class("caption-heading")
+            h.add_css_class("dim-label")
+            self.columns[i].add_widget(h)
+            self.headers.append(h)
+        title_row.append(self.headers)
+        blank = Gtk.Box()
+        self.columns[4].add_widget(blank)
+        title_row.append(blank)
+        scroller, self.box = W.column(W.logo(7), self.notices, title_row, self.list, self.empty, spacing=14)
         self.page = W.page("Try Linux", scroller, tag="home", header_start=[create], header_end=[more])
         app.listeners.append(self)
         self.refresh()
@@ -72,12 +88,21 @@ class HomePage:
 
     def refresh(self):
         self._notices()
+        # The old rows' cells leave the column groups with them.
+        for group, widget in getattr(self, "grouped", []):
+            group.remove_widget(widget)
+        self.grouped = []
         while (row := self.list.get_row_at_index(0)) is not None:
             self.list.remove(row)
         for c in self.app.systems:
             self.list.append(self._row(c))
         self.list.set_visible(bool(self.app.systems))
+        self.headers.set_visible(bool(self.app.systems))
         self.empty.set_visible(not self.app.systems)
+
+    def _group(self, column, widget):
+        self.columns[column].add_widget(widget)
+        self.grouped.append((self.columns[column], widget))
 
     def _row(self, c):
         status = self.app.status(c)
@@ -90,13 +115,19 @@ class HomePage:
         st = Gtk.Label(label=status, width_chars=10, xalign=0)
         st.add_css_class("status-on" if c.id in self.app.running else "status-off")
         st.add_css_class("caption")
+        self._group(0, st)
         stats.append(st)
-        for text in ("%d cores" % cores, "%d GiB" % ram, "%.1f GB" % (used / 1e9)):
+        for i, text in enumerate(("%d cores" % cores, "%d GiB" % ram, "%.1f GB" % (used / 1e9))):
             l = Gtk.Label(label=text, width_chars=8, xalign=0)
             l.add_css_class("stat")
             l.add_css_class("dim-label")
+            self._group(i + 1, l)
             stats.append(l)
         row.add_suffix(stats)
+        # Start (or Power) and Settings, as one block the width of the blank after the headers.
+        actions = Gtk.Box(spacing=6, valign=Gtk.Align.CENTER)
+        self._group(4, actions)
+        row.add_suffix(actions)
         v = self.app.running.get(c.id)
         if v:
             menu = Gio.Menu()
@@ -104,14 +135,14 @@ class HomePage:
                                 ("Resume" if v.paused else "Pause", "pause"), ("Force Stop", "force")):
                 menu.append(label, "app.power('%s|%s')" % (what, c.id))
             power = Gtk.MenuButton(label="Power", menu_model=menu, valign=Gtk.Align.CENTER)
-            row.add_suffix(power)
+            actions.append(power)
         else:
             start = Gtk.Button(label="Install" if c.pending_install else "Start", valign=Gtk.Align.CENTER)
             start.add_css_class("suggested-action")
             start.connect("clicked", lambda *_: self.app.start(c))
-            row.add_suffix(start)
+            actions.append(start)
         gear = Gtk.Button(icon_name="emblem-system-symbolic", valign=Gtk.Align.CENTER, tooltip_text="Settings")
         gear.add_css_class("flat")
         gear.connect("clicked", lambda *_: self.open(c))
-        row.add_suffix(gear)
+        actions.append(gear)
         return row
