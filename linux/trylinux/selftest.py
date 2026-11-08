@@ -281,6 +281,26 @@ def run(app):
             home()
     step(lambda: (setattr(app.settings, "theme", "dark"), app.apply_theme()), 300)
 
+    def reopened_closed():
+        # Settings opened again (after leaving it with sections open) starts with every section closed.
+        from gi.repository import Adw
+        c = next(s for s in app.systems if s.id == "fedora")
+        p = settings.SettingsPage(app, c)
+        open_ = []
+
+        def walk(w):
+            if isinstance(w, Adw.ExpanderRow) and w.get_expanded():
+                open_.append(w.get_title())
+            ch = w.get_first_child()
+            while ch:
+                walk(ch)
+                ch = ch.get_next_sibling()
+        for name in ("general", "hardware", "devices", "recovery"):
+            walk(p.stack.get_child_by_name(name))
+        assert not open_, "open: " + ", ".join(open_)
+        return "every section closed"
+    step(lambda: check("settings reopened", reopened_closed), 300)
+
     def finish():
         with open(os.path.join(out, "results.txt"), "w") as f:
             f.write("\n".join(LOG) + "\n")

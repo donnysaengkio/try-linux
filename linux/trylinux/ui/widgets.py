@@ -147,7 +147,8 @@ def column(*children, spacing=18, width=760):
 
 
 def button(label, action=None, primary=False, destructive=False, pill=False):
-    b = Gtk.Button(label=label)
+    # Centred, at its own height: beside a row's text a button would otherwise stretch to the row's height.
+    b = Gtk.Button(label=label, valign=Gtk.Align.CENTER)
     if primary:
         b.add_css_class("suggested-action")
     if destructive:

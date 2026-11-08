@@ -53,12 +53,16 @@ def _subheading(text):
 
 
 class SettingsPage:
-    opened = set()      # sections left open, remembered while Try Linux runs
+    # Sections to open when Settings opens (the self-test sets it); otherwise every section starts closed, and
+    # leaving Settings closes them all.
+    opened = set()
 
     def __init__(self, app, cfg):
         self.app = app
         self.host = app.host
         self.c = config.VMConfig.load(cfg.dir) or cfg
+        self.opened, SettingsPage.opened = set(SettingsPage.opened), set()
+        self.utilities = Gtk.SizeGroup(mode=Gtk.SizeGroupMode.HORIZONTAL)   # Disk Utilities' buttons, one width
         self.disk_index = 0
         self.stack = Adw.ViewStack()
         for name, title, icon, build in (("general", "General", "preferences-system-symbolic", self.general),
@@ -206,6 +210,8 @@ class SettingsPage:
         self.fill_disks()
 
     def fill_disks(self):
+        for b in self.utilities.get_widgets():
+            self.utilities.remove_widget(b)
         for r in self.disk_rows:
             self.disks.remove(r)
         self.disk_rows = []
@@ -242,7 +248,7 @@ class SettingsPage:
                                      ("Take this disk out of %s." % c.display_name, "Remove", self.remove_disk, self.disk_index > 0)):
             r = Adw.ActionRow(title=title)
             b = W.button(label, fn)
-            b.set_valign(Gtk.Align.CENTER)
+            self.utilities.add_widget(b)
             b.set_sensitive(ok)
             r.add_suffix(b)
             add(r)
