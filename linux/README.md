@@ -102,6 +102,8 @@ command for your distribution.
 
 ## Install
 
+**From a release:**
+
 1. Download `TryLinux-<version>-preview-linux.tar.gz` from
    [Releases](https://github.com/donnysaengkio/try-linux/releases?q=linux-v&expanded=true) (the `linux-v...` ones; one download for x86_64 and ARM64) and extract it.
 2. Run `./install.sh` in the extracted folder. It installs Try Linux for you, without sudo:
@@ -109,6 +111,17 @@ command for your distribution.
    **Try Linux** in your apps menu.
 
 You can also run `./try-linux` from the extracted folder without installing.
+
+**From a terminal** (needs `git`): this downloads the newest code from this repository and
+runs `install.sh`, the same as above. `~/Downloads` is just an example; use any folder
+you like. Running it again replaces your installed copy with the newest code.
+
+```bash
+cd ~/Downloads && rm -rf try-linux && git clone --depth 1 https://github.com/donnysaengkio/try-linux && cd try-linux/linux && ./install.sh
+```
+
+Afterwards you can delete the `try-linux` folder it made in `~/Downloads` (or wherever you
+ran it); the installed copy is in `~/.local/share/try-linux`.
 
 **Updates:** when a new version is out, the home screen shows **Update**. Try Linux downloads
 it, checks it against its published checksum and puts it in place. To uninstall, run
