@@ -245,24 +245,58 @@ struct PowerMenuItems: View {
 struct ChooseView: View {
     @EnvironmentObject var model: AppModel
     @State private var selected = 0
+    @State private var query: String
+    @State private var more = MoreDistros.cached
+
+    init(query: String = "") { _query = State(initialValue: query) }
+
+    // The built-in four with no search; otherwise every distribution whose name, description or id has all
+    // the words, names that start with the text first.
+    private var results: [Distro] {
+        let words = query.lowercased().split(separator: " ").map(String.init)
+        if words.isEmpty { return Distro.catalog }
+        let all = Distro.catalog + more
+        let found = all.filter { d in
+            let hay = (d.name + " " + d.about + " " + d.id).lowercased()
+            return words.allSatisfy { hay.contains($0) }
+        }
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        return found.filter { $0.name.lowercased().hasPrefix(q) } + found.filter { !$0.name.lowercased().hasPrefix(q) }
+    }
 
     var body: some View {
+        let shown = results
         Page {
-            Heading(text: "Choose a Linux OS", centered: true).padding(.top, 20)
+            Heading(text: "Choose a Linux OS", centered: true).padding(.top, 14)
             Text("Try Linux downloads the official ARM64 installer and checks it before use.")
                 .font(Theme.sans(11.5)).foregroundColor(Theme.muted)
                 .frame(maxWidth: .infinity).padding(.top, 6)
+            TextInput(text: $query, placeholder: "Search distributions, e.g. KDE, Xfce or Fedora")
+                .padding(.top, 14)
+                .onChange(of: query) { _ in selected = shown.isEmpty ? selected : (selected == -1 ? -1 : 0) }
+            Text(query.trimmingCharacters(in: .whitespaces).isEmpty ? "Recommended" : "\(shown.count) result\(shown.count == 1 ? "" : "s")")
+                .font(Theme.sans(13, .semibold)).foregroundColor(Theme.text)
+                .padding(.top, 10)
             // Two containers: the distributions, then your own installer. One selection across both (-1 is your own).
-            VStack(spacing: 6) {
-                ForEach(Distro.catalog.indices, id: \.self) { i in
-                    let d = Distro.catalog[i]
-                    OptionRow(title: d.name, subtitle: d.about, selected: i == selected, twoLine: true, link: d.home.flatMap(URL.init(string:)))
-                        .onTapGesture(count: 2) { selected = i; next() }
-                        .onTapGesture { selected = i }
+            ScrollView {
+                LazyVStack(spacing: 6) {
+                    ForEach(shown.indices, id: \.self) { i in
+                        let d = shown[i]
+                        OptionRow(title: d.name, subtitle: d.about, selected: i == selected, twoLine: true, link: d.home.flatMap(URL.init(string:)))
+                            .onTapGesture(count: 2) { selected = i; next() }
+                            .onTapGesture { selected = i }
+                    }
+                    if shown.isEmpty {
+                        Text("No distribution matches \"\(query)\".\nTry another name, or use your own installer below.")
+                            .font(Theme.sans(13)).foregroundColor(Theme.muted).multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity).padding(.top, 90)
+                    }
                 }
             }
+            .frame(height: 290)
             .modifier(BoxStyle())
-            .padding(.top, 24)
+            .padding(.top, 8)
+            .task { more = await MoreDistros.refresh() }
             OptionRow(title: "Use Your Own Installer", subtitle: "An existing disk image to import, an .iso file on this Mac, or a URL link to one",
                       selected: selected == -1, twoLine: true)
                 .onTapGesture(count: 2) { selected = -1; next() }
@@ -283,7 +317,19 @@ struct ChooseView: View {
 
     private func next() {
         if selected == -1 { model.screen = .own(nil); return }
-        let d = Distro.catalog[selected]
+        let shown = results
+        guard selected >= 0, selected < shown.count else { return }
+        let d = shown[selected]
+        if d.websiteOnly {
+            // A distribution Try Linux can't download itself: its website, then Use Your Own Installer.
+            if ThemedDialog.show("Download \(d.name) from its website?",
+                                 "Try Linux can't fetch the \(d.name) ISO file itself. Open its website to download its ARM64 (aarch64) ISO, then choose it in Use Your Own Installer (An ISO File On This Mac) to install it.",
+                                 primary: "Open Website", secondary: "Cancel") == .primary {
+                if let home = d.home, let url = URL(string: home) { NSWorkspace.shared.open(url) }
+                model.screen = .own(nil)
+            }
+            return
+        }
         model.screen = .setup(InstallPlan(distro: d, label: d.name))
     }
 }

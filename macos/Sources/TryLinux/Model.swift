@@ -252,9 +252,9 @@ final class AppModel: ObservableObject {
                     }
                     if let expected = r.sha256 {
                         progress = ProgressState(status: "Verifying the download", value: 0,
-                                                 detail: "Comparing with the official SHA-256 checksum", cancellable: true)
+                                                 detail: "Comparing with the official \(expected.count == 128 ? "SHA-512" : "SHA-256") checksum", cancellable: true)
                         let hash = try await Task.detached(priority: .userInitiated) { [weak self] in
-                            try Hashing.sha256(part, cancelled: { self?.cancelRequested ?? true }) { f in
+                            try Hashing.digest(part, sha512: expected.count == 128, cancelled: { self?.cancelRequested ?? true }) { f in
                                 DispatchQueue.main.async { self?.progress.value = f }
                             }
                         }.value

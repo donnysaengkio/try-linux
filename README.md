@@ -22,11 +22,17 @@ Mac releases `macos-v1.2.3-preview` and Linux releases `linux-v1.2.3-preview`.
 
 ## The distribution catalog
 
-[`catalog/distros.json`](catalog/distros.json) is shared by the editions: the distributions
-Try Linux downloads and checks (with each one's mirror, how to find its newest installer and
-its checksum file), and over 400 more from DistroWatch that you download from their website.
-The apps check it when you open Choose a Linux OS, so new entries appear without a new
-release. Its address is part of the released apps, so it stays at `catalog/distros.json` on
+The editions share two lists, each entry with its official mirror, how to find the newest
+installer there and its checksum file:
+
+- [`catalog/distros.json`](catalog/distros.json): x86_64 installers (Windows, and Linux on
+  x86_64 PCs), and over 400 distributions from DistroWatch that you download from their
+  website (every edition).
+- [`catalog/distros-aarch64.json`](catalog/distros-aarch64.json): ARM64 installers (the Mac,
+  and Linux on ARM64 PCs).
+
+The apps check them when you open Choose a Linux OS, so new entries appear without a new
+release. Their addresses are part of the released apps, so they stay in `catalog/` on
 `main`.
 
 ## Repository layout

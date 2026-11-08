@@ -41,8 +41,10 @@ Linux downloads and checks the same way (Kubuntu, Fedora KDE, openSUSE, Arch, Ni
 plus over 400 more from DistroWatch that you download from their website.
 
 On **ARM64** PCs, the recommended list is Fedora Workstation, Ubuntu Desktop, Debian and
-openSUSE Tumbleweed (the ARM64 installers). Search also lists the distributions you
-download from their website; pick their ARM64 (aarch64) ISO.
+openSUSE Tumbleweed (the ARM64 installers). **Search** finds 21 more ARM64 installers that
+Try Linux downloads and checks (from [`catalog/distros-aarch64.json`](../catalog/distros-aarch64.json):
+Fedora KDE and Silverblue, Rocky, AlmaLinux, Kali, NixOS, Alpine...), plus the distributions
+you download from their website; pick their ARM64 (aarch64) ISO.
 
 The list comes from [the shared catalog](../catalog/distros.json)
 and is checked each time you open Choose a Linux OS (downloaded again only when it has

@@ -31,6 +31,23 @@ enum SelfTest {
             }
         }
 
+        // The lists from the repository (read from its catalog folder, so CI tests this commit's copy):
+        // the ARM64 downloads are each resolved like the built-in ones.
+        let catalogDir = URL(fileURLWithPath: ProcessInfo.processInfo.environment["TRYLINUX_CATALOG_DIR"] ?? "../catalog", isDirectory: true)
+        if FileManager.default.fileExists(atPath: catalogDir.appendingPathComponent("distros.json").path) {
+            MoreDistros.localFolder = catalogDir
+        }
+        let more = await MoreDistros.refresh()
+        lines.append("catalog\t\(more.filter { !$0.websiteOnly }.count) ARM64 downloads, \(more.filter { $0.websiteOnly }.count) website-only")
+        for d in more where !d.websiteOnly {
+            do {
+                let r = try await Resolver.resolve(d)
+                lines.append("resolve \(d.id)\t\(r.fileName)\t\(r.size >> 20) MB\t\(r.sha256.map { "sha\($0.count == 128 ? 512 : 256)" } ?? "no-checksum")")
+            } catch {
+                lines.append("resolve \(d.id)\tERROR\t\(error.localizedDescription)")
+            }
+        }
+
         // Build and validate a full VM configuration against a throwaway storage folder.
         let storage = dir.appendingPathComponent("storage", isDirectory: true)
         UserDefaults.standard.set(storage.path, forKey: "storage")
@@ -237,6 +254,8 @@ enum SelfTest {
         snap("home-window-closed", HomeView())
         model.previewStatus = [:]
         snap("choose", ChooseView())
+        snap("choose-search", ChooseView(query: "KDE"))
+        snap("choose-website-only", ChooseView(query: "manjaro"))
         let fedoraPlan = InstallPlan(distro: Distro.catalog[0], label: "Fedora Workstation")
         snap("setup", SetupView(plan: fedoraPlan, step: 1))          // Create > Resources, as in the README
         snap("create-general", SetupView(plan: fedoraPlan, step: 0))
@@ -299,6 +318,9 @@ enum SelfTest {
         dialog("install-prompt", DialogView(title: "Install Try Linux?", text: Installer.installText, path: apps,
             after: "Run opens it from here without installing; you can install it later from Settings > General > About.\n\nTo uninstall, quit Try Linux and drag it from Applications to the Trash.",
             primary: "Install", secondary: "Run", danger: false, pick: { _ in }))
+        dialog("website-only-prompt", DialogView(title: "Download Manjaro Linux from its website?",
+            text: "Try Linux can't fetch the Manjaro Linux ISO file itself. Open its website to download its ARM64 (aarch64) ISO, then choose it in Use Your Own Installer (An ISO File On This Mac) to install it.",
+            path: nil, after: nil, primary: "Open Website", secondary: "Cancel", danger: false, pick: { _ in }))
         dialog("installed", DialogView(title: "Try Linux is installed", text: "Try Linux is now available in your Applications folder.", path: nil, after: nil,
             primary: "Open", secondary: nil, danger: false, pick: { _ in }))
         dialog("quit-prompt", DialogView(title: "Quit Try Linux?", text: "Try Linux will close without installing. You'll be asked again the next time you open it.",

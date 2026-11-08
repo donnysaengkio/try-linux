@@ -21,11 +21,19 @@ This is the Mac edition of [Try Linux for Windows](../windows/README.md). There'
 | [Debian](https://www.debian.org/) | One of the oldest community distributions, known for stability and the base of Ubuntu, Mint and many others |
 | [openSUSE&nbsp;Tumbleweed](https://www.opensuse.org/#Tumbleweed) | A rolling-release distribution from the openSUSE community that always has the newest KDE Plasma and kernel |
 
-On **Choose a Linux OS**, each one has a **Website ↗** link to its home page.
-
 Macs with Apple silicon run ARM64 (aarch64) Linux, so only distributions that publish
-ARM64 installers are listed. You can also install from any ARM64 `.iso` file or
-download link.
+ARM64 installers are listed. **Search** (above the list) finds 21 more that Try Linux
+downloads and checks the same way, such as Fedora KDE, Kinoite and Silverblue, Rocky
+Linux, AlmaLinux, Kali, NixOS, Alpine, Chimera Linux, Void and openSUSE Leap, plus over 400
+more from DistroWatch that you download from their website: for those, **Next** offers to
+open the website, where you download the ARM64 (aarch64) ISO, then pick it in **Use Your
+Own Installer**. Every result has a **Website ↗** link to the distribution's home page.
+
+The lists come from [`catalog/distros-aarch64.json`](../catalog/distros-aarch64.json) and
+[`catalog/distros.json`](../catalog/distros.json) in this repository, checked each time
+you open Choose a Linux OS, so new entries appear without a new release. Each download is
+checked against the distribution's official SHA-256 or SHA-512 checksum. You can also
+install from any ARM64 `.iso` file or download link.
 
 ## Screenshots
 

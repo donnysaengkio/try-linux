@@ -1,0 +1,174 @@
+{
+  "about": "ARM64 (aarch64) installers for Try Linux for Mac and Try Linux for Linux on ARM64 PCs, found and checked the same way as distros.json (its x86_64 counterpart): 'base' is an official mirror folder, each step is added to it (a step starting with ~ is a regex matched against the folder's links, newest first), and 'checksum' names the official SHA-256 or SHA-512 checksum file next to the ISO. Distributions you download from their website are in distros.json, for every architecture.",
+  "version": 2,
+  "distros": [
+    {
+      "id": "fedora-kde", "name": "Fedora KDE Plasma Desktop",
+      "home": "https://fedoraproject.org/",
+      "about": "Fedora with the KDE Plasma desktop instead of GNOME, with the same new kernel and Mesa releases",
+      "base": "https://mirrors.kernel.org/fedora/releases/",
+      "steps": ["~^\\d+/$", "KDE/aarch64/iso/", "~^Fedora-KDE-Desktop-Live-.*\\.iso$"],
+      "checksum": "~CHECKSUM$"
+    },
+    {
+      "id": "fedora-xfce", "name": "Fedora Xfce",
+      "home": "https://fedoraproject.org/",
+      "about": "A Fedora spin with the light, traditional Xfce desktop",
+      "base": "https://mirrors.kernel.org/fedora/releases/",
+      "steps": ["~^\\d+/$", "Spins/aarch64/iso/", "~^Fedora-Xfce-Live-.*\\.iso$"],
+      "checksum": "~CHECKSUM$"
+    },
+    {
+      "id": "fedora-lxqt", "name": "Fedora LXQt",
+      "home": "https://fedoraproject.org/",
+      "about": "A Fedora spin with the lightweight LXQt desktop",
+      "base": "https://mirrors.kernel.org/fedora/releases/",
+      "steps": ["~^\\d+/$", "Spins/aarch64/iso/", "~^Fedora-LXQt-Live-.*\\.iso$"],
+      "checksum": "~CHECKSUM$"
+    },
+    {
+      "id": "fedora-cosmic", "name": "Fedora COSMIC",
+      "home": "https://fedoraproject.org/",
+      "about": "A Fedora spin with COSMIC, the new desktop from System76 with built-in window tiling",
+      "base": "https://mirrors.kernel.org/fedora/releases/",
+      "steps": ["~^\\d+/$", "Spins/aarch64/iso/", "~^Fedora-COSMIC-Live-.*\\.iso$"],
+      "checksum": "~CHECKSUM$"
+    },
+    {
+      "id": "fedora-i3", "name": "Fedora i3",
+      "home": "https://fedoraproject.org/",
+      "about": "A Fedora spin with i3, a keyboard-driven tiling window manager",
+      "base": "https://mirrors.kernel.org/fedora/releases/",
+      "steps": ["~^\\d+/$", "Spins/aarch64/iso/", "~^Fedora-i3-Live-.*\\.iso$"],
+      "checksum": "~CHECKSUM$"
+    },
+    {
+      "id": "fedora-silverblue", "name": "Fedora Silverblue",
+      "home": "https://fedoraproject.org/",
+      "about": "An atomic (immutable) Fedora with GNOME: the system updates as a whole and can roll back, and apps come as Flatpaks",
+      "base": "https://mirrors.kernel.org/fedora/releases/",
+      "steps": ["~^\\d+/$", "Silverblue/aarch64/iso/", "~^Fedora-Silverblue-Installer-.*\\.iso$"],
+      "checksum": "~CHECKSUM$"
+    },
+    {
+      "id": "fedora-kinoite", "name": "Fedora Kinoite",
+      "home": "https://fedoraproject.org/",
+      "about": "An atomic (immutable) Fedora with KDE Plasma: the system updates as a whole and can roll back",
+      "base": "https://mirrors.kernel.org/fedora/releases/",
+      "steps": ["~^\\d+/$", "Kinoite/aarch64/iso/", "~^Fedora-Kinoite-Installer-.*\\.iso$"],
+      "checksum": "~CHECKSUM$"
+    },
+    {
+      "id": "fedora-cosmic-atomic", "name": "Fedora COSMIC Atomic",
+      "home": "https://fedoraproject.org/",
+      "about": "An atomic (immutable) Fedora with the COSMIC desktop: the system updates as a whole and can roll back",
+      "base": "https://mirrors.kernel.org/fedora/releases/",
+      "steps": ["~^\\d+/$", "COSMIC-Atomic/aarch64/iso/", "~^Fedora-CosmicAtomic-Installer-.*\\.iso$"],
+      "checksum": "~CHECKSUM$"
+    },
+    {
+      "id": "opensuse-tumbleweed-gnome", "name": "openSUSE Tumbleweed (GNOME)",
+      "home": "https://www.opensuse.org/",
+      "about": "openSUSE's rolling release with the newest GNOME desktop",
+      "base": "https://download.opensuse.org/ports/aarch64/tumbleweed/iso/",
+      "steps": ["openSUSE-Tumbleweed-GNOME-Live-aarch64-Current.iso"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "opensuse-tumbleweed-xfce", "name": "openSUSE Tumbleweed (Xfce)",
+      "home": "https://www.opensuse.org/",
+      "about": "openSUSE's rolling release with the light Xfce desktop",
+      "base": "https://download.opensuse.org/ports/aarch64/tumbleweed/iso/",
+      "steps": ["openSUSE-Tumbleweed-XFCE-Live-aarch64-Current.iso"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "opensuse-leap", "name": "openSUSE Leap",
+      "home": "https://www.opensuse.org/",
+      "about": "openSUSE's stable release, based on SUSE Linux Enterprise; the installer lets you choose KDE Plasma or GNOME",
+      "base": "https://download.opensuse.org/distribution/leap/16.0/offline/",
+      "steps": ["Leap-16.0-offline-installer-aarch64.install.iso"],
+      "checksum": "{iso}.sha512"
+    },
+    {
+      "id": "almalinux-gnome", "name": "AlmaLinux (GNOME)",
+      "home": "https://almalinux.org/",
+      "about": "A free, community-run rebuild of Red Hat Enterprise Linux, supported for ten years, with GNOME",
+      "base": "https://repo.almalinux.org/almalinux/",
+      "steps": ["~^\\d+/$", "live/aarch64/", "~^AlmaLinux-\\d+-latest-aarch64-Live-GNOME\\.iso$"],
+      "checksum": "CHECKSUM"
+    },
+    {
+      "id": "almalinux-kde", "name": "AlmaLinux (KDE Plasma)",
+      "home": "https://almalinux.org/",
+      "about": "A free, community-run rebuild of Red Hat Enterprise Linux, supported for ten years, with KDE Plasma",
+      "base": "https://repo.almalinux.org/almalinux/",
+      "steps": ["~^\\d+/$", "live/aarch64/", "~^AlmaLinux-\\d+-latest-aarch64-Live-KDE\\.iso$"],
+      "checksum": "CHECKSUM"
+    },
+    {
+      "id": "rocky", "name": "Rocky Linux (GNOME)",
+      "home": "https://rockylinux.org/",
+      "about": "A free enterprise distribution compatible with Red Hat Enterprise Linux, with the GNOME workstation",
+      "base": "https://download.rockylinux.org/pub/rocky/",
+      "steps": ["~^\\d+/$", "live/aarch64/", "~^Rocky-\\d+-Workstation-aarch64-latest\\.iso$"],
+      "checksum": "{iso}.CHECKSUM"
+    },
+    {
+      "id": "rocky-kde", "name": "Rocky Linux (KDE Plasma)",
+      "home": "https://rockylinux.org/",
+      "about": "A free enterprise distribution compatible with Red Hat Enterprise Linux, with KDE Plasma",
+      "base": "https://download.rockylinux.org/pub/rocky/",
+      "steps": ["~^\\d+/$", "live/aarch64/", "~^Rocky-\\d+-KDE-aarch64-latest\\.iso$"],
+      "checksum": "{iso}.CHECKSUM"
+    },
+    {
+      "id": "nixos", "name": "NixOS",
+      "home": "https://nixos.org/",
+      "about": "A distribution configured from a single file, so the whole system can be rebuilt or rolled back exactly; with GNOME or KDE",
+      "base": "https://channels.nixos.org/nixos-26.05/",
+      "steps": ["latest-nixos-graphical-aarch64-linux.iso"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "void-xfce", "name": "Void Linux (Xfce)",
+      "home": "https://voidlinux.org/",
+      "about": "An independent rolling-release distribution with its own package manager and runit, with Xfce",
+      "base": "https://repo-default.voidlinux.org/live/current/",
+      "steps": ["~^void-live-aarch64-\\d+-xfce\\.iso$"],
+      "checksum": "sha256sum.txt"
+    },
+    {
+      "id": "kali", "name": "Kali Linux",
+      "home": "https://www.kali.org/",
+      "about": "A Debian-based distribution for security testing, with hundreds of penetration-testing tools",
+      "base": "https://cdimage.kali.org/current/",
+      "steps": ["~^kali-linux-.*-installer-arm64\\.iso$"],
+      "checksum": "SHA256SUMS"
+    },
+    {
+      "id": "alpine", "name": "Alpine Linux",
+      "home": "https://www.alpinelinux.org/",
+      "about": "A tiny, security-minded distribution built on musl and BusyBox; installs from a text prompt (setup-alpine)",
+      "base": "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/aarch64/",
+      "steps": ["~^alpine-standard-(?<v>\\d+\\.\\d+\\.\\d+)-aarch64\\.iso$"],
+      "checksum": "{iso}.sha256"
+    },
+    {
+      "id": "chimera-gnome", "name": "Chimera Linux (GNOME)",
+      "home": "https://chimera-linux.org/",
+      "about": "An independent distribution with a FreeBSD userland, musl and LLVM, with the GNOME desktop",
+      "base": "https://repo.chimera-linux.org/live/latest/",
+      "steps": ["~^chimera-linux-aarch64-LIVE-\\d{8}-gnome\\.iso$"],
+      "checksum": "sha256sums.txt"
+    },
+    {
+      "id": "chimera-plasma", "name": "Chimera Linux (KDE Plasma)",
+      "home": "https://chimera-linux.org/",
+      "about": "An independent distribution with a FreeBSD userland, musl and LLVM, with the KDE Plasma desktop",
+      "base": "https://repo.chimera-linux.org/live/latest/",
+      "steps": ["~^chimera-linux-aarch64-LIVE-\\d{8}-plasma\\.iso$"],
+      "checksum": "sha256sums.txt"
+    }
+  ]
+}

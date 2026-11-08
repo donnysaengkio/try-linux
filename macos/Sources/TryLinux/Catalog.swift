@@ -38,7 +38,103 @@ struct Distro: Equatable {
                checksum: "{iso}.sha256", home: "https://www.opensuse.org/"),
     ]
 
-    static func find(_ id: String) -> Distro? { catalog.first { $0.id == id } }
+    // Try Linux can't download it itself: its ISO comes from its home page, then Use Your Own Installer.
+    var websiteOnly: Bool { base.isEmpty }
+
+    // The built-in four, then the lists from the repository (see MoreDistros).
+    static var all: [Distro] { catalog + MoreDistros.cached }
+
+    static func find(_ id: String) -> Distro? { all.first { $0.id == id } }
+}
+
+// More distributions, from the lists kept in the try-linux repository, so they can grow without a new
+// release: catalog/distros-aarch64.json (ARM64 installers, found and checked like the built-in ones) and
+// the website-only entries of catalog/distros.json (its downloads are x86_64 installers, so they're skipped).
+// Each list is checked when Choose a Linux OS opens and downloaded again only when it has changed (its ETag);
+// offline, the copy from last time is used.
+enum MoreDistros {
+    static let base = "https://raw.githubusercontent.com/donnysaengkio/try-linux/main/catalog/"
+    static let files = ["distros-aarch64.json", "distros.json"]
+    // The self-test reads the lists from the repository folder instead.
+    static var localFolder: URL?
+
+    private static let lock = NSLock()
+    private static var loaded: [Distro]?
+
+    static var cached: [Distro] {
+        lock.lock(); defer { lock.unlock() }
+        if loaded == nil { loaded = combine(files.map { (try? Data(contentsOf: cacheURL($0))) ?? Data() }) }
+        return loaded ?? []
+    }
+
+    private static func cacheURL(_ name: String) -> URL {
+        Paths.root.appendingPathComponent("catalog", isDirectory: true).appendingPathComponent(name)
+    }
+
+    // Both lists, the ARM64 downloads first, skipping ids that are taken (the built-in ones included).
+    static func combine(_ lists: [Data]) -> [Distro] {
+        var out: [Distro] = []
+        var taken = Set(Distro.catalog.map { $0.id })
+        for (i, data) in lists.enumerated() {
+            for d in parse(data, downloads: files[i] == "distros-aarch64.json") where !taken.contains(d.id) {
+                taken.insert(d.id)
+                out.append(d)
+            }
+        }
+        return out
+    }
+
+    // A version 2 list's entries: its downloads (https mirrors only) when `downloads`, and its website-only
+    // entries (an https home page and no mirror).
+    static func parse(_ data: Data, downloads: Bool) -> [Distro] {
+        guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              root["version"] as? Int == 2, let list = root["distros"] as? [[String: Any]] else { return [] }
+        let idPattern = try! NSRegularExpression(pattern: "^[a-z0-9-]{1,40}$")
+        var out: [Distro] = []
+        for e in list {
+            guard let id = e["id"] as? String, let name = e["name"] as? String, idPattern.matches(id) else { continue }
+            let home = (e["home"] as? String).flatMap { $0.hasPrefix("https://") ? $0 : nil }
+            let about = e["about"] as? String ?? ""
+            if let base = e["base"] as? String, let steps = e["steps"] as? [String] {
+                guard downloads, base.hasPrefix("https://") else { continue }
+                out.append(Distro(id: id, name: name, about: about, base: base, steps: steps,
+                                  checksum: e["checksum"] as? String, home: home))
+            } else if e["base"] == nil && e["steps"] == nil, let home {
+                out.append(Distro(id: id, name: name, about: about, base: "", steps: [], checksum: nil, home: home))
+            }
+        }
+        return out
+    }
+
+    // Checks both lists (a conditional request each), keeps any new copy, and returns the combined list.
+    @discardableResult
+    static func refresh() async -> [Distro] {
+        var lists: [Data] = []
+        for name in files {
+            if let folder = localFolder {
+                lists.append((try? Data(contentsOf: folder.appendingPathComponent(name))) ?? Data())
+                continue
+            }
+            let cache = cacheURL(name), etagFile = cache.appendingPathExtension("etag")
+            var data = (try? Data(contentsOf: cache)) ?? Data()
+            var req = Net.request(URL(string: base + name)!)
+            if !data.isEmpty, let etag = try? String(contentsOf: etagFile, encoding: .utf8) {
+                req.setValue(etag, forHTTPHeaderField: "If-None-Match")
+            }
+            if let result = try? await URLSession.shared.data(for: req), let http = result.1 as? HTTPURLResponse,
+               http.statusCode == 200, !(parse(result.0, downloads: true).isEmpty && parse(result.0, downloads: false).isEmpty) {
+                let body = result.0
+                data = body
+                try? FileManager.default.createDirectory(at: cache.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? body.write(to: cache, options: .atomic)
+                if let etag = http.value(forHTTPHeaderField: "ETag") { try? etag.write(to: etagFile, atomically: true, encoding: .utf8) }
+            }
+            lists.append(data)
+        }
+        let all = combine(lists)
+        lock.lock(); loaded = all; lock.unlock()
+        return all
+    }
 }
 
 struct AppError: LocalizedError {
@@ -169,7 +265,8 @@ enum Resolver {
         }
         guard let u = URL(string: dir + name) else { return nil }
         let text = try await Net.string(u)
-        let hex = try NSRegularExpression(pattern: "\\b[0-9a-fA-F]{64}\\b")
+        // A SHA-256 (64 hex digits) or SHA-512 (128) checksum; the download is checked with whichever it is.
+        let hex = try NSRegularExpression(pattern: "\\b([0-9a-fA-F]{128}|[0-9a-fA-F]{64})\\b")
         for line in text.components(separatedBy: "\n") where line.contains(fileName) {
             if let m = hex.firstMatch(in: line, range: NSRange(location: 0, length: (line as NSString).length)) {
                 return (line as NSString).substring(with: m.range).lowercased()
@@ -293,19 +390,33 @@ final class Downloader: NSObject, URLSessionDataDelegate {
 
 enum Hashing {
     static func sha256(_ url: URL, cancelled: () -> Bool, report: (Double) -> Void) throws -> String {
+        try digest(url, sha512: false, cancelled: cancelled, report: report)
+    }
+
+    // The file's SHA-512 when `sha512`, otherwise its SHA-256, as lowercase hex.
+    static func digest(_ url: URL, sha512: Bool, cancelled: () -> Bool, report: (Double) -> Void) throws -> String {
+        if sha512 {
+            var hasher = SHA512()
+            try read(url, cancelled: cancelled, report: report) { hasher.update(data: $0) }
+            return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+        }
+        var hasher = SHA256()
+        try read(url, cancelled: cancelled, report: report) { hasher.update(data: $0) }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func read(_ url: URL, cancelled: () -> Bool, report: (Double) -> Void, use: (Data) -> Void) throws {
         let h = try FileHandle(forReadingFrom: url)
         defer { try? h.close() }
-        var hasher = SHA256()
         let total = Double(max(1, (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 1))
         var done = 0.0, tick = 0
         while let chunk = try h.read(upToCount: 4 << 20), !chunk.isEmpty {
             if cancelled() { throw CancellationError() }
-            hasher.update(data: chunk)
+            use(chunk)
             done += Double(chunk.count)
             tick += 1
             if tick % 8 == 0 { report(done / total) }
         }
-        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 }
 

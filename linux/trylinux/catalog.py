@@ -1,9 +1,9 @@
 """The distributions Try Linux offers, and how it finds and checks their installers.
 
 The built-in list depends on the PC: x86_64 PCs get the same five as Try Linux for Windows, ARM64 PCs the
-same four as Try Linux for Mac. Search adds the list kept in the Windows edition's repository
-(catalog/distros.json): its downloads are x86_64 installers, so on ARM64 only its website-only entries
-(distributions Try Linux can't download itself) are shown."""
+same four as Try Linux for Mac. Search adds the lists kept in the try-linux repository: catalog/distros.json
+(x86_64 installers, and distributions Try Linux can't download itself, which you get from their website) and,
+on ARM64, catalog/distros-aarch64.json (ARM64 installers) in place of the x86_64 ones."""
 import json
 import os
 import re
@@ -12,7 +12,14 @@ from dataclasses import dataclass, field
 
 from . import net, paths
 
-CATALOG_URL = "https://raw.githubusercontent.com/donnysaengkio/try-linux/main/catalog/distros.json"
+CATALOG_BASE = "https://raw.githubusercontent.com/donnysaengkio/try-linux/main/catalog/"
+
+
+def catalog_files(arch=None):
+    """The lists to read, with whether each one's downloads are for this PC."""
+    if (arch or paths.arch()) == "aarch64":
+        return [("distros-aarch64.json", True), ("distros.json", False)]
+    return [("distros.json", True)]
 
 
 @dataclass
@@ -99,13 +106,16 @@ def _str(d, k):
     return v if isinstance(v, str) else None
 
 
-def parse(text, arch=None):
-    """The entries of a distros.json that this PC can use, skipping any that clash with a built-in id."""
+def parse(text, arch=None, downloads=None, taken=None):
+    """The entries of a distros list that this PC can use, skipping any whose id is taken (the built-in ones
+    included). `downloads` says whether its downloads are for this PC (by default: x86_64 PCs, for
+    distros.json); its website-only entries are always kept."""
     arch = arch or paths.arch()
+    downloads = (arch == "x86_64") if downloads is None else downloads
     root = json.loads(text)
     if not isinstance(root, dict) or root.get("version") != 2 or not isinstance(root.get("distros"), list):
         raise ValueError("not a version 2 distribution list")
-    taken = {d.id for d in builtin(arch)}
+    taken = set(taken or ()) | {d.id for d in builtin(arch)}
     out = []
     for d in root["distros"]:
         if not isinstance(d, dict):
@@ -121,8 +131,7 @@ def parse(text, arch=None):
                 out.append(Distro(did, name, _str(d, "about") or "", home=home))
                 taken.add(did)
             continue
-        # The downloads are x86_64 installers.
-        if arch != "x86_64" or not base or not base.startswith("https://") or not isinstance(steps, list):
+        if not downloads or not base or not base.startswith("https://") or not isinstance(steps, list):
             continue
         if not all(isinstance(s, str) for s in steps):
             continue
@@ -135,56 +144,80 @@ def _cache_file(name):
     return os.path.join(paths.CATALOG, name)
 
 
+def _combine(texts, arch=None):
+    """The lists' entries together, in order; a later list doesn't repeat an earlier one's ids."""
+    out, taken = [], set()
+    for (name, downloads), text in zip(catalog_files(arch), texts):
+        if not text:
+            continue
+        try:
+            entries = parse(text, arch, downloads, taken)
+        except ValueError:
+            continue
+        out += entries
+        taken |= {d.id for d in entries}
+    return out
+
+
 def cached():
-    """The list as last downloaded (empty until the first download)."""
+    """The lists as last downloaded (empty until the first download)."""
     global _loaded
     if _loaded is None:
-        try:
-            with open(_cache_file("distros.json"), encoding="utf-8") as f:
-                _loaded = parse(f.read())
-        except (OSError, ValueError):
-            _loaded = []
+        texts = []
+        for name, _ in catalog_files():
+            try:
+                with open(_cache_file(name), encoding="utf-8") as f:
+                    texts.append(f.read())
+            except OSError:
+                texts.append("")
+        _loaded = _combine(texts)
     return _loaded
 
 
-def refresh(source=CATALOG_URL):
-    """Checks the list in the repository: downloaded again only when it has changed (its ETag), otherwise
-    the cached copy is kept. Returns the list. Offline, the cached copy is used."""
+def _fetch(name, source):
+    """One list's text: from `source` (a folder or a file in it, for tests), or downloaded again only when it
+    has changed (its ETag); the cached copy otherwise, and offline."""
+    import urllib.error
+    import urllib.request
+    if source and not source.startswith("http"):
+        folder = source.replace("file://", "")
+        folder = folder if os.path.isdir(folder) else os.path.dirname(folder)
+        try:
+            with open(os.path.join(folder, name), encoding="utf-8") as f:
+                return f.read()
+        except OSError:
+            return ""
+    cache, etag_file = _cache_file(name), _cache_file(name + ".etag")
+    old = ""
+    if os.path.exists(cache):
+        with open(cache, encoding="utf-8") as f:
+            old = f.read()
+    headers = {}
+    if old and os.path.exists(etag_file):
+        with open(etag_file, encoding="utf-8") as f:
+            headers["If-None-Match"] = f.read().strip()
+    try:
+        with urllib.request.urlopen(net.request((source or CATALOG_BASE) + name, headers=headers), timeout=net.TIMEOUT) as r:
+            text = r.read().decode("utf-8")
+            etag = r.headers.get("ETag")
+        parse(text, downloads=False)   # a list, not an error page
+    except Exception:
+        return old
+    with open(cache, "w", encoding="utf-8") as f:
+        f.write(text)
+    if etag:
+        with open(etag_file, "w", encoding="utf-8") as f:
+            f.write(etag)
+    return text
+
+
+def refresh(source=None):
+    """Checks the lists in the repository (each downloaded again only when it has changed) and returns the
+    combined list. `source` is a folder (or a file in it) to read them from instead."""
     global _loaded
     paths.ensure(paths.CATALOG)
-    etag_file = _cache_file("distros.etag")
-    try:
-        if not source.startswith("http"):
-            with open(source.replace("file://", ""), encoding="utf-8") as f:
-                text = f.read()
-            _loaded = parse(text)
-            return _loaded
-        headers = {}
-        if os.path.exists(_cache_file("distros.json")) and os.path.exists(etag_file):
-            with open(etag_file, encoding="utf-8") as f:
-                headers["If-None-Match"] = f.read().strip()
-        import urllib.error
-        import urllib.request
-        try:
-            with urllib.request.urlopen(net.request(source, headers=headers), timeout=net.TIMEOUT) as r:
-                text = r.read().decode("utf-8")
-                etag = r.headers.get("ETag")
-        except urllib.error.HTTPError as e:
-            if e.code == 304:
-                _loaded = None
-                return cached()
-            raise
-        entries = parse(text)
-        with open(_cache_file("distros.json"), "w", encoding="utf-8") as f:
-            f.write(text)
-        if etag:
-            with open(etag_file, "w", encoding="utf-8") as f:
-                f.write(etag)
-        _loaded = entries
-        return entries
-    except Exception:
-        _loaded = None
-        return cached()
+    _loaded = _combine([_fetch(name, source) for name, _ in catalog_files()])
+    return _loaded
 
 
 def all_distros():
