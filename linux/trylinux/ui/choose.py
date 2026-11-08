@@ -159,7 +159,7 @@ class ChoosePage:
     def on_own(self, _l, row):
         if row is not None:
             self.own_selected = True
-            self.sel.unselect_all()
+            self.sel.set_selected(Gtk.INVALID_LIST_POSITION)   # no search result selected
 
     def chosen(self):
         if self.own_selected:
