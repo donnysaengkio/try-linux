@@ -150,6 +150,22 @@ def snap(app, name, out, window=None):
     note("ok", "screenshot " + name)
 
 
+def _compose(app, pop, out):  # noqa: ARG001 (pop: kept for the call's shape)
+    """The menu drawn where it opens over the window (the window and the popover are separate surfaces)."""
+    from gi.repository import GdkPixbuf
+    win = GdkPixbuf.Pixbuf.new_from_file(os.path.join(out, "main-menu-window.png"))
+    menu = GdkPixbuf.Pixbuf.new_from_file(os.path.join(out, "main-menu.png"))
+    # Under the ☰ button, centred on it (where GTK opens it), kept inside the window.
+    btn = app.home.menu_button
+    ok, r = btn.compute_bounds(app.window)
+    x = int(r.get_x() + r.get_width() / 2 - menu.get_width() / 2) if ok else win.get_width() - menu.get_width()
+    y = int(r.get_y() + r.get_height()) if ok else 50
+    x = max(0, min(x, win.get_width() - menu.get_width()))
+    y = max(0, min(y, win.get_height() - menu.get_height()))
+    menu.composite(win, x, y, menu.get_width(), menu.get_height(), x, y, 1, 1, GdkPixbuf.InterpType.NEAREST, 255)
+    win.savev(os.path.join(out, "main-menu-over-window.png"), "png", [], [])
+
+
 def fake_systems(app):
     """Two systems for the screenshots (disks of a few MB; nothing is installed)."""
     host = app.host
@@ -305,6 +321,23 @@ def run(app):
         return "; ".join("%s %s" % (a, app.get_accels_for_action(a)[0]) for _, items in menu.SHORTCUTS for a, _, _ in items if a)
     step(lambda: check("keyboard shortcuts", accels), 100)
     home()
+
+    # The open ☰ menu: the popover is a surface of its own, so it's rendered by itself, then over the window.
+    def menu_open():
+        app.home.menu_button.popup()
+
+    def menu_shots():
+        pop = app.home.menu_button.get_popover()
+        snap(app, "main-menu", out, pop)
+        snap(app, "main-menu-window", out)
+        _compose(app, pop, out)
+        app.home.menu_button.popdown()
+    for theme in ("dark", "light"):
+        step(lambda t=theme: (setattr(app.settings, "theme", t), app.apply_theme()), 400)
+        step(menu_open, 900)
+        step(lambda t=theme: (menu_shots(), [os.replace(os.path.join(out, n + ".png"), os.path.join(out, n + "-" + t + ".png"))
+                                              for n in ("main-menu", "main-menu-window", "main-menu-over-window")]), 500)
+    step(lambda: (setattr(app.settings, "theme", "dark"), app.apply_theme()), 400)
     step(lambda: shown.__setitem__("d", menu.preferences(app)), 900)
     shot("preferences")
     step(lambda: shown["d"].close(), 500)
