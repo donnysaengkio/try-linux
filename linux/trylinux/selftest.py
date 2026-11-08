@@ -184,6 +184,34 @@ def run(app):
     def home():
         step(lambda: app.nav.pop_to_tag("home"), 700)
 
+    # As right after installing: no saved copy of the lists, and Choose a Linux OS as the first screen. Search
+    # has to find more than the recommended distributions once the lists arrive.
+    fresh = {}
+    src = os.environ.get("TRYLINUX_CATALOG")
+
+    def first_screen():
+        catalog._loaded = None
+        for name, _ in catalog.catalog_files():
+            for f in (os.path.join(paths.CATALOG, name), os.path.join(paths.CATALOG, name + ".etag")):
+                if os.path.exists(f):
+                    os.remove(f)
+        page = choose.ChoosePage(app, root=True)
+        fresh["page"], fresh["before"] = page, page.store.get_n_items()
+        page.search.set_text("KDE")
+        import threading
+        threading.Thread(target=page.refresh_catalog, args=(src,), daemon=True).start()
+
+    def first_screen_search():
+        page = fresh["page"]
+        page.on_search()
+        found = page.sel.get_n_items()
+        assert page.store.get_n_items() > fresh["before"], "the list didn't get the catalog's entries"
+        assert found > 1, "searching KDE found %d" % found
+        return "%d listed (from %d), KDE finds %d" % (page.store.get_n_items(), fresh["before"], found)
+
+    if src:
+        step(first_screen, 2500)
+        step(lambda: check("first screen search", first_screen_search), 100)
     step(lambda: logic(app, out), 100)
     step(lambda: fake_systems(app), 500)
     for theme in ("dark", "light"):

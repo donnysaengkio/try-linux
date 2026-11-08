@@ -65,7 +65,9 @@ class ChoosePage:
         self.page = W.page("Choose a Linux OS", scroller, tag="choose", can_pop=not root,
                            bottom=W.bottom_bar(None, next_))
         self.page.chooser = self   # for the self-test
-        if not root and not app.selftest:
+        # The lists are checked every time this page opens, the first one too: right after installing there's
+        # no saved copy yet, so until they arrive search only has the recommended distributions.
+        if not app.selftest:
             threading.Thread(target=self.refresh_catalog, daemon=True).start()
 
     # ---- the list
@@ -75,11 +77,16 @@ class ChoosePage:
         for i, d in enumerate(catalog.all_distros()):
             self.store.append(Item(d, i))
 
-    def refresh_catalog(self):
-        before = len(catalog.cached())
-        entries = catalog.refresh()
-        if len(entries) != before:
-            W.ui(self.fill)
+    def refresh_catalog(self, source=None):
+        """Checks the lists (in the background) and shows what changed, keeping what's typed in search."""
+        catalog.refresh(source)
+        W.ui(self.update_list)
+
+    def update_list(self):
+        have = [self.store.get_item(i).d.id for i in range(self.store.get_n_items())]
+        if have != [d.id for d in catalog.all_distros()]:
+            self.fill()
+            self.on_search()
 
     def match(self, item, *_):
         words = self.query.lower().split()
