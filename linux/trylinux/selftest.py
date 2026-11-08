@@ -297,8 +297,10 @@ def run(app):
     shown = {}
 
     def accels():
+        from gi.repository import Gtk
+        same = lambda xs: [tuple(Gtk.accelerator_parse(x))[-2:] for x in xs]   # (key, modifiers), however it's written
         missing = [a for _, items in menu.SHORTCUTS for a, keys, _ in items
-                   if a and (not app.lookup_action(a.split(".", 1)[1]) or app.get_accels_for_action(a) != keys)]
+                   if a and (not app.lookup_action(a.split(".", 1)[1]) or same(app.get_accels_for_action(a)) != same(keys))]
         assert not missing, "not set up: " + ", ".join(missing)
         return "; ".join("%s %s" % (a, app.get_accels_for_action(a)[0]) for _, items in menu.SHORTCUTS for a, _, _ in items if a)
     step(lambda: check("keyboard shortcuts", accels), 100)
