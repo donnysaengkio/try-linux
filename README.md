@@ -8,11 +8,11 @@ SHA-512 checksum, creates a virtual disk and boots it in a window.
 
 ## Editions
 
-| | Runs on | Virtual machines | Download |
+| Edition | Runs on | Virtual machines | Download |
 |---|---|---|---|
-| [**Try Linux for Windows**](windows/README.md) | Windows 10 and 11, x64 | QEMU ([WINQ-EMU](https://github.com/cmspam/winq-emu)) with the Windows Hypervisor Platform, OpenGL and Vulkan graphics | [Latest release](https://github.com/donnysaengkio/try-linux/releases/latest) |
-| [**Try Linux for Mac**](macos/README.md) (preview) | macOS on Apple silicon | Apple's Virtualization framework | [Releases tagged `macos-v`](https://github.com/donnysaengkio/try-linux/releases?q=macos-v&expanded=true) |
-| [**Try Linux for Linux**](linux/README.md) (preview) | x86_64 and ARM64 Linux with GTK 4 and libadwaita | QEMU with KVM, VirGL graphics | [Releases tagged `linux-v`](https://github.com/donnysaengkio/try-linux/releases?q=linux-v&expanded=true) |
+| [**Try&nbsp;Linux&nbsp;for&nbsp;Windows**](windows/README.md) | Windows 10 and 11 (x64) | QEMU ([WINQ-EMU](https://github.com/cmspam/winq-emu)), OpenGL and Vulkan | [Latest](https://github.com/donnysaengkio/try-linux/releases/latest) |
+| [**Try&nbsp;Linux&nbsp;for&nbsp;Mac**](macos/README.md)&nbsp;(preview) | Apple silicon Macs | Apple Virtualization | [`macos-v`&nbsp;releases](https://github.com/donnysaengkio/try-linux/releases?q=macos-v&expanded=true) |
+| [**Try&nbsp;Linux&nbsp;for&nbsp;Linux**](linux/README.md)&nbsp;(preview) | x86_64 and ARM64, GTK 4 | QEMU with KVM, VirGL | [`linux-v`&nbsp;releases](https://github.com/donnysaengkio/try-linux/releases?q=linux-v&expanded=true) |
 
 Each edition updates itself from its own releases here: Windows releases are tagged `v1.2.3`,
 Mac releases `macos-v1.2.3-preview` and Linux releases `linux-v1.2.3-preview`.
