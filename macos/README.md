@@ -35,6 +35,10 @@ you open Choose a Linux OS, so new entries appear without a new release. Each do
 checked against the distribution's official SHA-256 or SHA-512 checksum. You can also
 install from any ARM64 `.iso` file or download link.
 
+![Choose a Linux OS, searching for KDE: KDE Linux, openSUSE Tumbleweed, Fedora KDE Plasma Desktop and Fedora Kinoite, each with a Website link](docs/images/search.png)
+
+<img src="docs/images/website-only-prompt.png" alt="Download Manjaro Linux from its website? Try Linux can't fetch the Manjaro Linux ISO file itself. Open its website to download its ARM64 (aarch64) ISO, then choose it in Use Your Own Installer. Cancel and Open Website buttons" width="520">
+
 ## Screenshots
 
 ![Choose a Linux OS](docs/images/choose-os.png)
