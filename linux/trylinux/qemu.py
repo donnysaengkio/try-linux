@@ -183,7 +183,7 @@ def args(host, cfg, installer=False, qmp=None, gl=None, display=None, serial=Non
           "-drive", "if=none,id=cd0,media=cdrom,readonly=on" + (",format=raw,file=" + _esc(cd) if cd else ""),
           "-device", "scsi-cd,drive=cd0,id=cd" + (",bootindex=0" if installer else "")]
     if cfg.sound:
-        backend = "pipewire" if "pipewire" in host.audio else ("pa" if "pa" in host.audio else None)
+        backend = audio_backend(host)
         if backend:
             a += ["-audiodev", "%s,id=snd0" % backend, "-device", "intel-hda",
                   "-device", "%s,audiodev=snd0" % ("hda-duplex" if cfg.mic else "hda-output")]
@@ -200,6 +200,17 @@ def args(host, cfg, installer=False, qmp=None, gl=None, display=None, serial=Non
     # installer once Linux has been installed.
     a += ["-action", "reboot=shutdown"]
     return a
+
+
+def audio_backend(host):
+    """PipeWire or PulseAudio, whichever is running for you (and QEMU has); None when neither is, so the
+    system starts without sound instead of not starting."""
+    runtime = os.environ.get("XDG_RUNTIME_DIR") or "/run/user/%d" % os.getuid()
+    if "pipewire" in host.audio and os.path.exists(os.path.join(runtime, "pipewire-0")):
+        return "pipewire"
+    if "pa" in host.audio and os.path.exists(os.path.join(runtime, "pulse", "native")):
+        return "pa"
+    return None
 
 
 def _esc(path):

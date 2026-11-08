@@ -77,37 +77,50 @@ GLYPHS = {
 }
 
 
-def logo(px=7, word="TRY LINUX"):
-    """The pixel logo: the letters in a gradient of the highlight colours, with a drop shadow."""
-    area = Gtk.DrawingArea()
-    cols = len(word) * 6 - 1
-    shadow = max(1, px // 3)
-    area.set_content_width(cols * px + shadow)
-    area.set_content_height(7 * px + shadow)
-    area.set_halign(Gtk.Align.CENTER)
+class Logo(Gtk.Widget):
+    """The pixel logo: the letters in a gradient of the highlight colours, with a drop shadow. Drawn as
+    rectangles in GTK's own scene graph (no cairo bindings needed)."""
+    __gtype_name__ = "TryLinuxLogo"
 
-    def draw(_a, cr, w, h, _d):
-        p = palette()
-        x0, y0 = (w - cols * px - shadow) // 2, (h - 7 * px - shadow) // 2
+    def __init__(self, px=7, word="TRY LINUX"):
+        super().__init__(halign=Gtk.Align.CENTER)
+        self.px, self.word = px, word
+        self.cols = len(word) * 6 - 1
+        self.shadow = max(1, px // 3)
+
+    def do_measure(self, orientation, for_size):
+        n = self.cols * self.px + self.shadow if orientation == Gtk.Orientation.HORIZONTAL else 7 * self.px + self.shadow
+        return n, n, -1, -1
+
+    def do_snapshot(self, snap):
+        from gi.repository import Graphene
+        p, px = palette(), self.px
+        x0 = (self.get_width() - self.cols * px - self.shadow) // 2
+        y0 = (self.get_height() - 7 * px - self.shadow) // 2
+
+        def rgba(rgb):
+            c = Gdk.RGBA()
+            c.red, c.green, c.blue, c.alpha = rgb[0], rgb[1], rgb[2], 1.0
+            return c
 
         def word_at(x, y, color_for_row):
-            for i, ch in enumerate(word):
+            for i, ch in enumerate(self.word):
                 g = GLYPHS.get(ch)
                 if not g:
                     continue
                 for r, row in enumerate(g):
-                    cr.set_source_rgb(*color_for_row(r))
+                    color = rgba(color_for_row(r))
                     for c, bit in enumerate(row):
                         if bit == "#":
-                            cr.rectangle(x + (i * 6 + c) * px, y + r * px, px, px)
-                    cr.fill()
+                            snap.append_color(color, Graphene.Rect().init(x + (i * 6 + c) * px, y + r * px, px, px))
 
-        word_at(x0 + shadow, y0 + shadow, lambda r: _rgb(p["accent2"]))
+        word_at(x0 + self.shadow, y0 + self.shadow, lambda r: _rgb(p["accent2"]))
         a, b = _rgb(p["highlight"]), _rgb(p["highlight2"])
         word_at(x0, y0, lambda r: tuple(a[k] + (b[k] - a[k]) * r / 6 for k in range(3)))
 
-    area.set_draw_func(draw, None)
-    return area
+
+def logo(px=7, word="TRY LINUX"):
+    return Logo(px, word)
 
 
 def heading(text, sub=None):

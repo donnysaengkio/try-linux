@@ -15,9 +15,11 @@ def main():
     if "--self-test" in args:
         selftest = os.path.abspath(args[args.index("--self-test") + 1])
         os.makedirs(selftest, exist_ok=True)
-        # Everything the self-test makes stays in its folder.
-        os.environ["TRYLINUX_DATA"] = os.path.join(selftest, "data")
-        os.environ["TRYLINUX_CONFIG"] = os.path.join(selftest, "config")
+        # Everything the self-test makes stays in its folder (on CI's throwaway runners, TRYLINUX_SELFTEST_HOME=1
+        # uses the usual folders, so the screenshots show the paths you'd see).
+        if os.environ.get("TRYLINUX_SELFTEST_HOME") != "1":
+            os.environ["TRYLINUX_DATA"] = os.path.join(selftest, "data")
+            os.environ["TRYLINUX_CONFIG"] = os.path.join(selftest, "config")
     if "--resolve-test" in args:
         from . import catalog
         for d in catalog.builtin():
