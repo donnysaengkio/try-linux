@@ -174,7 +174,8 @@ def args(host, cfg, installer=False, qmp=None, gl=None, display=None, serial=Non
     else:
         # restrict=on keeps the system off this PC and the internet, but port forwards still reach it.
         net = "user,id=net0" + (",restrict=on" if cfg.net_type == 1 else "") + "".join("," + f.hostfwd() for f in cfg.forward_rules())
-        a += ["-netdev", net, "-device", "virtio-net-pci,netdev=net0"]
+        # ARM64 systems boot with UEFI, which doesn't need the network card's boot ROM (often not installed).
+        a += ["-netdev", net, "-device", "virtio-net-pci,netdev=net0" + (",romfile=" if arm else "")]
     a += ["-device", "qemu-xhci", "-device", "usb-tablet"]
     if arm:
         a += ["-device", "usb-kbd"]
