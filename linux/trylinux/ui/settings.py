@@ -106,8 +106,15 @@ class SettingsPage:
         info.add_row(_value_row("Operating system", self.app.os_label(c)))
         d = catalog.find(c.distro_id)
         if d and d.home:
-            r = Adw.ActionRow(title="Home page")
-            r.add_suffix(W.link(d.home, d.home))
+            r = _value_row("Home page")
+            box = r.get_child()
+            box.remove(box.get_last_child())
+            link = W.link(d.home, d.home)
+            link.set_halign(Gtk.Align.START)
+            link.set_valign(Gtk.Align.START)
+            link.set_margin_top(-6)
+            link.set_margin_bottom(-6)
+            box.append(link)
             info.add_row(r)
         info.add_row(_value_row("Location", paths.display(c.dir)))
 
