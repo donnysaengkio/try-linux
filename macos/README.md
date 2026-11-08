@@ -7,6 +7,7 @@ window. It uses Apple's built-in Virtualization framework, so there's nothing el
 install.
 
 This is the Mac edition of [Try Linux for Windows](https://github.com/donnysaengkio/try-linux).
+There's also [Try Linux for Linux](https://github.com/donnysaengkio/try-linux-linux) (preview).
 
 > **Preview:** this first version is being tested. Please report problems in
 > [Issues](../../issues).
