@@ -162,6 +162,9 @@ def fake_systems(app):
         c.dir = paths.ensure(os.path.join(app.settings.vms_dir, sid))
         if host.img and not os.path.exists(c.disk):
             qemu.create_disk(host, c.disk, 64)
+        if sid == "fedora" and host.img:
+            qemu.create_disk(host, os.path.join(c.dir, "disk2.qcow2"), 32)
+            c.extra_disks = ["disk2.qcow2"]
         c.save()
     app.reload()
 
@@ -258,6 +261,23 @@ def run(app):
                 return p.page
             push(open_settings)
             shot(name + ("-light" if theme == "light" else ""))
+            if tab == "hardware" and theme == "dark":
+                # Switching between disks shows the chosen disk's details, once (they used to pile up).
+                def switch_disks():
+                    page = app.nav.get_visible_page()
+                    sp = _settings_of(page)
+                    for i in (1, 0, 1):
+                        sp.disk_index = -1
+                        sp.pick_disk(i)
+                        sp.fill_disks()
+                    labels = []
+                    _labels(sp.disks, labels)
+                    n = sum(1 for t in labels if t == "Capacity")
+                    assert n == 1, "Capacity shown %d times" % n
+                    assert "disk2.qcow2" in " ".join(labels), "Disk 2's details aren't shown"
+                    return "Disk 2 shown, headings once"
+                step(lambda: check("switch disks", switch_disks), 500)
+                shot("settings-disk-2")
             home()
     step(lambda: (setattr(app.settings, "theme", "dark"), app.apply_theme()), 300)
 
@@ -295,6 +315,20 @@ def _find(widget, cls):
             return r
         c = c.get_next_sibling()
     return None
+
+
+def _labels(widget, out):
+    from gi.repository import Gtk
+    if isinstance(widget, Gtk.Label) and widget.get_mapped():
+        out.append(widget.get_label())
+    c = widget.get_first_child()
+    while c:
+        _labels(c, out)
+        c = c.get_next_sibling()
+
+
+def _settings_of(page):
+    return page.settings
 
 
 def _chooser(app):

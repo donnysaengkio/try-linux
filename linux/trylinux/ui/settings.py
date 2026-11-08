@@ -45,9 +45,11 @@ def _text(tv):
 
 
 def _subheading(text):
+    # A row of its own, so it can be taken out again with the rows under it (a bare label is wrapped in a
+    # row by GTK, and removing the label left that row behind).
     l = Gtk.Label(label=text, xalign=0, margin_top=10, margin_bottom=4, margin_start=12)
     l.add_css_class("heading")
-    return l
+    return Gtk.ListBoxRow(child=l, activatable=False, selectable=False)
 
 
 class SettingsPage:
@@ -70,6 +72,7 @@ class SettingsPage:
         switcher = Adw.ViewSwitcher(stack=self.stack, policy=Adw.ViewSwitcherPolicy.WIDE)
         save = W.button("Save", self.save, primary=True)
         self.page = W.page(self.c.display_name, self.stack, title_widget=switcher, header_end=[save])
+        self.page.settings = self   # for the self-test
 
     def section(self, pg, title, summary=""):
         g = Adw.PreferencesGroup()
