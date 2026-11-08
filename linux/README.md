@@ -112,12 +112,12 @@ command for your distribution.
 
 You can also run `./try-linux` from the extracted folder without installing.
 
-**From a terminal** (needs `git`): this downloads the newest code from this repository and
-runs `install.sh`, the same as above. `~/Downloads` is just an example; use any folder
-you like. Running it again replaces your installed copy with the newest code.
+**From a terminal** (needs `git`): this downloads the newest code from this repository into
+a `try-linux` folder and runs `install.sh`, the same as above. `~/Downloads` is just an
+example; use any folder you like.
 
 ```bash
-cd ~/Downloads && rm -rf try-linux && git clone --depth 1 https://github.com/donnysaengkio/try-linux && cd try-linux/linux && ./install.sh
+cd ~/Downloads && git clone --depth 1 https://github.com/donnysaengkio/try-linux && cd try-linux/linux && ./install.sh
 ```
 
 Afterwards you can delete the `try-linux` folder it made in `~/Downloads` (or wherever you
