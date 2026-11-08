@@ -50,6 +50,11 @@ class App(Adw.Application):
             self.window.present()
             return
         W.apply_theme(self.settings.theme, self.settings.follow_system)
+        # The app icon (About, and the window) also when running from the extracted folder, not installed.
+        data = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data")
+        if os.path.isdir(data):
+            from gi.repository import Gdk, Gtk
+            Gtk.IconTheme.get_for_display(Gdk.Display.get_default()).add_search_path(data)
         Adw.StyleManager.get_default().connect("notify::dark", lambda *_: self.follow_theme())
         self.window = Adw.ApplicationWindow(application=self, title="Try Linux", default_width=980, default_height=760)
         self.window.set_size_request(640, 520)
