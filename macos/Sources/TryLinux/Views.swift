@@ -282,7 +282,7 @@ struct ChooseView: View {
                 LazyVStack(spacing: 6) {
                     ForEach(shown.indices, id: \.self) { i in
                         let d = shown[i]
-                        OptionRow(title: d.name, subtitle: d.about, selected: i == selected, twoLine: true, link: d.home.flatMap(URL.init(string:)))
+                        OptionRow(title: d.name, subtitle: d.about, selected: i == selected, twoLine: true, link: d.home.flatMap(URL.init(string:)), flat: true)
                             .onTapGesture(count: 2) { selected = i; next() }
                             .onTapGesture { selected = i }
                     }
@@ -298,7 +298,7 @@ struct ChooseView: View {
             .padding(.top, 8)
             .task { more = await MoreDistros.refresh() }
             OptionRow(title: "Use Your Own Installer", subtitle: "An existing disk image to import, an .iso file on this Mac, or a URL link to one",
-                      selected: selected == -1, twoLine: true)
+                      selected: selected == -1, twoLine: true, flat: true)
                 .onTapGesture(count: 2) { selected = -1; next() }
                 .onTapGesture { selected = -1 }
                 .modifier(BoxStyle())

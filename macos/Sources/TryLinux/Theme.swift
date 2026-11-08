@@ -118,18 +118,23 @@ struct BoxStyle: ViewModifier {
 struct Surface: ViewModifier {
     var selected = false
     var hover = false
+    // A list row: no box (just what's behind it) until it's pointed at or selected, and no border when pointed at.
+    var flat = false
 
     func body(content: Content) -> some View {
         let colors = selected ? [Theme.selectedTop, Theme.selectedBottom]
             : hover ? [Theme.hoverTop, Theme.hoverBottom] : [Theme.cardTop, Theme.cardBottom]
+        let bare = flat && !selected && !hover
         return content
-            .background(LinearGradient(colors: colors, startPoint: .top, endPoint: .bottom))
-            .overlay(Rectangle().stroke(selected ? Theme.accent : Theme.border, lineWidth: selected ? 1.5 : 1))
+            .background(LinearGradient(colors: bare ? [.clear, .clear] : colors, startPoint: .top, endPoint: .bottom))
+            .overlay(Rectangle().stroke(selected ? Theme.accent : (flat ? .clear : Theme.border), lineWidth: selected ? 1.5 : 1))
     }
 }
 
 extension View {
-    func surface(selected: Bool = false, hover: Bool = false) -> some View { modifier(Surface(selected: selected, hover: hover)) }
+    func surface(selected: Bool = false, hover: Bool = false, flat: Bool = false) -> some View {
+        modifier(Surface(selected: selected, hover: hover, flat: flat))
+    }
 }
 
 struct PixelLogo: View {
@@ -220,9 +225,11 @@ struct OptionRow: View {
     // A system's values (CPU, memory, disk), shown as columns on the right with the status in its own
     // column before them. The column headers are above the list (see StatHeaders).
     var stats: [String] = []
-    // A web page for the row (a distribution's home page), shown as "Website ↗" on the title line;
-    // clicking it opens the page, and the rest of the row still selects it.
+    // A web page for the row (a distribution's home page), shown as "Website ↗" in its own column on the
+    // right, past a divider line; clicking it opens the page, and the rest of the row still selects it.
     var link: URL? = nil
+    // No box of its own unless pointed at or selected (the distributions on Choose a Linux OS).
+    var flat = false
     @State private var hover = false
 
     static let statusW: CGFloat = 76, statW: CGFloat = 86, gap: CGFloat = 10, trailing: CGFloat = 18
@@ -231,13 +238,7 @@ struct OptionRow: View {
         HStack(spacing: 0) {
             // The glow marks the selected row, so there's no stripe on its left.
             VStack(alignment: .leading, spacing: 7) {
-                HStack(spacing: 12) {
-                    Text(title).font(Theme.sans(14, .semibold)).foregroundColor(Theme.text).lineLimit(1)
-                    if let link {
-                        Spacer(minLength: 0)
-                        WebLink(url: link)
-                    }
-                }
+                Text(title).font(Theme.sans(14, .semibold)).foregroundColor(Theme.text).lineLimit(1)
                 Text(subtitle).font(Theme.sans(11.5)).foregroundColor(Theme.muted)
                     .lineLimit(twoLine ? 2 : 1)
                     .fixedSize(horizontal: false, vertical: true)
@@ -246,6 +247,10 @@ struct OptionRow: View {
             .padding(.trailing, 18)
             .padding(.vertical, 9)
             Spacer(minLength: 0)
+            if let link {
+                Rectangle().fill(Theme.border).frame(width: 1, height: 30)
+                WebLink(url: link).padding(.leading, 18).padding(.trailing, Self.trailing)
+            }
             if !stats.isEmpty {
                 Text(status).font(Theme.sans(11.5)).foregroundColor(statusColor).lineLimit(1)
                     .fixedSize().frame(minWidth: Self.statusW, alignment: .leading)
@@ -263,7 +268,7 @@ struct OptionRow: View {
         }
         .frame(maxWidth: .infinity, minHeight: twoLine ? 70 : 54, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)   // keep to its content; don't stretch into free space
-        .surface(selected: selected, hover: hover)
+        .surface(selected: selected, hover: hover, flat: flat)
         .contentShape(Rectangle())
         .onHover { hover = $0 }
     }

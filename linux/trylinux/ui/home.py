@@ -29,13 +29,15 @@ class HomePage:
         # Column headers for the rows' status and stats, on the title row. Each column is in a size group with
         # its cells in the rows (and the rows' buttons with a blank of the same width), so they line up.
         self.columns = [Gtk.SizeGroup(mode=Gtk.SizeGroupMode.HORIZONTAL) for _ in range(5)]
+        # The headers sit on the title's baseline.
+        baseline = getattr(Gtk.Align, "BASELINE_CENTER", Gtk.Align.BASELINE)
         title_row = Gtk.Box(spacing=6, margin_end=12)
-        title = Gtk.Label(label="Virtual Machines", xalign=0, hexpand=True)
+        title = Gtk.Label(label="Virtual Machines", xalign=0, hexpand=True, valign=baseline)
         title.add_css_class("title-3")
         title_row.append(title)
-        self.headers = Gtk.Box(spacing=18, valign=Gtk.Align.END)
+        self.headers = Gtk.Box(spacing=18, valign=baseline)
         for i, text in enumerate(("STATUS", "CPU", "MEM", "DISK")):
-            h = Gtk.Label(label=text, xalign=0)
+            h = Gtk.Label(label=text, xalign=0, valign=baseline)
             h.add_css_class("caption-heading")
             h.add_css_class("dim-label")
             self.columns[i].add_widget(h)

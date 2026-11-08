@@ -28,7 +28,10 @@ class ChoosePage:
         self.filter = Gtk.CustomFilter.new(self.match)
         self.sorter = Gtk.CustomSorter.new(self.compare)
         model = Gtk.SortListModel(model=Gtk.FilterListModel(model=self.store, filter=self.filter), sorter=self.sorter)
-        self.sel = Gtk.SingleSelection(model=model, autoselect=True, can_unselect=True)
+        # No autoselect: with it, unselecting (when Use Your Own Installer is chosen) picked a row straight back.
+        self.sel = Gtk.SingleSelection(model=model, autoselect=False, can_unselect=True)
+        if self.sel.get_n_items():
+            self.sel.set_selected(0)
         self.sel.connect("notify::selected", self.on_selected)
 
         factory = Gtk.SignalListItemFactory()
@@ -50,17 +53,20 @@ class ChoosePage:
         self.hint = Gtk.Label(wrap=True, visible=False, justify=Gtk.Justification.CENTER)
         self.hint.add_css_class("dim-label")
 
+        # Use Your Own Installer: a row like the results' (no box of its own), in a frame like theirs.
         self.own = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
-        self.own.add_css_class("boxed-list")
+        self.own.add_css_class("navigation-sidebar")
         own_row = Adw.ActionRow(title="Use Your Own Installer", activatable=True,
                                 subtitle="An existing virtual disk to import, an .iso file on this PC, or a URL link to one")
         self.own.append(own_row)
         self.own.connect("row-selected", self.on_own)
         self.own.connect("row-activated", lambda *_: self.next())
+        own_frame = Gtk.Frame(child=self.own)
+        own_frame.add_css_class("results")
 
         sub = "Try Linux downloads the official %sinstaller and checks it before use." % ("ARM64 " if arm else "")
         scroller, _ = W.column(W.logo(7), W.heading("Choose a Linux OS", sub), self.search, self.heading,
-                               frame, self.hint, self.own, spacing=12)
+                               frame, self.hint, own_frame, spacing=12)
         next_ = W.button("Next", self.next, primary=True, pill=True)
         self.page = W.page("Choose a Linux OS", scroller, tag="choose", can_pop=not root,
                            bottom=W.bottom_bar(None, next_))
@@ -123,18 +129,22 @@ class ChoosePage:
         sub.add_css_class("caption")
         text.append(title)
         text.append(sub)
-        link = Gtk.LinkButton(label="Website ↗", valign=Gtk.Align.START)
+        # The home page in its own column, centred on the row, past a divider line.
+        divider = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL, margin_top=4, margin_bottom=4)
+        link = Gtk.LinkButton(label="Website ↗", valign=Gtk.Align.CENTER)
         box.append(text)
+        box.append(divider)
         box.append(link)
-        box.parts = (title, sub, link)
+        box.parts = (title, sub, link, divider)
         li.set_child(box)
 
     def bind_row(self, _f, li):
         d = li.get_item().d
-        title, sub, link = li.get_child().parts
+        title, sub, link, divider = li.get_child().parts
         title.set_label(d.name)
         sub.set_label(d.about)
         link.set_visible(bool(d.home))
+        divider.set_visible(bool(d.home))
         if d.home:
             link.set_uri(d.home)
             link.set_tooltip_text(d.home)

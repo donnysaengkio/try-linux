@@ -237,6 +237,17 @@ def run(app):
             step(lambda: _chooser(app).next(), 800)
             shot("website-only-prompt")
             step(lambda: _close_dialogs(app), 500)
+
+            def own_chosen():
+                # Choosing Use Your Own Installer clears the search result's selection (it stayed highlighted).
+                page = _chooser(app)
+                page.search.set_text("")
+                page.own.select_row(page.own.get_row_at_index(0))
+                assert page.sel.get_selected_item() is None, "a search result is still selected"
+                assert page.chosen() == "own"
+                return "only Use Your Own Installer selected"
+            step(lambda: check("own installer chosen", own_chosen), 600)
+            shot("choose-own-selected")
             push(lambda: create.OwnInstallerPage(app).page)
             shot("own-installer")
             plan = create.InstallPlan(distro=catalog.builtin()[0], label=catalog.builtin()[0].name)

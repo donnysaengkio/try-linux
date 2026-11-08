@@ -2536,6 +2536,8 @@ class OptionRow : Control
     }
 
     public bool Selected { get { return selected; } set { selected = value; Invalidate(); } }
+    // Drawn without a box (just the list's background) unless pointed at or selected, like a GTK list.
+    public bool Flat;
     protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
     protected override void OnMouseLeave(EventArgs e) { hover = linkHover = false; Invalidate(); base.OnMouseLeave(e); }
 
@@ -2565,10 +2567,13 @@ class OptionRow : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        Theme.Surface(g, ClientRectangle, Parent != null ? Parent.BackColor : Theme.Bg,
-            selected ? Theme.SelectedTop : hover ? Theme.HoverTop : Theme.CardTop,
-            selected ? Theme.SelectedBottom : hover ? Theme.HoverBottom : Theme.CardBottom,
-            selected ? Theme.Accent : Theme.Border, selected);
+        var behind = Parent != null ? Parent.BackColor : Theme.Bg;
+        if (Flat && !selected && !hover) g.Clear(behind);   // a list row: no box until it's pointed at or chosen
+        else
+            Theme.Surface(g, ClientRectangle, behind,
+                selected ? Theme.SelectedTop : hover ? Theme.HoverTop : Theme.CardTop,
+                selected ? Theme.SelectedBottom : hover ? Theme.HoverBottom : Theme.CardBottom,
+                selected ? Theme.Accent : Flat ? Theme.HoverBottom : Theme.Border, selected);
         int pad = Theme.D(18), half = Height / 2;
         var flags = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
         int textW = Width - pad * 2;
@@ -2614,20 +2619,21 @@ class OptionRow : Control
         // one-line description has the same space above and below as a two-line one.
         var wrap = TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
         int w = Width - pad * 2, titleH = Theme.D(20), gap = Theme.D(6);
-        int subH = Math.Min(Height - titleH - gap - Theme.D(8), TextRenderer.MeasureText(g, Sub, Theme.Small, new Size(w, int.MaxValue), wrap).Height);
-        int top = Math.Max(Theme.D(4), (Height - titleH - gap - subH) / 2);
-        // The distribution's home page, on the right of the title line; the title stops short of it.
-        int titleW = w;
+        // The distribution's home page in its own column on the right, centred on the row, past a divider
+        // line like the one before the stats on Virtual Machines; the title and description stop short of it.
         linkRect = Rectangle.Empty;
         if (!string.IsNullOrEmpty(Link))
         {
-            var font = linkHover ? LinkHoverFont : Theme.Small;
-            var size = TextRenderer.MeasureText(g, LinkText, font, Size.Empty, TextFormatFlags.NoPrefix);
-            linkRect = new Rectangle(Width - pad - size.Width, top, size.Width, titleH);
-            TextRenderer.DrawText(g, LinkText, font, linkRect, linkHover ? Theme.Text : Theme.Highlight, flags);
-            titleW = w - size.Width - Theme.D(12);
+            var size = TextRenderer.MeasureText(g, LinkText, Theme.Small, Size.Empty, TextFormatFlags.NoPrefix);   // the same width hovered
+            int linkX = Width - pad - size.Width, divider = linkX - Theme.D(18);
+            linkRect = new Rectangle(linkX, (Height - size.Height) / 2, size.Width, size.Height);
+            using (var p = new Pen(Theme.Border)) g.DrawLine(p, divider, Theme.D(12), divider, Height - Theme.D(12));
+            TextRenderer.DrawText(g, LinkText, linkHover ? LinkHoverFont : Theme.Small, linkRect, linkHover ? Theme.Text : Theme.Highlight, flags);
+            w = divider - Theme.D(18) - pad;
         }
-        TextRenderer.DrawText(g, Title, Theme.RowTitle, new Rectangle(pad, top, titleW, titleH), Theme.Text, flags);
+        int subH = Math.Min(Height - titleH - gap - Theme.D(8), TextRenderer.MeasureText(g, Sub, Theme.Small, new Size(w, int.MaxValue), wrap).Height);
+        int top = Math.Max(Theme.D(4), (Height - titleH - gap - subH) / 2);
+        TextRenderer.DrawText(g, Title, Theme.RowTitle, new Rectangle(pad, top, w, titleH), Theme.Text, flags);
         TextRenderer.DrawText(g, Sub, Theme.Small, new Rectangle(pad, top + titleH + gap, w, subH), Theme.Muted, wrap);
     }
 }
@@ -3080,6 +3086,8 @@ class OptionList : ScrollPanel
     // Pixels kept clear right of the rows: a list that reaches into its box's padding, so the scroll bar sits
     // at the box's edge rather than between the rows and the box's border.
     public int RightInset;
+    // Rows without a box of their own (see OptionRow.Flat), for a long list such as search results.
+    public bool FlatRows;
 
     public OptionList()
     {
@@ -3089,7 +3097,7 @@ class OptionList : ScrollPanel
     // `height` (design units) overrides RowHeight for this row, e.g. a one-line entry in a list of two-line ones.
     public OptionRow AddItem(string title, string sub, object tag, string status = null, Color? statusColor = null, int height = 0)
     {
-        var row = new OptionRow { Title = title, Sub = sub, Tag = tag, Status = status ?? "", StatusColor = statusColor ?? Theme.Muted, DesignHeight = height };
+        var row = new OptionRow { Title = title, Sub = sub, Tag = tag, Status = status ?? "", StatusColor = statusColor ?? Theme.Muted, DesignHeight = height, Flat = FlatRows };
         int index = rows.Count;
         row.MouseDown += delegate { SelectedIndex = index; };
         row.DoubleClick += delegate { if (Activated != null) Activated(this, EventArgs.Empty); };
@@ -3713,13 +3721,14 @@ partial class MainForm : Form
         p.Caption("Virtual Machines", 0, 116, 640, 30, Theme.Title);
         // Column headers for the rows' status and stats, on the title row and lined up with the rows' columns,
         // over a divider line.
+        // 3 higher than the title's box, so their letters sit on the title's baseline.
         int x = 640 - OptionRow.Pad;
         foreach (var label in new[] { "DISK", "MEM", "CPU" })
         {
             x -= OptionRow.StatColW;
-            p.Caption(label, x, 116, OptionRow.StatColW, 30, Theme.Small, Theme.Muted, ContentAlignment.BottomLeft).BringToFront();   // over the title label
+            p.Caption(label, x, 113, OptionRow.StatColW, 30, Theme.Small, Theme.Muted, ContentAlignment.BottomLeft).BringToFront();   // over the title label
         }
-        p.Caption("STATUS", x - 10 - OptionRow.StatusColW, 116, OptionRow.StatusColW, 30, Theme.Small, Theme.Muted, ContentAlignment.BottomLeft).BringToFront();
+        p.Caption("STATUS", x - 10 - OptionRow.StatusColW, 113, OptionRow.StatusColW, 30, Theme.Small, Theme.Muted, ContentAlignment.BottomLeft).BringToFront();
         p.Add(new Panel { BackColor = Theme.Border }, 0, 154, 640, 1);
         var list = p.Add(new OptionList(), 0, 166, 640, 270);
         foreach (var vm in vms)
@@ -4003,7 +4012,7 @@ partial class MainForm : Form
         var heading = p.Caption("Recommended", 0, 206, 640, 22, Theme.Heading, Theme.Text);
 
         var distroBox = p.Add(new BoxPanel(), 0, top, 640, box1);
-        var list = new OptionList { RowHeight = rowH, BackColor = BoxPanel.Fill };
+        var list = new OptionList { RowHeight = rowH, BackColor = BoxPanel.Fill, FlatRows = true };
         // The list reaches across the box's right padding (to just inside its border) for the scroll bar.
         int listW = Theme.D(640) - Theme.D(padIn) - 1;
         list.SetBounds(Theme.D(padIn), Theme.D(padIn), listW, Theme.D(distroH));
@@ -4041,7 +4050,7 @@ partial class MainForm : Form
 
         var ownBox = p.Add(new BoxPanel(), 0, top + box1 + 12, 640, box2);
         // One option; Next asks whether the installer is an ISO file on this PC or a URL link.
-        var own = new OptionList { RowHeight = rowH, BackColor = BoxPanel.Fill };
+        var own = new OptionList { RowHeight = rowH, BackColor = BoxPanel.Fill, FlatRows = true };
         own.SetBounds(Theme.D(padIn), Theme.D(padIn), Theme.D(640 - padIn * 2), Theme.D(ownH));
         ownBox.Controls.Add(own);
         own.AddItem("Use Your Own Installer", "An existing virtual disk to import, an .iso file on this PC, or a URL link to one", "own");
