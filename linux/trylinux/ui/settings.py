@@ -12,9 +12,23 @@ from .create import ResourcePicker
 
 
 def _value_row(title, value=""):
-    r = Adw.ActionRow(title=title, subtitle=value, subtitle_selectable=True)
-    r.add_css_class("property")
-    return r
+    """A label and its value on one line, the values lined up in a column (as in the Windows and Mac
+    editions). The value can be selected and copied."""
+    box = Gtk.Box(spacing=12, margin_top=9, margin_bottom=9, margin_start=12, margin_end=12)
+    label = Gtk.Label(label=title, xalign=0, valign=Gtk.Align.START)
+    label.set_size_request(170, -1)
+    val = Gtk.Label(label=value, xalign=0, hexpand=True, wrap=True, selectable=True, valign=Gtk.Align.START)
+    box.append(label)
+    box.append(val)
+    return Gtk.ListBoxRow(child=box, activatable=False, selectable=False)
+
+
+def _note(text):
+    """An explanation under a setting, in smaller, dimmer text."""
+    l = Gtk.Label(label=text, xalign=0, wrap=True, margin_top=4, margin_bottom=8, margin_start=12, margin_end=12)
+    l.add_css_class("dim-label")
+    l.add_css_class("caption")
+    return Gtk.ListBoxRow(child=l, activatable=False, selectable=False)
 
 
 def _text_box(text, height=76):
@@ -201,9 +215,10 @@ class SettingsPage:
         add(_value_row("System free", "%s on the drive" % W_size(qemu.free_space(os.path.dirname(url)))))
         add(_value_row("Maximum size", W_size(qemu.capacity(h, url)) if exists else ""))
         add(_subheading("Disk information"))
-        add(_value_row("Allocation", "Preallocated: its full maximum size was taken on the drive when it was made."
-                       if self.disk_index == 0 and c.disk_full else
-                       "Dynamic: the file takes space on the drive only as Linux stores data, up to the maximum size."))
+        add(_note("Preallocated: its full maximum size was taken on the drive when it was made."
+                  if self.disk_index == 0 and c.disk_full else
+                  "Dynamic: the file takes space on the drive only as Linux stores data, up to the maximum size."))
+        add(_note("Stored in %s%s" % (os.path.basename(url), ", the disk %s starts from." % c.display_name if self.disk_index == 0 else ".")))
         add(_value_row("Location", paths.display(url)))
         # What can be done with the disks, under the disk's details.
         add(_subheading("Disk Utilities"))
@@ -359,7 +374,7 @@ class SettingsPage:
         self.cd_row.add_suffix(W.button("Choose ISO", self.choose_cd))
         self.cd_row.add_suffix(W.button("Eject", lambda: self.set_cd("")))
         cd.add_row(self.cd_row)
-        cd.add_row(_value_row("", "For ISOs such as drivers or rescue disks. While %s runs, the disc changes at once." % c.display_name))
+        cd.add_row(_note("For ISOs such as drivers or rescue disks. While %s runs, the disc changes at once." % c.display_name))
 
         net = self.section(pg, "Network", config.NET_TYPES[c.net_type])
         self.net = Adw.ComboRow(title="Network type", model=Gtk.StringList.new(config.NET_TYPES))
@@ -368,7 +383,7 @@ class SettingsPage:
         net.add_row(_subheading("Port forwards"))
         self.fwd, frame = _text_box("\n".join(c.forwards), 60)
         net.add_row(frame)
-        net.add_row(_value_row("", "One a line, as tcp:2222:22 (this PC's port, then Linux's). ssh -p 2222 you@localhost reaches Linux's SSH."))
+        net.add_row(_note("One a line, as tcp:2222:22 (this PC's port, then Linux's). ssh -p 2222 you@localhost reaches Linux's SSH."))
 
     def choose_cd(self):
         W.open_file(self.app.window, "Choose an ISO for the CD/DVD drive", self.set_cd, "Disk images (*.iso)", ["*.iso"])
