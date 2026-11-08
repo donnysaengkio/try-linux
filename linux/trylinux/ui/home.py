@@ -1,5 +1,5 @@
 """Virtual Machines: every system, whether it's running, its CPU, memory and disk, and its commands."""
-from gi.repository import Adw, Gio, Gtk
+from gi.repository import Adw, Gio, Gtk, Pango
 
 from .. import qemu
 from . import widgets as W
@@ -29,20 +29,26 @@ class HomePage:
         # Column headers for the rows' status and stats, on the title row. Each column is in a size group with
         # its cells in the rows (and the rows' buttons with a blank of the same width), so they line up.
         self.columns = [Gtk.SizeGroup(mode=Gtk.SizeGroupMode.HORIZONTAL) for _ in range(5)]
-        # The headers sit on the title's baseline.
-        baseline = getattr(Gtk.Align, "BASELINE_CENTER", Gtk.Align.BASELINE)
         title_row = Gtk.Box(spacing=6, margin_end=12)
-        title = Gtk.Label(label="Virtual Machines", xalign=0, hexpand=True, valign=baseline)
+        title = Gtk.Label(label="Virtual Machines", xalign=0, hexpand=True, valign=Gtk.Align.END)
         title.add_css_class("title-3")
         title_row.append(title)
-        self.headers = Gtk.Box(spacing=18, valign=baseline)
+        self.headers = Gtk.Box(spacing=18, valign=Gtk.Align.END)
         for i, text in enumerate(("STATUS", "CPU", "MEM", "DISK")):
-            h = Gtk.Label(label=text, xalign=0, valign=baseline)
+            h = Gtk.Label(label=text, xalign=0)
             h.add_css_class("caption-heading")
             h.add_css_class("dim-label")
             self.columns[i].add_widget(h)
             self.headers.append(h)
         title_row.append(self.headers)
+        # The headers sit on the title's baseline: both are at the bottom of the row, raised by how much
+        # further the title's font reaches below its baseline (measured once the fonts are known).
+        def on_baseline(*_):
+            def descent(label):
+                layout = label.get_layout()
+                return layout.get_pixel_size()[1] - layout.get_baseline() // Pango.SCALE
+            self.headers.set_margin_bottom(max(0, descent(title) - descent(h)))
+        title.connect("map", on_baseline)
         blank = Gtk.Box()
         self.columns[4].add_widget(blank)
         title_row.append(blank)
