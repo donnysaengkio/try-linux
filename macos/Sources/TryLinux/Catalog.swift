@@ -107,6 +107,10 @@ enum MoreDistros {
     }
 
     // Checks both lists (a conditional request each), keeps any new copy, and returns the combined list.
+    static func fingerprint(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
     @discardableResult
     static func refresh() async -> [Distro] {
         var lists: [Data] = []
@@ -118,16 +122,25 @@ enum MoreDistros {
             let cache = cacheURL(name), etagFile = cache.appendingPathExtension("etag")
             var data = (try? Data(contentsOf: cache)) ?? Data()
             var req = Net.request(URL(string: base + name)!)
-            if !data.isEmpty, let etag = try? String(contentsOf: etagFile, encoding: .utf8) {
-                req.setValue(etag, forHTTPHeaderField: "If-None-Match")
+            // The saved ETag is sent only if it belongs to the cached list: one saved without its list (a newer
+            // ETag beside an older list) would get "not modified" for a list this Mac never had.
+            if !data.isEmpty, let saved = try? String(contentsOf: etagFile, encoding: .utf8) {
+                let lines = saved.components(separatedBy: "\n")
+                if lines.count >= 2, lines[1].trimmingCharacters(in: .whitespaces) == fingerprint(data) {
+                    req.setValue(lines[0].trimmingCharacters(in: .whitespaces), forHTTPHeaderField: "If-None-Match")
+                }
             }
             if let result = try? await URLSession.shared.data(for: req), let http = result.1 as? HTTPURLResponse,
                http.statusCode == 200, !(parse(result.0, downloads: true).isEmpty && parse(result.0, downloads: false).isEmpty) {
                 let body = result.0
                 data = body
                 try? FileManager.default.createDirectory(at: cache.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try? body.write(to: cache, options: .atomic)
-                if let etag = http.value(forHTTPHeaderField: "ETag") { try? etag.write(to: etagFile, atomically: true, encoding: .utf8) }
+                // The ETag only with the list it came with (and a fingerprint of that list).
+                if (try? body.write(to: cache, options: .atomic)) != nil, let etag = http.value(forHTTPHeaderField: "ETag") {
+                    try? (etag + "\n" + fingerprint(body)).write(to: etagFile, atomically: true, encoding: .utf8)
+                } else {
+                    try? FileManager.default.removeItem(at: etagFile)
+                }
             }
             lists.append(data)
         }

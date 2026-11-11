@@ -193,9 +193,9 @@ def _fetch(name, source):
         with open(cache, encoding="utf-8") as f:
             old = f.read()
     headers = {}
-    if old and os.path.exists(etag_file):
-        with open(etag_file, encoding="utf-8") as f:
-            headers["If-None-Match"] = f.read().strip()
+    saved = _saved_etag(etag_file, old)
+    if saved:
+        headers["If-None-Match"] = saved
     try:
         with urllib.request.urlopen(net.request((source or CATALOG_BASE) + name, headers=headers), timeout=net.TIMEOUT) as r:
             text = r.read().decode("utf-8")
@@ -206,9 +206,31 @@ def _fetch(name, source):
     with open(cache, "w", encoding="utf-8") as f:
         f.write(text)
     if etag:
+        # With a fingerprint of the list it came with, so it's only ever sent for that list.
         with open(etag_file, "w", encoding="utf-8") as f:
-            f.write(etag)
+            f.write(etag + "\n" + _fingerprint(text))
     return text
+
+
+def _fingerprint(text):
+    import hashlib
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _saved_etag(etag_file, cached):
+    """The saved ETag, if it belongs to the cached list. One saved without its list (a newer ETag beside an
+    older list) would get "not modified" for a list this computer never had, so it's dropped and the whole
+    list is downloaded again."""
+    if not cached or not os.path.exists(etag_file):
+        return None
+    try:
+        with open(etag_file, encoding="utf-8") as f:
+            lines = f.read().split("\n")
+    except OSError:
+        return None
+    if len(lines) < 2 or lines[1].strip() != _fingerprint(cached):
+        return None
+    return lines[0].strip() or None
 
 
 def refresh(source=None):
