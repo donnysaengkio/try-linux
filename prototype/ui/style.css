@@ -1,0 +1,141 @@
+/* Try Linux's look, from the Windows edition's Theme: the same colours, fonts and rounding, in CSS. */
+
+@font-face { font-family: "Prompt"; font-weight: 600; src: url("fonts/Prompt-SemiBold.ttf"); }
+@font-face { font-family: "Work Sans"; font-weight: 600; src: url("fonts/WorkSans-SemiBold.ttf"); }
+@font-face { font-family: "Noto Sans"; font-weight: 400; src: url("fonts/NotoSans-Regular.ttf"); }
+@font-face { font-family: "Noto Sans"; font-weight: 600; src: url("fonts/NotoSans-SemiBold.ttf"); }
+
+:root {
+  --bg: #111113; --card: #252429; --card-hover: #2E2D33; --card-selected: #352E48;
+  --card-top: #28272C; --card-bottom: #232227; --hover-top: #302F35; --hover-bottom: #2A292F;
+  --selected-top: #372F4D; --selected-bottom: #2C263D; --border: #39383D; --box-fill: #1C1B22;
+  --text: #FBFBFE; --muted: #BFBFC9; --accent: #B89CFE; --accent-hover: #C7B1FF; --accent-dark: #A487F2;
+  --accent2: #5E4898; --highlight: #C7B1FF; --highlight2: #B89CFE; --on-accent: #15141A;
+  --success: #7ED68A; --danger: #F26D6D;
+  --radius: 8px;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #FCF9FE; --card: #FFFFFF; --card-hover: #F6F2FC; --card-selected: #EEE8FF;
+    --card-top: #FFFFFF; --card-bottom: #FBF9FE; --hover-top: #F8F5FD; --hover-bottom: #F2EEFA;
+    --selected-top: #F3EEFF; --selected-bottom: #E9E1FF; --border: #DEDBE8; --box-fill: #F4F1F9;
+    --text: #0C0C14; --muted: #6B6880; --accent: #6D4AFF; --accent-hover: #8466FF; --accent-dark: #5A37E6;
+    --accent2: #3A1F99; --highlight: #5B2BD1; --highlight2: #3A1F99; --on-accent: #FFFFFF;
+    --success: #1C8A4E; --danger: #D6332E;
+    color-scheme: light;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 400 12.7px "Noto Sans", "Segoe UI", sans-serif;
+  display: flex; flex-direction: column; overflow: hidden;
+  user-select: none; -webkit-user-select: none; cursor: default;
+}
+button { font: inherit; color: inherit; }
+svg.icon { width: 18px; height: 18px; display: block; }
+
+/* ---- header bar */
+.headerbar { height: 54px; flex: none; display: flex; align-items: center; padding: 0 12px; gap: 8px; }
+.headerbar .side { flex: 1; display: flex; align-items: center; gap: 8px; }
+.headerbar .side.right { justify-content: flex-end; }
+.headerbar .middle { flex: none; display: flex; justify-content: center; }
+#header-right { display: flex; gap: 8px; }
+
+/* ---- buttons: a shaded rounded surface; the main action a purple gradient */
+.btn {
+  height: 36px; padding: 0 16px; border-radius: var(--radius); border: 1px solid var(--border);
+  background: linear-gradient(var(--card-top), var(--card-bottom)); font-weight: 600; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap;
+}
+.btn:hover { background: linear-gradient(var(--hover-top), var(--hover-bottom)); }
+.btn.primary { border-color: var(--accent); color: var(--on-accent);
+  background: linear-gradient(var(--accent-hover), var(--accent)); }
+.btn.primary:hover { background: linear-gradient(#D6C7FF, #C2A9FF); }
+@media (prefers-color-scheme: light) { .btn.primary:hover { background: linear-gradient(#9A82FF, #7A5CFF); } }
+.btn.icon { width: 38px; padding: 0; }
+.btn.small { height: 34px; }
+.btn .chev svg.icon { width: 14px; height: 14px; }
+
+/* ---- pages */
+#page { flex: 1; overflow: auto; padding: 0 24px 24px; }
+.column { width: 640px; max-width: 100%; margin: 0 auto; }
+.column.wide { width: min(1200px, max(760px, calc(100vw - 220px))); }
+.logo { display: block; margin: 0 auto 8px; }
+.home .logo { margin-top: max(0px, calc((100vh - 54px - 470px) / 2 - 20px)); }
+h1 { font: 600 20px "Prompt", "Segoe UI", sans-serif; margin: 0; }
+.subtitle { color: var(--muted); font-size: 11.3px; text-align: center; margin: 2px 0 18px; }
+.center { text-align: center; }
+
+/* Virtual Machines: one rounded card of rows, with the stat columns' headers on the title's line */
+/* The headers get the rows' padding (and border) so each sits over its column; the title stays at the edge. */
+.vm-head { display: flex; align-items: flex-end; margin: 18px 0 10px; padding: 0 15px 0 19px; }
+.vm-head h1 { flex: 1; margin-left: -19px; }
+.col-label { color: var(--muted); font-size: 11.3px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.vm-row { display: flex; align-items: center; height: 62px; padding: 0 14px 0 18px; border-top: 1px solid var(--border); }
+.vm-row:first-child { border-top: 0; }
+.vm-row:hover { background: var(--card-hover); }
+.vm-name { flex: 1; min-width: 0; }
+.vm-name .title { font-weight: 600; font-size: 13.3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vm-name .os { color: var(--muted); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.status { width: 76px; font-size: 11.3px; color: var(--muted); margin-right: 10px; }
+.status.on { color: var(--success); }
+.divider { width: 1px; align-self: stretch; margin: 12px 10px 12px 0; background: var(--border); }
+.stat { width: 86px; }
+.stat .value { font-weight: 600; }
+.stat .sub { color: var(--muted); font-size: 11.3px; margin-top: 6px; }
+.actions { width: 196px; display: flex; justify-content: flex-end; gap: 8px; }
+.actions .btn.go { width: 88px; }
+
+/* Choose a Linux OS: a search field, then two boxes of rows without borders until chosen */
+.search { width: 100%; height: 30px; border-radius: 6px; border: 1px solid var(--border); background: var(--card);
+  color: var(--text); font: inherit; padding: 0 10px; outline: none; user-select: text; }
+.search:focus { border-color: var(--accent); }
+.search::placeholder { color: var(--muted); opacity: .7; }
+.heading { font-weight: 600; margin: 14px 4px 6px; }
+.box { background: var(--box-fill); border: 1px solid var(--border); border-radius: 10px; padding: 6px; }
+.box.list { max-height: 392px; overflow-y: auto; }   /* five rows, then it scrolls */
+.option { display: flex; align-items: center; height: 70px; padding: 0 16px 0 20px; border-radius: 8px;
+  border: 1px solid transparent; margin-top: 6px; cursor: pointer; }
+.option:first-child { margin-top: 0; }
+.option:hover { background: var(--card-hover); }
+.option.selected { border-color: var(--accent); background: linear-gradient(var(--selected-top), var(--selected-bottom)); }
+.option .text { flex: 1; min-width: 0; }
+.option .title { font-weight: 600; font-size: 13.3px; }
+.option .about { color: var(--muted); margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.option .link { color: var(--highlight); padding-left: 20px; margin-left: 16px; border-left: 1px solid var(--border);
+  height: 46px; display: flex; align-items: center; white-space: nowrap; }
+.option .link:hover { text-decoration: underline; }
+.empty { color: var(--muted); text-align: center; padding: 40px 0; }
+.nav { display: flex; justify-content: space-between; margin-top: 20px; }
+.nav .btn { width: 88px; }
+
+/* overlay scroll bars, thin, like the other editions */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, transparent); border-radius: 5px;
+  border: 3px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-track { background: transparent; }
+
+.btn:disabled { opacity: .5; cursor: default; }
+.btn.danger { border-color: var(--danger); color: var(--danger); }
+
+/* menus (the Power menu) and dialogs */
+.menu { position: fixed; z-index: 10; background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 4px; box-shadow: 0 8px 28px #0007; display: flex; flex-direction: column; }
+.menu-item { background: none; border: 0; text-align: left; padding: 7px 12px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+.menu-item:hover { background: var(--card-selected); }
+.menu-item.danger { color: var(--danger); }
+.menu-line { height: 1px; background: var(--border); margin: 4px 2px; }
+.modal-back { position: fixed; inset: 0; z-index: 20; background: #0008; display: flex; align-items: center; justify-content: center; }
+.modal { width: 440px; max-width: calc(100vw - 32px); background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; }
+.modal-title { font: 600 15px "Work Sans", "Segoe UI", sans-serif; margin-bottom: 8px; }
+.modal-text { color: var(--muted); line-height: 1.45; white-space: pre-wrap; user-select: text; max-height: 50vh; overflow: auto; }
+.modal-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.modal-buttons .btn { min-width: 88px; }
+
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--card);
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; box-shadow: 0 6px 24px #0006; }
