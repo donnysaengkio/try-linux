@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Try Linux</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- The window has no title bar: this header bar moves it (drag) and maximizes it (double-click). -->
+  <header class="headerbar" data-tauri-drag-region>
+    <div class="side left" data-tauri-drag-region><span id="header-left"></span></div>
+    <div class="middle" id="header-middle" data-tauri-drag-region></div>
+    <div class="side right" data-tauri-drag-region>
+      <span id="header-right"></span>
+      <button class="btn icon" id="close" title="Close" data-icon="x"></button>
+    </div>
+  </header>
+
+  <main id="page"></main>
+
+  <div class="toast" id="toast" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>
