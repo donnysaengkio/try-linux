@@ -133,14 +133,15 @@ static class MoreDistros
     {
         try
         {
-            string etag = !force && Cached().Count > 0 && File.Exists(EtagFile) ? File.ReadAllText(EtagFile).Trim() : null;
+            string etag = !force && Cached().Count > 0 ? SavedEtag() : null;
             string newEtag;
             string text = Fetch(etag, out newEtag);
             if (text == null) return Cached();   // not modified
             var list = Parse(text);
             Directory.CreateDirectory(Path.GetDirectoryName(CacheFile));
             File.WriteAllText(CacheFile, text);
-            if (newEtag != null) File.WriteAllText(EtagFile, newEtag); else if (File.Exists(EtagFile)) File.Delete(EtagFile);
+            // The ETag with a fingerprint of the list it came with, so it's only ever sent for that list.
+            if (newEtag != null) File.WriteAllText(EtagFile, newEtag + "\n" + Fingerprint(text)); else if (File.Exists(EtagFile)) File.Delete(EtagFile);
             loaded = list;
             return list;
         }
@@ -149,6 +150,27 @@ static class MoreDistros
             if (Cached().Count > 0) return Cached();
             throw;
         }
+    }
+
+    // The saved ETag, if it belongs to the cached list. One saved without its list (as 1.1.13 and earlier could
+    // leave it: a newer ETag beside an older list) would get "not modified" for a list this PC never had, so
+    // it's dropped and the whole list is downloaded again.
+    static string SavedEtag()
+    {
+        try
+        {
+            if (!File.Exists(EtagFile) || !File.Exists(CacheFile)) return null;
+            var lines = File.ReadAllText(EtagFile).Split('\n');
+            if (lines.Length < 2 || lines[1].Trim() != Fingerprint(File.ReadAllText(CacheFile))) return null;
+            return lines[0].Trim();
+        }
+        catch { return null; }
+    }
+
+    static string Fingerprint(string text)
+    {
+        using (var sha = SHA256.Create())
+            return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(text))).Replace("-", "").ToLowerInvariant();
     }
 
     // The list's text, or null when the server says it hasn't changed since `etag`.
@@ -1059,7 +1081,11 @@ static class DarkCombo
         {
             SetWindowTheme(c.Handle, "", "");
             var info = new COMBOBOXINFO { cbSize = Marshal.SizeOf(typeof(COMBOBOXINFO)) };
-            if (GetComboBoxInfo(c.Handle, ref info) && info.hwndList != IntPtr.Zero) SetWindowTheme(info.hwndList, Native.ScrollbarTheme, null);
+            if (GetComboBoxInfo(c.Handle, ref info) && info.hwndList != IntPtr.Zero)
+            {
+                SetWindowTheme(info.hwndList, Native.ScrollbarTheme, null);
+                Native.RoundCorners(info.hwndList);
+            }
         }
         catch { }
     }
@@ -1074,20 +1100,29 @@ static class DarkCombo
         var button = new Rectangle(c.Width - bw, 0, bw, c.Height);
         using (var g = Graphics.FromHwnd(c.Handle))
         {
-            // Everything but the text: the ring around it and the button.
+            // Everything but the text: a rounded box like GTK's dropdown button, the arrow inside it.
             g.ExcludeClip(item);
-            using (var b = new SolidBrush(Theme.Card)) g.FillRectangle(b, 0, 0, c.Width, c.Height);
-            g.ResetClip();
-            using (var p = new Pen(Theme.Border))
+            using (var b = new SolidBrush(c.Parent != null ? c.Parent.BackColor : Theme.Bg)) g.FillRectangle(b, 0, 0, c.Width, c.Height);
+            var mode0 = g.SmoothingMode;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            var box = new Rectangle(0, 0, c.Width - 1, c.Height - 1);
+            using (var path = Theme.Shape(box, Theme.D(6), true, true))
             {
-                g.DrawLine(p, button.Left, 1, button.Left, c.Height - 2);
-                g.DrawRectangle(p, 0, 0, c.Width - 1, c.Height - 1);
+                using (var b = new SolidBrush(Theme.Card)) g.FillPath(b, path);
+                g.ResetClip();
+                using (var p = new Pen(Theme.Border)) g.DrawPath(p, path);
             }
+            g.SmoothingMode = mode0;
             // A chevron in the middle of the button.
             int cx = button.Left + button.Width / 2, cy = c.Height / 2, s = Math.Max(3, Theme.D(4));
             var mode = g.SmoothingMode;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            using (var p = new Pen(dim ? Theme.Muted : Theme.Text, Math.Max(1.5f, Theme.Scale * 1.5f)))
+            if (Lucide.Has("chevron-down"))
+            {
+                int ic = Theme.D(16);
+                Lucide.Draw(g, "chevron-down", new Rectangle(cx - ic / 2, cy - ic / 2, ic, ic), dim ? Theme.Muted : Theme.Text);
+            }
+            else using (var p = new Pen(dim ? Theme.Muted : Theme.Text, Math.Max(1.5f, Theme.Scale * 1.5f)))
                 g.DrawLines(p, new[] { new Point(cx - s, cy - s / 2), new Point(cx, cy + s / 2), new Point(cx + s, cy - s / 2) });
             g.SmoothingMode = mode;
         }
@@ -1242,6 +1277,91 @@ class RunningVm
     public bool ResetAsked, ForceStopped;
     public DateTime Started = DateTime.Now;
     public readonly StringBuilder Err = new StringBuilder();
+
+    // Live activity, shown on its row on Virtual Machines: CPU as a share of the cores it was given, the memory
+    // QEMU holds on this PC, and how fast its disks are read and written (QEMU's query-blockstats). -1: not known yet.
+    public double CpuPct = -1, DiskRate = -1;
+    public long MemBytes = -1;
+    // The memory Linux itself is using (total less available), from the balloon's statistics; -1 until Linux's
+    // driver has reported, or for a system started without the balloon.
+    public long GuestUsed = -1;
+    bool balloonAsked;
+    TimeSpan lastCpu;
+    long lastDisk = -1;
+    DateTime lastAt = DateTime.MinValue;
+
+    // Takes a reading; rates come from the change since the last one. Slow (it asks QEMU), so not on the UI thread.
+    public void Sample()
+    {
+        var now = DateTime.UtcNow;
+        double wall = lastAt == DateTime.MinValue ? 0 : (now - lastAt).TotalSeconds;
+        int cores, ram;
+        Cfg.Resources(out cores, out ram);
+        try
+        {
+            P.Refresh();
+            var cpu = P.TotalProcessorTime;
+            MemBytes = P.WorkingSet64;
+            if (wall > 0) CpuPct = Math.Max(0, Math.Min(100, (cpu - lastCpu).TotalSeconds / wall / Math.Max(1, cores) * 100));
+            lastCpu = cpu;
+        }
+        catch { }
+        try
+        {
+            long total = DiskBytes(Net.QmpQuery(QmpPort, "query-blockstats"));
+            if (wall > 0 && lastDisk >= 0) DiskRate = Math.Max(0, (total - lastDisk) / wall);
+            lastDisk = total;
+        }
+        catch { }
+        try
+        {
+            // Linux's driver reports only once asked to, every couple of seconds.
+            if (!balloonAsked)
+            {
+                Net.QmpQuery(QmpPort, "qom-set", "{\"path\":\"/machine/peripheral/balloon0\",\"property\":\"guest-stats-polling-interval\",\"value\":2}");
+                balloonAsked = true;
+            }
+            GuestUsed = BalloonUsed(Net.QmpQuery(QmpPort, "qom-get", "{\"path\":\"/machine/peripheral/balloon0\",\"property\":\"guest-stats\"}"));
+        }
+        catch { }
+        lastAt = now;
+    }
+
+    // Total less available memory, as Linux's "free" counts it as used; -1 if Linux hasn't reported yet.
+    static long BalloonUsed(string reply)
+    {
+        var doc = new System.Web.Script.Serialization.JavaScriptSerializer().DeserializeObject(reply) as Dictionary<string, object>;
+        var ret = doc != null && doc.ContainsKey("return") ? doc["return"] as Dictionary<string, object> : null;
+        if (ret == null || Stat(ret, "last-update") <= 0) return -1;
+        var stats = (Dictionary<string, object>)ret["stats"];
+        long total = Stat(stats, "stat-total-memory"), avail = Stat(stats, "stat-available-memory");
+        if (avail < 0) avail = Stat(stats, "stat-free-memory");
+        return total > 0 && avail >= 0 ? Math.Max(0, total - avail) : -1;
+    }
+
+    // A balloon statistic; -1 when missing or unknown (QEMU reports those as 2^64 - 1).
+    static long Stat(Dictionary<string, object> d, string key)
+    {
+        object v;
+        if (!d.TryGetValue(key, out v)) return -1;
+        decimal n = Convert.ToDecimal(v);
+        return n < 0 || n > long.MaxValue ? -1 : (long)n;
+    }
+
+    // Bytes read and written so far across the system's drives (each drive's own counts, not its layers').
+    static long DiskBytes(string reply)
+    {
+        var doc = new System.Web.Script.Serialization.JavaScriptSerializer().DeserializeObject(reply) as Dictionary<string, object>;
+        long total = 0;
+        foreach (var o in (object[])doc["return"])
+        {
+            var stats = ((Dictionary<string, object>)o)["stats"] as Dictionary<string, object>;
+            if (stats == null) continue;
+            total += Convert.ToInt64(stats["rd_bytes"]) + Convert.ToInt64(stats["wr_bytes"]);
+        }
+        return total;
+    }
+
     // Why QEMU stopped, from its SHUTDOWN event: "guest-shutdown" for a power-off, "guest-reset" for a restart.
     public volatile string ShutdownReason;
     public System.Threading.Thread Watcher;
@@ -1429,6 +1549,28 @@ static class Net
 
     // Sends one QMP command (e.g. system_powerdown) to a running QEMU.
     public static void Qmp(int port, string command) { Qmp(port, command, null); }
+
+    // A query's reply (its JSON line), for reading what QEMU reports, such as query-blockstats.
+    public static string QmpQuery(int port, string command, string args = null)
+    {
+        using (var c = new TcpClient())
+        {
+            if (!c.ConnectAsync("127.0.0.1", port).Wait(1000)) throw new TimeoutException("QMP");
+            using (var s = c.GetStream())
+            {
+                s.ReadTimeout = 2000;
+                var r = new StreamReader(s);
+                var w = new StreamWriter(s) { AutoFlush = true, NewLine = "\n" };
+                r.ReadLine();
+                w.WriteLine("{\"execute\":\"qmp_capabilities\"}");
+                r.ReadLine();
+                w.WriteLine("{\"execute\":\"" + command + "\"" + (args != null ? ",\"arguments\":" + args : "") + "}");
+                string reply = r.ReadLine();
+                while (reply != null && reply.Contains("\"event\"")) reply = r.ReadLine();
+                return reply;
+            }
+        }
+    }
 
     // With arguments (a JSON object); throws when QEMU answers with an error.
     public static void Qmp(int port, string command, string args)
@@ -1653,6 +1795,14 @@ static class Native
     public static void RedrawFrame(IntPtr h)
     {
         try { SetWindowPos(h, IntPtr.Zero, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0004 | 0x0010 | 0x0020); } catch { }   // NOSIZE NOMOVE NOZORDER NOACTIVATE FRAMECHANGED
+    }
+
+    // Windows 11's rounded corners (and the shadow that goes with them) on a pop-up: a menu or a dropdown's list.
+    // Earlier Windows ignores it and keeps them square.
+    public static void RoundCorners(IntPtr h)
+    {
+        int round = 2;   // DWMWCP_ROUND
+        try { DwmSetWindowAttribute(h, 33, ref round, 4); } catch { }   // DWMWA_WINDOW_CORNER_PREFERENCE
     }
 
     // A dark title bar for the dark themes, the usual light one for Light.
@@ -1916,8 +2066,28 @@ static class Theme
     public static Color AccentLight, AccentMid, AccentDark;
     public static Color OnAccent;
 
-    // Corner rounding for cards, bars, tabs and buttons, in design units; 0 draws them square.
-    public static int Radius = 0;
+    // Corner rounding for cards, bars, tabs and buttons, in design units (like the Linux edition's GTK look).
+    public static int Radius = 8;
+
+    // Rounded on the top corners, the bottom ones, or both (rows joined into one card round only its ends).
+    public static GraphicsPath Shape(Rectangle r, int radius, bool top, bool bottom)
+    {
+        var p = new GraphicsPath();
+        int d = Math.Min(radius * 2, Math.Min(r.Width, r.Height));
+        if (d <= 1 || (!top && !bottom)) { p.AddRectangle(r); return p; }
+        if (top) { p.AddArc(r.X, r.Y, d, d, 180, 90); p.AddArc(r.Right - d, r.Y, d, d, 270, 90); }
+        else { p.AddLine(r.X, r.Y, r.Right, r.Y); }
+        if (bottom) { p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90); p.AddArc(r.X, r.Bottom - d, d, d, 90, 90); }
+        else { p.AddLine(r.Right, r.Bottom, r.X, r.Bottom); }
+        p.CloseFigure();
+        return p;
+    }
+
+    public static Color Mix(Color a, Color b, double t)
+    {
+        Func<int, int, int> m = (x, y) => (int)Math.Round(x + (y - x) * t);
+        return Color.FromArgb(m(a.R, b.R), m(a.G, b.G), m(a.B, b.B));
+    }
 
     public static GraphicsPath Shape(Rectangle r, int radius)
     {
@@ -2427,6 +2597,29 @@ class DarkMenu : ToolStripProfessionalRenderer
 {
     public DarkMenu() : base(new Colors()) { RoundedEdges = false; }
 
+    // Menus get rounded corners, like the rest of the app.
+    protected override void Initialize(ToolStrip toolStrip)
+    {
+        base.Initialize(toolStrip);
+        if (!(toolStrip is ToolStripDropDown)) return;
+        if (toolStrip.IsHandleCreated) Native.RoundCorners(toolStrip.Handle);
+        toolStrip.HandleCreated += delegate { Native.RoundCorners(toolStrip.Handle); };
+    }
+
+    protected override void InitializeItem(ToolStripItem item)
+    {
+        base.InitializeItem(item);
+        var sub = item as ToolStripDropDownItem;   // a submenu
+        if (sub != null) sub.DropDown.HandleCreated += delegate { Native.RoundCorners(sub.DropDown.Handle); };
+    }
+
+    // Windows draws the rounded edge itself; a square line of our own would show at the corners.
+    protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
+    {
+        if (e.ToolStrip is ToolStripDropDown && Environment.OSVersion.Version.Build >= 22000) return;
+        base.OnRenderToolStripBorder(e);
+    }
+
     protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
     {
         e.TextColor = !e.Item.Enabled ? Theme.Muted : e.Item.ForeColor == Theme.Danger ? Theme.Danger : Theme.Text;
@@ -2451,12 +2644,125 @@ class DarkMenu : ToolStripProfessionalRenderer
     }
 }
 
+// A checkbox drawn as a switch on the right of its row, with its text on the left (like GTK's switch rows).
+class Toggle : CheckBox
+{
+    bool hover;
+
+    public Toggle()
+    {
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        Cursor = Cursors.Hand;
+    }
+
+    protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
+    protected override void OnCheckedChanged(EventArgs e) { Invalidate(); base.OnCheckedChanged(e); }
+    protected override void OnEnabledChanged(EventArgs e) { Invalidate(); base.OnEnabledChanged(e); }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.Clear(Parent != null ? Parent.BackColor : Theme.Bg);
+        int sw = Theme.D(40), sh = Theme.D(22);
+        var track = new Rectangle(Width - sw - 2, (Height - sh) / 2, sw, sh);
+        TextRenderer.DrawText(g, Text, Font, new Rectangle(0, 0, track.X - Theme.D(12), Height), Enabled ? ForeColor : Theme.Muted,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        Color fill = Checked ? (hover ? Theme.AccentHover : Theme.Accent) : Theme.Mix(Theme.Card, Theme.Text, hover ? 0.24 : 0.18);
+        if (!Enabled) fill = Theme.Mix(fill, Theme.Bg, 0.5);
+        using (var path = Theme.Shape(track, sh / 2)) using (var b = new SolidBrush(fill)) g.FillPath(b, path);
+        int d = sh - Theme.D(6);
+        int kx = Checked ? track.Right - d - Theme.D(3) : track.X + Theme.D(3);
+        using (var b = new SolidBrush(Checked ? Theme.OnAccent : Color.White)) g.FillEllipse(b, kx, track.Y + Theme.D(3), d, d);
+        if (Focused && ShowFocusCues)
+            using (var path = Theme.Shape(Rectangle.Inflate(track, 2, 2), sh / 2 + 2)) using (var pen = new Pen(Theme.Highlight)) g.DrawPath(pen, path);
+    }
+}
+
+// The bar at the top of Virtual Machines and Settings, like GTK's header bar: a control on the left and one on
+// the right, and a title (or the tabs) in the middle.
+class HeaderBar : Panel
+{
+    Control left, middle, right;
+    FlatBtn close;
+
+    public HeaderBar()
+    {
+        Dock = DockStyle.Top;
+        Height = Theme.D(54);
+        BackColor = Theme.Bg;
+        Clear();
+    }
+
+    public void Set(Control l, Control m, Control r)
+    {
+        Clear();
+        left = l; middle = m; right = r;
+        foreach (var c in new[] { l, m, r }) if (c != null) Controls.Add(c);
+        Place();
+    }
+
+    // Leaves just the close button (the window has no title bar of its own; this bar is where it's moved from).
+    public void Clear()
+    {
+        foreach (Control c in Controls.Cast<Control>().ToList()) { Controls.Remove(c); c.Dispose(); }
+        left = middle = right = null;
+        BackColor = Theme.Bg;
+        close = new FlatBtn("\uE8BB") { Font = new Font("Segoe MDL2 Assets", 8f), Size = new Size(Theme.D(36), Theme.D(36)), TabStop = false };
+        close.Click += delegate { var f = FindForm(); if (f != null) f.Close(); };
+        new ToolTip().SetToolTip(close, "Close");
+        Controls.Add(close);
+        Place();
+    }
+
+    public static Label Title(string text)
+    {
+        return new PassLabel { Text = text, Font = Theme.Bold, ForeColor = Theme.Text, BackColor = Theme.Bg, AutoSize = true, UseMnemonic = false };
+    }
+
+    // The bar's empty space and its title belong to the window behind them, which treats them as its title bar:
+    // drag to move, double-click to maximize or restore.
+    const int WM_NCHITTEST = 0x84, HTTRANSPARENT = -1;
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == WM_NCHITTEST && !DesignMode) { m.Result = (IntPtr)HTTRANSPARENT; return; }
+        base.WndProc(ref m);
+    }
+
+    class PassLabel : Label
+    {
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == WM_NCHITTEST) { m.Result = (IntPtr)HTTRANSPARENT; return; }
+            base.WndProc(ref m);
+        }
+    }
+
+    protected override void OnResize(EventArgs e) { base.OnResize(e); Place(); }
+
+    void Place()
+    {
+        int pad = Theme.D(12);
+        int end = Width - pad;
+        if (close != null) { close.Location = new Point(end - close.Width, (Height - close.Height) / 2); end = close.Left - Theme.D(8); }
+        if (left != null) left.Location = new Point(pad, (Height - left.Height) / 2);
+        if (right != null) right.Location = new Point(end - right.Width, (Height - right.Height) / 2);
+        if (middle != null) middle.Location = new Point((Width - middle.Width) / 2, (Height - middle.Height) / 2);
+    }
+}
+
 class FlatBtn : Button
 {
     bool hover, down;
 
     protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
-    protected override void OnMouseLeave(EventArgs e) { hover = down = false; Invalidate(); base.OnMouseLeave(e); }
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        hover = down = false; Invalidate(); base.OnMouseLeave(e);
+        var row = Parent as OptionRow;
+        if (row != null && row.Join != 0) row.RefreshHover();
+    }
     protected override void OnMouseDown(MouseEventArgs e) { down = true; Invalidate(); base.OnMouseDown(e); }
     protected override void OnMouseUp(MouseEventArgs e) { down = false; Invalidate(); base.OnMouseUp(e); }
     protected override void OnEnabledChanged(EventArgs e) { Invalidate(); base.OnEnabledChanged(e); }
@@ -2469,6 +2775,8 @@ class FlatBtn : Button
     {
         var g = e.Graphics;
         Color behind = Parent != null ? Parent.BackColor : Theme.Bg;
+        var onRow = Parent as OptionRow;
+        if (onRow != null && onRow.Join != 0) behind = onRow.JoinFill;
         bool primary = BackColor.ToArgb() == Theme.Accent.ToArgb();
         Color top, bottom, border, fore = ForeColor;
         if (!Enabled) { top = bottom = Theme.Card; border = Theme.Border; fore = Theme.Muted; }
@@ -2485,6 +2793,23 @@ class FlatBtn : Button
             border = Focused && ShowFocusCues ? Theme.Highlight : FlatAppearance.BorderColor;
         }
         Theme.Surface(g, ClientRectangle, behind, top, bottom, border, false);
+        int icon = Theme.D(18);
+        string name = Lucide.ForGlyph(Text);
+        if (name != null)   // an icon button: the Lucide icon instead of the glyph
+        {
+            Lucide.Draw(g, name, new Rectangle((Width - icon) / 2, (Height - icon) / 2, icon, icon), fore);
+            return;
+        }
+        if (Text.EndsWith("▾") && Lucide.Has("chevron-down"))   // a menu button: its text, then a chevron
+        {
+            string label = Theme.TitleCase(Text.TrimEnd('▾', ' '));
+            int small = Theme.D(14), gap = Theme.D(6);
+            int tw = TextRenderer.MeasureText(g, label, Font, Size.Empty, TextFormatFlags.NoPadding).Width;
+            int x = (Width - tw - gap - small) / 2;
+            TextRenderer.DrawText(g, label, Font, new Rectangle(x, 0, tw + 2, Height), fore, TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
+            Lucide.Draw(g, "chevron-down", new Rectangle(x + tw + gap, (Height - small) / 2, small, small), fore, 2.5f);
+            return;
+        }
         TextRenderer.DrawText(g, Theme.TitleCase(Text), Font, ClientRectangle, fore,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
     }
@@ -2525,6 +2850,8 @@ class OptionRow : Control
     // column headers above the list (Virtual Machines), so each row shows just the values, with the status in
     // its own column before them.
     public Tuple<string, string>[] Stats;
+    // A smaller line under each stat (a running system's live value goes above what it was given: "of 16 cores").
+    public string[] StatSubs;
     public const int StatColW = 86, StatusColW = 76, Pad = 18;
     bool selected, hover;
 
@@ -2538,8 +2865,22 @@ class OptionRow : Control
     public bool Selected { get { return selected; } set { selected = value; Invalidate(); } }
     // Drawn without a box (just the list's background) unless pointed at or selected, like a GTK list.
     public bool Flat;
-    protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
-    protected override void OnMouseLeave(EventArgs e) { hover = linkHover = false; Invalidate(); base.OnMouseLeave(e); }
+    // Pixels kept clear on the right for the row's own buttons (Virtual Machines' Start and Settings).
+    public int Reserve;
+    // Part of one card with the rows around it (like GTK's boxed list): 1 the first row (its top corners are
+    // round), 2 the last (bottom corners, no line under it), 3 the only one; 0 a row of its own.
+    // Joined rows show no selection.
+    public int Join;
+    // A joined row's colour, which the buttons on it paint their corners with (so none show the page behind).
+    public Color JoinFill { get { return hover ? Theme.Mix(Theme.Card, Theme.Text, 0.04) : Theme.Card; } }
+    protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(Join != 0); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { linkHover = false; RefreshHover(); base.OnMouseLeave(e); }
+    // Pointing at one of the row's own buttons still counts as pointing at the row.
+    public void RefreshHover()
+    {
+        hover = Join != 0 && ClientRectangle.Contains(PointToClient(Cursor.Position));
+        Invalidate(Join != 0);
+    }
 
     // A web page for the row (a distribution's home page), shown as "Website ↗" on two-line rows; clicking it
     // opens the page in the browser, and the rest of the row still selects it.
@@ -2568,7 +2909,22 @@ class OptionRow : Control
     {
         var g = e.Graphics;
         var behind = Parent != null ? Parent.BackColor : Theme.Bg;
-        if (Flat && !selected && !hover) g.Clear(behind);   // a list row: no box until it's pointed at or chosen
+        if (Join != 0)
+        {
+            g.Clear(behind);
+            var mode = g.SmoothingMode;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            bool first = (Join & 1) != 0, last = (Join & 2) != 0;
+            var r = new Rectangle(0, 0, Width - 1, Height - (last ? 1 : 0));
+            using (var path = Theme.Shape(r, Theme.D(Theme.Radius + 4), first, last))
+            {
+                using (var b = new SolidBrush(JoinFill)) g.FillPath(b, path);
+                using (var pen = new Pen(Theme.Mix(Theme.Border, Theme.Card, 0.3))) g.DrawPath(pen, path);
+            }
+            g.SmoothingMode = mode;
+            if (!last) using (var pen = new Pen(Theme.Mix(Theme.Border, Theme.Card, 0.3))) g.DrawLine(pen, 0, Height - 1, Width, Height - 1);
+        }
+        else if (Flat && !selected && !hover) g.Clear(behind);   // a list row: no box until it's pointed at or chosen
         else
             Theme.Surface(g, ClientRectangle, behind,
                 selected ? Theme.SelectedTop : hover ? Theme.HoverTop : Theme.CardTop,
@@ -2577,15 +2933,23 @@ class OptionRow : Control
         int pad = Theme.D(18), half = Height / 2;
         var flags = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
         int textW = Width - pad * 2;
-        int right = Width - pad;   // the status and any stat columns are laid out leftwards from here
+        int right = Width - pad - Reserve;   // the status and any stat columns are laid out leftwards from here
         bool statusDone = false;
         if (Stats != null && Height < Theme.D(64))
         {
             int colW = Theme.D(StatColW);
-            foreach (var s in Stats.Reverse())
+            for (int i = Stats.Length - 1; i >= 0; i--)
             {
-                TextRenderer.DrawText(g, s.Item2, Theme.Bold, new Rectangle(right - colW, 0, colW, Height), Theme.Text,
-                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+                string sub = StatSubs != null && i < StatSubs.Length ? StatSubs[i] : null;
+                var cellFlags = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis;
+                if (string.IsNullOrEmpty(sub))
+                    TextRenderer.DrawText(g, Stats[i].Item2, Theme.Bold, new Rectangle(right - colW, 0, colW, Height), Theme.Text, cellFlags);
+                else
+                {
+                    // Lined up with the name and the line under it.
+                    TextRenderer.DrawText(g, Stats[i].Item2, Theme.Bold, new Rectangle(right - colW, Theme.D(3), colW, half - Theme.D(3)), Theme.Text, cellFlags);
+                    TextRenderer.DrawText(g, sub, Theme.Small, new Rectangle(right - colW, half, colW, half - Theme.D(4)), Theme.Muted, cellFlags);
+                }
                 right -= colW;
             }
             using (var p = new Pen(Theme.Border)) g.DrawLine(p, right - Theme.D(10), Theme.D(12), right - Theme.D(10), Height - Theme.D(12));
@@ -3088,6 +3452,8 @@ class OptionList : ScrollPanel
     public int RightInset;
     // Rows without a box of their own (see OptionRow.Flat), for a long list such as search results.
     public bool FlatRows;
+    // Design units between rows; 0 for rows joined into one card (see OptionRow.Join).
+    public int Gap = 6;
 
     public OptionList()
     {
@@ -3125,7 +3491,7 @@ class OptionList : ScrollPanel
     {
         get
         {
-            int gap = Theme.D(6), total = 0;
+            int gap = Theme.D(Gap), total = 0;
             foreach (var r in rows) total += H(r) + gap;
             return rows.Count > 0 ? total - gap : 0;
         }
@@ -3137,7 +3503,7 @@ class OptionList : ScrollPanel
     void LayoutRows()
     {
         if (updates > 0) return;
-        int gap = Theme.D(6), w = ClientSize.Width - RightInset, view = ClientSize.Height, y = -ScrollY;
+        int gap = Theme.D(Gap), w = ClientSize.Width - RightInset, view = ClientSize.Height, y = -ScrollY;
         var moves = new List<KeyValuePair<Control, Rectangle>>();
         SuspendLayout();
         foreach (var r in rows)
@@ -3166,7 +3532,7 @@ class OptionList : ScrollPanel
             for (int i = 0; i < rows.Count; i++) rows[i].Selected = i == value;
             if (value >= 0 && value < rows.Count)
             {
-                int top = 0, gap = Theme.D(6);
+                int top = 0, gap = Theme.D(Gap);
                 for (int i = 0; i < value; i++) top += H(rows[i]) + gap;
                 ShowRange(top, top + H(rows[value]));
             }
@@ -3180,6 +3546,321 @@ class OptionList : ScrollPanel
 
 // A text box of several lines with the overlay scroll bar instead of Windows' one. The edit control still
 // scrolls itself (keys, typing); the wheel and the bar, painted in its right margin, scroll it from here.
+// The app's icons: Lucide (lucide.dev, ISC license), the same SVG files the Linux and Mac editions use, embedded
+// in the exe as icon-<name>.svg and drawn here as lines in the text colour. Only what Lucide's outline icons use is
+// read: path, line, polyline, polygon, rect, circle and ellipse, all stroked 2 units wide on a 24-unit grid.
+static class Lucide
+{
+    static readonly Dictionary<string, GraphicsPath> cache = new Dictionary<string, GraphicsPath>();
+    // Dots: Lucide writes them as lines a hundredth of a unit long ("M12 8h.01"), which GDI+ doesn't draw.
+    static readonly Dictionary<string, List<PointF>> dots = new Dictionary<string, List<PointF>>();
+
+    // The Segoe MDL2 glyphs (and text icons) buttons were made with, and the Lucide icon each now shows.
+    static readonly Dictionary<string, string> forGlyph = new Dictionary<string, string> {
+        { "\uE713", "settings" }, { "\uE700", "menu" }, { "\uE72B", "arrow-left" }, { "\uE8BB", "x" },
+        { "\uE70F", "pencil" }, { ">_", "terminal" },
+    };
+
+    public static string ForGlyph(string text) { string n; return text != null && forGlyph.TryGetValue(text, out n) && Has(n) ? n : null; }
+
+    public static bool Has(string name) { return Load(name) != null; }
+
+    public static void Draw(Graphics g, string name, Rectangle box, Color color, float strokeUnits = 2f)
+    {
+        var shape = Load(name);
+        if (shape == null) return;
+        int size = Math.Min(box.Width, box.Height);
+        float s = size / 24f;
+        using (var p = (GraphicsPath)shape.Clone())
+        using (var m = new Matrix())
+        {
+            m.Translate(box.X + (box.Width - size) / 2f, box.Y + (box.Height - size) / 2f);
+            m.Scale(s, s);
+            p.Transform(m);
+            var mode = g.SmoothingMode;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            float width = Math.Max(1f, strokeUnits * s);
+            using (var pen = new Pen(color, width) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round })
+                g.DrawPath(pen, p);
+            List<PointF> spots;
+            if (dots.TryGetValue(name, out spots) && spots.Count > 0)
+            {
+                var pts = spots.ToArray();
+                m.TransformPoints(pts);
+                using (var b = new SolidBrush(color))
+                    foreach (var pt in pts) g.FillEllipse(b, pt.X - width / 2, pt.Y - width / 2, width, width);
+            }
+            g.SmoothingMode = mode;
+        }
+    }
+
+    static GraphicsPath Load(string name)
+    {
+        GraphicsPath p;
+        if (cache.TryGetValue(name, out p)) return p;
+        try
+        {
+            using (var st = typeof(Lucide).Assembly.GetManifestResourceStream("icon-" + name + ".svg"))
+                if (st != null) using (var r = new StreamReader(st)) { var found = new List<PointF>(); p = Parse(r.ReadToEnd(), found); dots[name] = found; }
+        }
+        catch { p = null; }
+        cache[name] = p;
+        return p;
+    }
+
+    static float A(string tag, string attr, float otherwise = 0)
+    {
+        var m = Regex.Match(tag, "\\s" + attr + "=\"([^\"]*)\"");
+        float v;
+        return m.Success && float.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out v) ? v : otherwise;
+    }
+
+    static GraphicsPath Parse(string svg, List<PointF> spots)
+    {
+        var p = new GraphicsPath();
+        foreach (Match el in Regex.Matches(svg, "<(path|line|polyline|polygon|rect|circle|ellipse)\\b([^>]*)>"))
+        {
+            string kind = el.Groups[1].Value, tag = " " + el.Groups[2].Value;
+            p.StartFigure();
+            switch (kind)
+            {
+                case "path": PathData(p, Regex.Match(tag, "\\sd=\"([^\"]*)\"").Groups[1].Value, spots); break;
+                case "line": p.AddLine(A(tag, "x1"), A(tag, "y1"), A(tag, "x2"), A(tag, "y2")); break;
+                case "circle": { float r = A(tag, "r"); p.AddEllipse(A(tag, "cx") - r, A(tag, "cy") - r, 2 * r, 2 * r); break; }
+                case "ellipse": { float rx = A(tag, "rx"), ry = A(tag, "ry"); p.AddEllipse(A(tag, "cx") - rx, A(tag, "cy") - ry, 2 * rx, 2 * ry); break; }
+                case "rect":
+                {
+                    float x = A(tag, "x"), y = A(tag, "y"), w = A(tag, "width"), h = A(tag, "height");
+                    float rx = A(tag, "rx", A(tag, "ry")), ry = A(tag, "ry", rx);
+                    rx = Math.Min(rx, w / 2); ry = Math.Min(ry, h / 2);
+                    if (rx <= 0 || ry <= 0) { p.AddRectangle(new RectangleF(x, y, w, h)); break; }
+                    p.AddArc(x, y, 2 * rx, 2 * ry, 180, 90); p.AddArc(x + w - 2 * rx, y, 2 * rx, 2 * ry, 270, 90);
+                    p.AddArc(x + w - 2 * rx, y + h - 2 * ry, 2 * rx, 2 * ry, 0, 90); p.AddArc(x, y + h - 2 * ry, 2 * rx, 2 * ry, 90, 90);
+                    p.CloseFigure();
+                    break;
+                }
+                default:   // polyline, polygon
+                {
+                    var n = Numbers(Regex.Match(tag, "\\spoints=\"([^\"]*)\"").Groups[1].Value);
+                    var pts = new List<PointF>();
+                    for (int i = 0; i + 1 < n.Count; i += 2) pts.Add(new PointF(n[i], n[i + 1]));
+                    if (pts.Count > 1) p.AddLines(pts.ToArray());
+                    if (kind == "polygon") p.CloseFigure();
+                    break;
+                }
+            }
+        }
+        return p;
+    }
+
+    static List<float> Numbers(string s)
+    {
+        return Regex.Matches(s, "[-+]?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?").Cast<Match>()
+            .Select(m => float.Parse(m.Value, System.Globalization.CultureInfo.InvariantCulture)).ToList();
+    }
+
+    // SVG path data: M L H V C S Q T A Z, absolute and relative.
+    static void PathData(GraphicsPath p, string d, List<PointF> spots)
+    {
+        int i = 0;
+        char cmd = ' ';
+        PointF cur = PointF.Empty, start = PointF.Empty, ctrl = PointF.Empty;
+        char prev = ' ';
+        Action skip = () => { while (i < d.Length && (char.IsWhiteSpace(d[i]) || d[i] == ',')) i++; };
+        Func<float> num = () =>
+        {
+            skip();
+            var m = Regex.Match(d.Substring(i), "^[-+]?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?");
+            if (!m.Success) throw new FormatException("path data");
+            i += m.Length;
+            return float.Parse(m.Value, System.Globalization.CultureInfo.InvariantCulture);
+        };
+        Func<bool> flag = () => { skip(); return d[i++] == '1'; };   // arc flags can run together ("01")
+        while (true)
+        {
+            skip();
+            if (i >= d.Length) break;
+            if (char.IsLetter(d[i])) cmd = d[i++];
+            else if (cmd == 'M') cmd = 'L'; else if (cmd == 'm') cmd = 'l';   // more pairs after a move are lines
+            bool rel = char.IsLower(cmd);
+            float ox = rel ? cur.X : 0, oy = rel ? cur.Y : 0;
+            switch (char.ToUpper(cmd))
+            {
+                case 'M': cur = start = new PointF(ox + num(), oy + num()); p.StartFigure(); break;
+                case 'L': { var to = new PointF(ox + num(), oy + num()); Line(p, cur, to, spots); cur = to; break; }
+                case 'H': { var to = new PointF(ox + num(), cur.Y); Line(p, cur, to, spots); cur = to; break; }
+                case 'V': { var to = new PointF(cur.X, oy + num()); Line(p, cur, to, spots); cur = to; break; }
+                case 'C':
+                {
+                    var c1 = new PointF(ox + num(), oy + num()); var c2 = new PointF(ox + num(), oy + num()); var to = new PointF(ox + num(), oy + num());
+                    p.AddBezier(cur, c1, c2, to); ctrl = c2; cur = to; break;
+                }
+                case 'S':
+                {
+                    var c1 = "CcSs".IndexOf(prev) >= 0 ? new PointF(2 * cur.X - ctrl.X, 2 * cur.Y - ctrl.Y) : cur;
+                    var c2 = new PointF(ox + num(), oy + num()); var to = new PointF(ox + num(), oy + num());
+                    p.AddBezier(cur, c1, c2, to); ctrl = c2; cur = to; break;
+                }
+                case 'Q':
+                case 'T':
+                {
+                    PointF q = char.ToUpper(cmd) == 'Q' ? new PointF(ox + num(), oy + num())
+                        : "QqTt".IndexOf(prev) >= 0 ? new PointF(2 * cur.X - ctrl.X, 2 * cur.Y - ctrl.Y) : cur;
+                    var to = new PointF(ox + num(), oy + num());
+                    p.AddBezier(cur, new PointF(cur.X + 2f / 3 * (q.X - cur.X), cur.Y + 2f / 3 * (q.Y - cur.Y)),
+                        new PointF(to.X + 2f / 3 * (q.X - to.X), to.Y + 2f / 3 * (q.Y - to.Y)), to);
+                    ctrl = q; cur = to; break;
+                }
+                case 'A':
+                {
+                    float rx = num(), ry = num(), rot = num(); bool large = flag(), sweep = flag();
+                    var to = new PointF(ox + num(), oy + num());
+                    Arc(p, cur, rx, ry, rot, large, sweep, to); cur = to; break;
+                }
+                case 'Z': p.CloseFigure(); cur = start; break;
+                default: return;
+            }
+            prev = cmd;
+        }
+    }
+
+    static void Line(GraphicsPath p, PointF a, PointF b, List<PointF> spots)
+    {
+        if (Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y) < 0.1f) spots.Add(a);   // a dot
+        else p.AddLine(a, b);
+    }
+
+    // An SVG arc as Bézier curves (the endpoint form converted to the centre form, then quarter turns at most).
+    static void Arc(GraphicsPath p, PointF a, double rx, double ry, double rotation, bool large, bool sweep, PointF b)
+    {
+        if (rx == 0 || ry == 0 || (a.X == b.X && a.Y == b.Y)) { p.AddLine(a, b); return; }
+        double phi = rotation * Math.PI / 180, cos = Math.Cos(phi), sin = Math.Sin(phi);
+        double dx = (a.X - b.X) / 2.0, dy = (a.Y - b.Y) / 2.0;
+        double x1 = cos * dx + sin * dy, y1 = -sin * dx + cos * dy;
+        rx = Math.Abs(rx); ry = Math.Abs(ry);
+        double lam = x1 * x1 / (rx * rx) + y1 * y1 / (ry * ry);
+        if (lam > 1) { rx *= Math.Sqrt(lam); ry *= Math.Sqrt(lam); }
+        double num = rx * rx * ry * ry - rx * rx * y1 * y1 - ry * ry * x1 * x1, den = rx * rx * y1 * y1 + ry * ry * x1 * x1;
+        double co = Math.Sqrt(Math.Max(0, num / den)) * (large == sweep ? -1 : 1);
+        double cxp = co * rx * y1 / ry, cyp = -co * ry * x1 / rx;
+        double cx = cos * cxp - sin * cyp + (a.X + b.X) / 2.0, cy = sin * cxp + cos * cyp + (a.Y + b.Y) / 2.0;
+        Func<double, double, double, double, double> ang = (ux, uy, vx, vy) => Math.Atan2(ux * vy - uy * vx, ux * vx + uy * vy);
+        double t1 = ang(1, 0, (x1 - cxp) / rx, (y1 - cyp) / ry);
+        double dt = ang((x1 - cxp) / rx, (y1 - cyp) / ry, (-x1 - cxp) / rx, (-y1 - cyp) / ry);
+        if (!sweep && dt > 0) dt -= 2 * Math.PI; else if (sweep && dt < 0) dt += 2 * Math.PI;
+        int n = Math.Max(1, (int)Math.Ceiling(Math.Abs(dt) / (Math.PI / 2) - 1e-9));
+        double step = dt / n, k = 4.0 / 3 * Math.Tan(step / 4);
+        Func<double, PointF> at = t => new PointF((float)(cx + rx * Math.Cos(t) * cos - ry * Math.Sin(t) * sin), (float)(cy + rx * Math.Cos(t) * sin + ry * Math.Sin(t) * cos));
+        Func<double, PointF> tangent = t => new PointF((float)(-rx * Math.Sin(t) * cos - ry * Math.Cos(t) * sin), (float)(-rx * Math.Sin(t) * sin + ry * Math.Cos(t) * cos));
+        for (int s = 0; s < n; s++)
+        {
+            double ta = t1 + s * step, tb = ta + step;
+            PointF pa = at(ta), pb = at(tb), da = tangent(ta), db = tangent(tb);
+            p.AddBezier(pa, new PointF((float)(pa.X + k * da.X), (float)(pa.Y + k * da.Y)), new PointF((float)(pb.X - k * db.X), (float)(pb.Y - k * db.Y)), pb);
+        }
+    }
+}
+
+// Rounds a text box like the other fields (and the Linux edition's entries): Windows' square border is replaced by
+// a frame drawn here, a few pixels wide, with rounded corners, so the text sits inside it. The accent colour marks
+// the box with the keyboard focus.
+class RoundBox : NativeWindow
+{
+    [DllImport("user32.dll")] static extern IntPtr GetWindowDC(IntPtr h);
+    [DllImport("user32.dll")] static extern int ReleaseDC(IntPtr h, IntPtr dc);
+    [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    [StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }
+    const int WM_NCCALCSIZE = 0x83, WM_NCHITTEST = 0x84, WM_NCPAINT = 0x85, HTNOWHERE = 0, HTCLIENT = 1, HTBORDER = 18;
+    readonly TextBox box;
+
+    public static void Attach(TextBox t)
+    {
+        int h = t.Height;
+        t.AutoSize = false;
+        t.BorderStyle = BorderStyle.None;
+        t.Height = h;
+        new RoundBox(t);
+    }
+
+    RoundBox(TextBox t)
+    {
+        box = t;
+        // These handlers also keep this object alive as long as the box.
+        t.HandleCreated += delegate { Hook(); };
+        t.HandleDestroyed += delegate { ReleaseHandle(); };
+        t.Resize += delegate { Frame(); };
+        t.GotFocus += delegate { Frame(); };
+        t.LostFocus += delegate { Frame(); };
+        t.EnabledChanged += delegate { Frame(); };
+        t.BackColorChanged += delegate { Frame(); };
+        if (t.IsHandleCreated) Hook();
+    }
+
+    void Hook() { if (Handle != box.Handle) { if (Handle != IntPtr.Zero) ReleaseHandle(); AssignHandle(box.Handle); } Frame(); }
+
+    // Has Windows work out the frame again (WM_NCCALCSIZE) and draw it (WM_NCPAINT).
+    void Frame() { if (Handle != IntPtr.Zero) SetWindowPos(Handle, IntPtr.Zero, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0004 | 0x0010 | 0x0020); }
+
+    int InsetX { get { return Theme.D(4); } }
+    int InsetY
+    {
+        get
+        {
+            if (box.Multiline) return Theme.D(4);
+            return Math.Max(Theme.D(2), (box.Height - box.Font.Height) / 2);   // one line: centred
+        }
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        switch (m.Msg)
+        {
+            case WM_NCCALCSIZE:
+            {
+                base.WndProc(ref m);
+                var r = (RECT)Marshal.PtrToStructure(m.LParam, typeof(RECT));
+                r.Left += InsetX; r.Right -= InsetX; r.Top += InsetY; r.Bottom -= InsetY;
+                Marshal.StructureToPtr(r, m.LParam, false);
+                m.Result = IntPtr.Zero;
+                return;
+            }
+            case WM_NCHITTEST:
+                base.WndProc(ref m);
+                // The frame counts as the box: clicking it puts the caret in, as on its text.
+                if ((int)m.Result == HTNOWHERE || (int)m.Result == HTBORDER) m.Result = (IntPtr)HTCLIENT;
+                return;
+            case WM_NCPAINT:
+                base.WndProc(ref m);
+                Paint();
+                m.Result = IntPtr.Zero;
+                return;
+        }
+        base.WndProc(ref m);
+    }
+
+    void Paint()
+    {
+        IntPtr dc = GetWindowDC(Handle);
+        if (dc == IntPtr.Zero) return;
+        try
+        {
+            using (var g = Graphics.FromHdc(dc))
+            {
+                int w = box.Width, h = box.Height;
+                g.ExcludeClip(new Rectangle(InsetX, InsetY, w - InsetX * 2, h - InsetY * 2));
+                using (var b = new SolidBrush(box.Parent != null ? box.Parent.BackColor : Theme.Bg)) g.FillRectangle(b, 0, 0, w, h);
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                using (var path = Theme.Shape(new Rectangle(0, 0, w - 1, h - 1), Theme.D(6), true, true))
+                {
+                    using (var b = new SolidBrush(box.BackColor)) g.FillPath(b, path);
+                    using (var p = new Pen(box.Focused && !box.ReadOnly ? Theme.Accent : Theme.Border)) g.DrawPath(p, path);
+                }
+            }
+        }
+        finally { ReleaseDC(Handle, dc); }
+    }
+}
+
 class NoteBox : TextBox
 {
     [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, IntPtr l);
@@ -3364,30 +4045,59 @@ class Page : ScrollPanel
     // Pages are laid out for an 84-tall logo; the logo is now 56 tall, so everything below it moves up.
     const int LogoH = 56, LayoutLogoH = 84;
     readonly int shift;
+    // A column that widens with the window, up to this many design units (0: a fixed width). Controls anchored
+    // Left and Right grow with it; ones anchored Right move with its right edge.
+    public int MaxWidth;
+    // The room kept either side of a widening column, as at the default window size.
+    const int SideRoom = 110;
 
-    public Page(int colHeight, bool logo = true)
+    // `width`: the column's width in design units (Virtual Machines is wider, for each row's buttons).
+    public Page(int colHeight, bool logo = true, int width = 640)
     {
         Dock = DockStyle.Fill;
         BackColor = Theme.Bg;
         Scrolls = logo;   // with the overlay scroll bar when the window is shorter than the page
         Col.BackColor = Theme.Bg;
         shift = logo ? LayoutLogoH - LogoH : 0;
-        Col.Size = new Size(Theme.D(640), Theme.D(Math.Max(0, colHeight - shift)));
+        Col.Size = new Size(Theme.D(width), Theme.D(Math.Max(0, colHeight - shift)));
         Controls.Add(Col);
+        minWidth = Col.Width;
         if (logo)
         {
-            var l = new PixelLogo { Px = 7 };
-            l.SetBounds(0, 0, Theme.D(640), Theme.D(LogoH));
+            var l = new PixelLogo { Px = 7, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+            l.SetBounds(0, 0, Theme.D(width), Theme.D(LogoH));
             Col.Controls.Add(l);
         }
     }
 
+    readonly int minWidth;
+
     protected override void OnResize(EventArgs e)
     {
+        if (MaxWidth > 0)
+        {
+            int w = Math.Max(minWidth, Math.Min(Theme.D(MaxWidth), ClientSize.Width - 2 * Theme.D(SideRoom)));
+            if (w != Col.Width) Col.Width = w;
+        }
         int x = Math.Max(0, (ClientSize.Width - Col.Width) / 2);
         if (Fill != null) { Col.Location = new Point(x, -ScrollY); Fill(); }
         else Col.Location = new Point(x, Math.Max(0, (ClientSize.Height - Col.Height) / 2) - ScrollY);
         base.OnResize(e);   // keeps the scroll position within the column's new place (e.g. after notifications shrink the page)
+    }
+
+    // A page's Back and Next (or Install) buttons: the same width, fitted to the longer text, 36 tall like the
+    // header's buttons, at the column's left and right edges. Either can be null (the first page has no Back).
+    public void Nav(Button back, Button next)
+    {
+        int w = Math.Max(back != null ? Sheet.SnugWidth(back.Text) : 0, next != null ? Sheet.SnugWidth(next.Text) : 0) + 8;
+        foreach (var b in new[] { back, next })
+        {
+            if (b == null) continue;
+            b.Top += (b.Height - Theme.D(36)) / 2;
+            b.Size = new Size(Theme.D(w), Theme.D(36));
+        }
+        if (back != null) back.Left = 0;
+        if (next != null) { next.Left = Col.Width - next.Width; next.Anchor = AnchorStyles.Top | AnchorStyles.Right; }
     }
 
     public T Add<T>(T c, int x, int y, int w, int h) where T : Control
@@ -3408,6 +4118,8 @@ class Page : ScrollPanel
     public TextBox Input(string text, int x, int y, int w)
     {
         var t = Add(new TextBox { Text = text, Font = Theme.Body, BackColor = Theme.Card, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle }, x, y, w, 26);
+        RoundBox.Attach(t);
+        t.Height = Theme.D(30);
         Native.TextMargins(t);
         return t;
     }
@@ -3416,6 +4128,7 @@ class Page : ScrollPanel
     public TextBox Notes(string text, int x, int y, int w, int h)
     {
         var t = Add(new NoteBox { Text = text, Font = Theme.Body, BackColor = Theme.Card, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle }, x, y, w, h);
+        RoundBox.Attach(t);
         Native.TextMargins(t);
         return t;
     }
@@ -3610,6 +4323,8 @@ partial class MainForm : Form
     bool trayAfterStart;
     bool busy, cancelRequested, quitting, trayHintShown, restartPending;
     readonly NoticeBar notices = new NoticeBar();   // the notification area above every page
+    readonly HeaderBar header = new HeaderBar();    // Create / Back, the title or tabs, and ☰ / Save, above it
+    TextBox searchBox;                              // Choose a Linux OS's search (Ctrl+F)
     string stagedUpdate;    // a verified update waiting to be applied when Try Linux quits
     Page page;
     Label pStatus, pDetail, pTip;
@@ -3637,6 +4352,7 @@ partial class MainForm : Form
         tray.ContextMenuStrip.Opening += delegate { BuildTrayMenu(); };
         tray.DoubleClick += delegate { ShowLauncher(); };
         Controls.Add(notices);
+        Controls.Add(header);   // docked above the notifications
 
         AppSettings.Load();
         Winq.Detect();
@@ -3651,6 +4367,50 @@ partial class MainForm : Form
     {
         base.OnHandleCreated(e);
         Native.DarkTitleBar(Handle);
+        Native.RedrawFrame(Handle);   // drops the title bar (see WndProc)
+        // Tall enough for the tallest page (Choose a Linux OS) under the header bar, so its Back and Next show
+        // without scrolling. Set after the title bar is gone, from the frame Windows now actually draws.
+        var area = System.Windows.Forms.Screen.FromHandle(Handle).WorkingArea;
+        int frameW = Width - ClientSize.Width, frameH = Height - ClientSize.Height;
+        Size = new Size(Math.Min(D(980), area.Width - 40) + frameW, Math.Min(D(830), area.Height - 40) + frameH);
+    }
+
+    // No Windows title bar, like the Linux edition: the header bar takes its place. The window keeps its resizing
+    // edges, snapping and shadow; the header bar's empty space moves it, and double-clicking it maximizes.
+    [StructLayout(LayoutKind.Sequential)] struct WinRect { public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll")] static extern int GetSystemMetrics(int index);
+    [DllImport("user32.dll")] static extern bool IsZoomed(IntPtr h);
+    const int WM_NCCALCSIZE = 0x83, WM_NCHITTEST = 0x84, HTCLIENT = 1, HTCAPTION = 2, HTTOP = 12, HTTOPLEFT = 13, HTTOPRIGHT = 14;
+
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == WM_NCCALCSIZE && m.WParam != IntPtr.Zero)
+        {
+            // Windows works out the side and bottom edges as usual; the top stays where the window starts.
+            var before = (WinRect)Marshal.PtrToStructure(m.LParam, typeof(WinRect));
+            base.WndProc(ref m);
+            var after = (WinRect)Marshal.PtrToStructure(m.LParam, typeof(WinRect));
+            after.Top = before.Top;
+            // Maximized, the window reaches past the screen by its frame on every side, so the client is inset by it.
+            if (IsZoomed(Handle))   // WindowState can still say Normal while Windows is maximizing it
+            {
+                int frame = GetSystemMetrics(33) + GetSystemMetrics(92);   // SM_CYSIZEFRAME + SM_CXPADDEDBORDER
+                after = new WinRect { Left = before.Left + frame, Top = before.Top + frame, Right = before.Right - frame, Bottom = before.Bottom - frame };
+            }
+            Marshal.StructureToPtr(after, m.LParam, false);
+            m.Result = IntPtr.Zero;
+            return;
+        }
+        base.WndProc(ref m);
+        if (m.Msg == WM_NCHITTEST && (int)m.Result == HTCLIENT)
+        {
+            var pt = PointToClient(new Point(unchecked((short)(long)m.LParam), unchecked((short)((long)m.LParam >> 16))));
+            int edge = GetSystemMetrics(33) + GetSystemMetrics(92);
+            if (!IsZoomed(Handle) && pt.Y < edge)
+                m.Result = (IntPtr)(pt.X < edge * 2 ? HTTOPLEFT : pt.X >= ClientSize.Width - edge * 2 ? HTTOPRIGHT : HTTOP);
+            else if (header.Visible && pt.Y < header.Bottom)
+                m.Result = (IntPtr)HTCAPTION;
+        }
     }
 
     protected override void OnShown(EventArgs e)
@@ -3700,7 +4460,11 @@ partial class MainForm : Form
     void SetPage(Page p)
     {
         if (tipTimer != null) { tipTimer.Dispose(); tipTimer = null; }
+        if (liveTimer != null) { liveTimer.Dispose(); liveTimer = null; }
+        homeRows = new List<OptionRow>();
         SuspendLayout();
+        header.Clear();   // the page sets its own after this
+        searchBox = null;
         var old = page;
         page = p;
         Controls.Add(p);
@@ -3711,85 +4475,387 @@ partial class MainForm : Form
 
     // ------------------------------------------------------------ pages
 
+    // Virtual Machines: like the Linux edition, the header bar has Create and the ☰ menu, and each system's
+    // row has its own Console, Start (or Power) and Settings buttons. Double-click a row to start
+    // it.
     void ShowHome()
     {
         var vms = VmConfig.All();
         if (vms.Count == 0) { ShowChoose(); return; }
 
-        // Sections (logo, title, list, buttons) are spaced twice as far apart as before.
-        var p = new Page(514);
-        p.Caption("Virtual Machines", 0, 116, 640, 30, Theme.Title);
-        // Column headers for the rows' status and stats, on the title row and lined up with the rows' columns,
-        // over a divider line.
-        // 3 higher than the title's box, so their letters sit on the title's baseline.
-        int x = 640 - OptionRow.Pad;
+        const int width = 760, reserve = 196;   // the column, and the room on each row's right for its buttons
+        // The column widens with the window (names get the extra room); at the default size it's 760.
+        var p = new Page(470, true, width) { MaxWidth = 1200 };
+        p.Caption("Virtual Machines", 0, 116, 300, 30, Theme.Title);
+        // Column headers on the title's line (3 higher than its box: their letters sit on its baseline). They're
+        // laid out from the right, like the rows' stats, so they move with the column's right edge.
+        int x = width - OptionRow.Pad - reserve;
+        var right = AnchorStyles.Top | AnchorStyles.Right;
         foreach (var label in new[] { "DISK", "MEM", "CPU" })
         {
             x -= OptionRow.StatColW;
-            p.Caption(label, x, 113, OptionRow.StatColW, 30, Theme.Small, Theme.Muted, ContentAlignment.BottomLeft).BringToFront();   // over the title label
+            var c = p.Caption(label, x, 113, OptionRow.StatColW, 30, Theme.Small, Theme.Muted, ContentAlignment.BottomLeft);
+            c.Anchor = right; c.BringToFront();
         }
-        p.Caption("STATUS", x - 10 - OptionRow.StatusColW, 113, OptionRow.StatusColW, 30, Theme.Small, Theme.Muted, ContentAlignment.BottomLeft).BringToFront();
-        p.Add(new Panel { BackColor = Theme.Border }, 0, 154, 640, 1);
-        var list = p.Add(new OptionList(), 0, 166, 640, 270);
+        var st = p.Caption("STATUS", x - 10 - OptionRow.StatusColW, 113, OptionRow.StatusColW, 30, Theme.Small, Theme.Muted, ContentAlignment.BottomLeft);
+        st.Anchor = right; st.BringToFront();
+        var list = p.Add(new OptionList { Gap = 0, RowHeight = 62, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right }, 0, 160, width, 300);
+        p.Tag = "home";
+        var rows = new List<OptionRow>();
         foreach (var vm in vms)
         {
+            var v = vm;
             var row = list.AddItem(vm.DisplayName, OsLabel(vm), vm, Status(vm), On(vm) ? Theme.Success : Theme.Muted);
+            row.Reserve = D(reserve);
+            bool on = On(vm);
+            var act = new FlatBtn(on ? "Power  \u25be" : vm.PendingInstall ? "Install" : "Start", !on);
+            var console = new FlatBtn(">_") { Font = new Font("Consolas", 10f, FontStyle.Bold) };   // a terminal prompt
+            var gear = new FlatBtn("\uE713") { Font = new Font("Segoe MDL2 Assets", 10f) };
+            var tip = new ToolTip();
+            tip.SetToolTip(console, on ? "Show console" : "Open console");
+            tip.SetToolTip(gear, "Settings");
+            row.Controls.Add(console);
+            row.Controls.Add(act);
+            row.Controls.Add(gear);
+            EventHandler place = delegate
+            {
+                int h = D(34), y = (row.Height - h) / 2;
+                gear.SetBounds(row.Width - D(14) - D(38), y, D(38), h);
+                act.SetBounds(gear.Left - D(8) - D(88), y, D(88), h);
+                console.SetBounds(act.Left - D(8) - D(38), y, D(38), h);
+            };
+            console.Click += delegate { OpenConsole(v); };
+            row.Resize += place;
+            place(row, EventArgs.Empty);
+            act.Click += delegate
+            {
+                RunningVm r;
+                if (running.TryGetValue(v.Name, out r) && !r.Held)
+                {
+                    // A running system: the Power menu, with its console first.
+                    var menu = new ContextMenuStrip { Renderer = new DarkMenu(), Font = Theme.Body, ShowItemToolTips = true, ShowImageMargin = false,
+                                                      MinimumSize = new Size(act.Width, 0) };
+                    menu.Items.Add(new ToolStripMenuItem("Show console", null, delegate { ShowVm(r); }) { ToolTipText = "Brings its window to the front" });
+                    menu.Items.Add(new ToolStripSeparator());
+                    menu.Items.AddRange(PowerItems(r));
+                    foreach (ToolStripItem i in menu.Items) i.Padding = new Padding(D(6), D(3), 0, D(3));
+                    menu.Closed += delegate { BeginInvoke((Action)menu.Dispose); };
+                    menu.Show(act, new Point(0, act.Height));
+                    return;
+                }
+                if (r != null && r.Held) PowerOn(r); else Boot(v);
+            };
+            gear.Click += delegate { Sheet.ResetSections(); ShowSettings(v); };   // every section starts closed
+            rows.Add(row);
+        }
+        for (int i = 0; i < rows.Count; i++) rows[i].Join = (i == 0 ? 1 : 0) | (i == rows.Count - 1 ? 2 : 0);
+        homeRows = rows;   // again after SetPage, which clears it for the page it replaces
+        ShowLiveStats();
+        list.Activated += delegate { var vm = (VmConfig)list.SelectedTag; if (vm != null && !On(vm)) Boot(vm); };
+        ShowUpdateButton();
+        SetPage(p);
+        var create = new FlatBtn("Create", true) { Size = new Size(D(88), D(36)) };
+        create.Click += delegate { ShowChoose(); };
+        var more = new FlatBtn("") { Font = new Font("Segoe MDL2 Assets", 10f), Size = new Size(D(40), D(36)) };
+        more.Click += delegate { MainMenu().Show(more, new Point(more.Width, more.Height), ToolStripDropDownDirection.BelowLeft); };
+        header.Set(create, null, more);   // no title: the logo below already says Try Linux
+        // Running systems' activity, read every two seconds while this page is open.
+        homeRows = rows;
+        liveTimer = new Timer { Interval = 2000 };
+        liveTimer.Tick += delegate { SampleLive(); };
+        liveTimer.Start();
+        SampleLive();
+    }
+
+    List<OptionRow> homeRows = new List<OptionRow>();
+    Timer liveTimer;
+    bool sampling;
+
+    void SampleLive()
+    {
+        var vms = running.Values.Where(r => !r.Held && r.P != null).ToList();
+        if (sampling || vms.Count == 0) return;
+        sampling = true;
+        Task.Run(() => { foreach (var r in vms) r.Sample(); }).ContinueWith(t =>
+        {
+            try { BeginInvoke((Action)(() => { sampling = false; ShowLiveStats(); })); } catch { sampling = false; }
+        });
+    }
+
+    // A running system's row shows what it's doing now, above what it was given; one that's off, what it was given.
+    void ShowLiveStats()
+    {
+        foreach (var row in homeRows)
+        {
+            var vm = row.Tag as VmConfig;
+            RunningVm r;
+            if (vm == null || row.IsDisposed) continue;
             int cores, ram;
             vm.Resources(out cores, out ram);
-            row.Stats = new[] {
-                Tuple.Create("CPU", cores + (cores == 1 ? " core" : " cores")),
-                Tuple.Create("MEM", ram + " GB"),
-                Tuple.Create("DISK", DiskUsed(vm)),
-            };
+            string coresText = cores + (cores == 1 ? " core" : " cores"), ramText = ram + " GB", disk = DiskUsed(vm);
+            if (running.TryGetValue(vm.Name, out r) && !r.Held && r.CpuPct >= 0)
+            {
+                row.Stats = new[] {
+                    Tuple.Create("CPU", Math.Round(r.CpuPct) + "%"),
+                    // What Linux is using; without the balloon's report, what QEMU holds on this PC (all of it, with WHPX).
+                    Tuple.Create("MEM", r.GuestUsed >= 0 ? DiskSize(r.GuestUsed) : r.MemBytes >= 0 ? DiskSize(r.MemBytes) : ramText),
+                    Tuple.Create("DISK", r.DiskRate >= 0 ? Rate(r.DiskRate) : disk),
+                };
+                row.StatSubs = new[] { "of " + coresText, "of " + ramText, disk };
+            }
+            else
+            {
+                row.Stats = new[] { Tuple.Create("CPU", coresText), Tuple.Create("MEM", ramText), Tuple.Create("DISK", disk) };
+                row.StatSubs = null;
+            }
+            row.Invalidate();
         }
+    }
 
-        // Four equal buttons across the 640-wide column, 12 apart.
-        var add = p.Add(new FlatBtn("Create"), 0, 472, 151, 42);
-        var settings = p.Add(new FlatBtn("Settings"), 163, 472, 151, 42);
-        p.Tag = "home";
-        // Console opens the system's window; for a system that's off, the window opens with it still off.
-        var console = p.Add(new FlatBtn("Console"), 326, 472, 151, 42);
-        var start = p.Add(new FlatBtn("Start", true), 489, 472, 151, 42);
-        // A running system has Power in place of Start: a menu, so nothing powers off from one click.
-        // Double-clicking it opens its window.
-        var power = p.Add(new FlatBtn("Power  ▾") { Visible = false }, 489, 472, 151, 42);
-        power.Click += delegate
+    static string Rate(double bytesPerSecond)
+    {
+        if (bytesPerSecond < 1024) return "0 KB/s";
+        if (bytesPerSecond < 1024 * 1024) return Math.Round(bytesPerSecond / 1024) + " KB/s";
+        return (bytesPerSecond / 1024 / 1024).ToString(bytesPerSecond < 10 * 1024 * 1024 ? "0.0" : "0") + " MB/s";
+    }
+
+    // ---- the main menu (☰), its windows and keyboard shortcuts
+
+    ContextMenuStrip MainMenu()
+    {
+        var m = new ContextMenuStrip { Renderer = new DarkMenu(), Font = Theme.Body, ShowImageMargin = false };
+        Func<string, string, Action, ToolStripMenuItem> item = (text, keys, act) =>
+            new ToolStripMenuItem(text, null, delegate { act(); }) { ShortcutKeyDisplayString = keys, ShowShortcutKeys = keys.Length > 0 };
+        m.Items.Add(item("Check for Updates", "Ctrl+U", CheckForUpdatesNow));
+        m.Items.Add(new ToolStripSeparator());
+        m.Items.Add(item("Preferences", "Ctrl+,", ShowPreferences));
+        m.Items.Add(item("Keyboard Shortcuts", "Ctrl+?", ShowShortcuts));
+        m.Items.Add(item("About Try Linux", "", ShowAbout));
+        m.Items.Add(new ToolStripSeparator());
+        m.Items.Add(item("Quit Try Linux", "Ctrl+Q", QuitApp));
+        foreach (ToolStripItem i in m.Items) i.Padding = new Padding(D(6), D(4), D(6), D(4));
+        m.Closed += delegate { BeginInvoke((Action)m.Dispose); };
+        return m;
+    }
+
+    // Every keyboard shortcut, as (keys, what it does); Keyboard Shortcuts lists them.
+    static readonly string[][] Shortcuts = {
+        new[] { "General", "" },
+        new[] { "Ctrl+N", "Create a virtual machine" },
+        new[] { "Ctrl+F", "Search distributions (on Choose a Linux OS)" },
+        new[] { "Ctrl+U", "Check for updates" },
+        new[] { "Ctrl+,", "Preferences" },
+        new[] { "Ctrl+?", "Keyboard shortcuts" },
+        new[] { "Ctrl+Q", "Quit Try Linux" },
+        new[] { "Navigation", "" },
+        new[] { "Alt+←", "Back" },
+        new[] { "Esc", "Close a dialog" },
+    };
+
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        switch (keyData)
         {
-            var vm = (VmConfig)list.SelectedTag;
-            RunningVm r;
-            if (vm == null || !running.TryGetValue(vm.Name, out r)) return;
-            var menu = new ContextMenuStrip { Renderer = new DarkMenu(), Font = Theme.Body, ShowItemToolTips = true, ShowImageMargin = false,
-                                              MinimumSize = new Size(power.Width, 0) };
-            menu.Items.AddRange(PowerItems(r));
-            foreach (ToolStripItem i in menu.Items) i.Padding = new Padding(Theme.D(6), Theme.D(3), 0, Theme.D(3));
-            menu.Closed += delegate { BeginInvoke((Action)menu.Dispose); };
-            menu.Show(power, new Point(0, power.Height));
-        };
+            case Keys.Control | Keys.N: if (!busy) ShowChoose(); return true;
+            case Keys.Control | Keys.F:
+                if (searchBox != null && !searchBox.IsDisposed) { searchBox.Focus(); searchBox.SelectAll(); }
+                return true;
+            case Keys.Control | Keys.U: CheckForUpdatesNow(); return true;
+            case Keys.Control | Keys.Oemcomma: ShowPreferences(); return true;
+            case Keys.Control | Keys.OemQuestion:
+            case Keys.Control | Keys.Shift | Keys.OemQuestion: ShowShortcuts(); return true;
+            case Keys.Control | Keys.Q: QuitApp(); return true;
+            case Keys.Alt | Keys.Left:
+                // The page's Back button (in the header bar, or at the bottom of the page).
+                var back = header.Controls.OfType<FlatBtn>().Concat(page != null ? AllControls(page).OfType<FlatBtn>() : Enumerable.Empty<FlatBtn>())
+                    .FirstOrDefault(b => b.Visible && b.Enabled && ((b.Tag as string) == "back" || b.Text == "Back"));
+                if (back != null) { back.PerformClick(); return true; }
+                break;
+        }
+        return base.ProcessCmdKey(ref msg, keyData);
+    }
+
+    static IEnumerable<Control> AllControls(Control c)
+    {
+        foreach (Control child in c.Controls)
+        {
+            yield return child;
+            foreach (var d in AllControls(child)) yield return d;
+        }
+    }
+
+    void QuitApp()
+    {
+        if (running.Count > 0 && !Ask("Quit Try Linux?", "Running systems keep running, but without the tray menu.", "Quit")) return;
+        quitting = true;
+        Close();
+    }
+
+    // Check for Updates (Ctrl+U): an available update is offered straight away; otherwise GitHub is asked now.
+    async void CheckForUpdatesNow()
+    {
+        if (busy) return;
+        if (Updater.Available != null || Updater.WinqAvailable != null) { UpdateClicked(); return; }
+        string found = null, failed = null;
+        Cursor = Cursors.WaitCursor;
+        try { found = await Task.Run(() => Updater.Check(true)); }
+        catch (Exception ex) { failed = ex.Message; }
+        Cursor = Cursors.Default;
+        if (IsDisposed) return;
+        if (failed != null) { ThemedDialog.Show(this, "Couldn't check for updates", failed, null, null, "OK"); return; }
+        if (found == null && Updater.WinqAvailable == null)
+        {
+            ThemedDialog.Show(this, "Try Linux is up to date", "You have the latest Try Linux (" + Version + ")" +
+                (Winq.Version != null ? " and WINQ-EMU (" + Winq.Version + ")." : "."), null, null, "OK");
+            return;
+        }
+        Updater.Available = found;
         ShowUpdateButton();
+        UpdateClicked();
+    }
 
-        list.SelectionChanged += delegate
+    Form DialogForm(string title, int w, int h)
+    {
+        var f = new Form { Text = title, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false, ShowInTaskbar = false,
+                           StartPosition = FormStartPosition.CenterParent, BackColor = Theme.Bg, ForeColor = Theme.Text, Font = Theme.Body,
+                           ClientSize = new Size(D(w), D(h)), KeyPreview = true };
+        f.HandleCreated += delegate { Native.DarkTitleBar(f.Handle); };
+        f.KeyDown += (s2, e2) => { if (e2.KeyCode == Keys.Escape) f.Close(); };
+        return f;
+    }
+
+    // Preferences (Ctrl+,): Try Linux as a whole. Changes apply straight away.
+    void ShowPreferences()
+    {
+        bool reopen = false;
+        using (var f = DialogForm("Preferences", 640, 380))
         {
-            var vm = (VmConfig)list.SelectedTag;
-            if (vm == null) return;
-            start.Text = vm.PendingInstall ? "Install" : "Start";
-            start.Visible = !On(vm);
-            power.Visible = !start.Visible;
-        };
-        list.SelectedIndex = 0;
-        EventHandler go = delegate { var vm = (VmConfig)list.SelectedTag; if (vm != null) Boot(vm); };
-        list.Activated += go;
-        start.Click += delegate
+            var sheet = new Sheet();
+            sheet.Panel.Visible = true;
+            sheet.Section("Appearance");
+            var themePick = sheet.Row("Theme", Sheet.Combo(Theme.Titles), 160);
+            themePick.SelectedIndex = Math.Max(0, Array.IndexOf(Theme.Names, AppSettings.ThemeName));
+            var follow = sheet.Check("Follow system", AppSettings.FollowSystem);
+            sheet.Note("Light while Windows shows apps in light mode, and Dark otherwise.", 1);
+            themePick.Enabled = !follow.Checked;
+            sheet.Section("Updates");
+            var auto = sheet.Check("Check for updates automatically (once a day)", AppSettings.CheckUpdates);
+            sheet.Note("You have Try Linux " + Version + (Winq.Version != null ? " and WINQ-EMU " + Winq.Version : "") + ".", 1);
+            var check = sheet.Buttons(Sheet.Align.Left, "Check For Updates")[0];
+            EventHandler look = delegate
+            {
+                AppSettings.ThemeName = Theme.Names[Math.Max(0, themePick.SelectedIndex)];
+                AppSettings.FollowSystem = follow.Checked;
+                try { AppSettings.Save(); } catch { }
+                if (AppSettings.EffectiveTheme != Theme.Name) { reopen = true; f.Close(); }   // drawn again in the new theme
+                themePick.Enabled = !follow.Checked;
+            };
+            themePick.SelectedIndexChanged += look;
+            follow.CheckedChanged += look;
+            auto.CheckedChanged += delegate { AppSettings.CheckUpdates = auto.Checked; try { AppSettings.Save(); } catch { } };
+            check.Click += delegate { f.Close(); BeginInvoke((Action)CheckForUpdatesNow); };
+            var holder = new Panel { Dock = DockStyle.Fill, Padding = new Padding(D(20), D(10), D(20), D(10)), BackColor = Theme.Bg };
+            holder.Controls.Add(sheet.Panel);
+            f.Controls.Add(holder);
+            f.ShowDialog(this);
+        }
+        if (reopen) { RefreshTheme(); ShowPreferences(); }
+    }
+
+    // About Try Linux: versions, where things are kept, and links.
+    void ShowAbout()
+    {
+        using (var f = DialogForm("About Try Linux", 520, 430))
         {
-            var vm = (VmConfig)list.SelectedTag;
-            RunningVm r;
-            if (vm == null) return;
-            if (running.TryGetValue(vm.Name, out r) && r.Held) PowerOn(r); else Boot(vm);
-        };
-        console.Click += delegate { var vm = (VmConfig)list.SelectedTag; if (vm != null) OpenConsole(vm); };
-        add.Click += delegate { ShowChoose(); };
-        settings.Click += delegate { var vm = (VmConfig)list.SelectedTag; if (vm != null) { Sheet.ResetSections(); ShowSettings(vm); } };   // every section starts closed
-        AcceptButton = start;
-        SetPage(p);
+            Action<Control, int, int, int, int> add = (c, x, y, w, h) => { c.SetBounds(D(x), D(y), D(w), D(h)); f.Controls.Add(c); };
+            add(new PictureBox { Image = Icons.Draw(D(72)), SizeMode = PictureBoxSizeMode.CenterImage, BackColor = Theme.Bg }, 0, 22, 520, 76);
+            add(new Label { Text = "Try Linux", Font = Theme.Title, ForeColor = Theme.Text, BackColor = Theme.Bg, TextAlign = ContentAlignment.MiddleCenter }, 0, 104, 520, 34);
+            add(new Label { Text = "Version " + Version, Font = Theme.Bold, ForeColor = Theme.Highlight, BackColor = Theme.Bg, TextAlign = ContentAlignment.MiddleCenter }, 0, 138, 520, 24);
+            add(new Label { Text = "Try a Linux desktop on Windows in a virtual machine, from the official installer, checked against its published checksum.",
+                            Font = Theme.Body, ForeColor = Theme.Muted, BackColor = Theme.Bg, TextAlign = ContentAlignment.MiddleCenter }, 40, 168, 440, 44);
+            string winq = Winq.Ready ? "WINQ-EMU " + (Winq.Version ?? "") + (Updater.WinqAvailable != null ? "  (" + Updater.WinqAvailable + " available)" : "") : "WINQ-EMU isn't installed";
+            add(new Label { Text = winq + "\nStorage: " + AppSettings.Storage, Font = Theme.Small, ForeColor = Theme.Muted, BackColor = Theme.Bg,
+                            TextAlign = ContentAlignment.MiddleCenter, AutoEllipsis = true }, 20, 216, 480, 40);
+            var names = new List<string> { "Website", "Report an Issue", "WINQ-EMU Releases", "Open Storage Folder" };
+            if (!SelfInstall.IsInstalledCopy) names.Add("Install");
+            if (Updater.WinqAvailable != null) names.Add("Update WINQ-EMU");
+            int bx = 40, by = 270;
+            foreach (var n in names)
+            {
+                var b = new FlatBtn(n);
+                add(b, bx, by, 214, 36);
+                string name = n;
+                b.Click += delegate
+                {
+                    if (name == "Website") OpenUri("https://github.com/donnysaengkio/try-linux/tree/main/windows");
+                    else if (name == "Report an Issue") OpenUri("https://github.com/donnysaengkio/try-linux/issues");
+                    else if (name == "WINQ-EMU Releases") OpenUri("https://github.com/cmspam/winq-emu/releases");
+                    else if (name == "Open Storage Folder") { Directory.CreateDirectory(AppSettings.Storage); Process.Start("explorer.exe", Q(AppSettings.Storage)); }
+                    else if (name == "Install") { f.Close(); BeginInvoke((Action)InstallSelf); }
+                    else if (name == "Update WINQ-EMU") { f.Close(); BeginInvoke((Action)StartWinqUpdate); }
+                };
+                if (bx == 40) bx = 266; else { bx = 40; by += 44; }
+            }
+            f.ClientSize = new Size(D(520), D(by + (bx == 266 ? 44 : 0) + 20));
+            f.ShowDialog(this);
+        }
+    }
+
+    void InstallSelf()
+    {
+        if (!ThemedDialog.Show(this, "Install Try Linux?",
+                "Try Linux copies itself to this folder and adds itself to the Start menu, so you can delete the downloaded file:", SelfInstall.Dir,
+                "Uninstall it any time from Windows Settings > Apps > Installed apps.", "Install", "Cancel")) return;
+        try { SelfInstall.Install(); }
+        catch (Exception ex) { ThemedDialog.Show(this, "Couldn't install Try Linux", ex.Message, null, null, "OK"); return; }
+        // Open switches to the installed copy; closing the window keeps using this one for now.
+        if (!ThemedDialog.Show(this, "Try Linux is installed",
+                "Try Linux is now available in the Windows Start menu.", null, null, "Open")) return;
+        if (running.Count > 0 && !ThemedDialog.Show(this, "Open the installed copy?",
+                "Running systems keep running, but this copy's tray menu closes, so shut them down from inside Linux.",
+                null, null, "Open", "Back")) return;
+        Process.Start(SelfInstall.Exe);
+        quitting = true;
+        Close();
+    }
+
+    // Keyboard Shortcuts (Ctrl+?): each shortcut's keys as key caps, and what it does.
+    void ShowShortcuts()
+    {
+        using (var f = DialogForm("Keyboard Shortcuts", 520, 30 + Shortcuts.Length * 38))
+        {
+            f.Paint += (s2, e2) =>
+            {
+                var g = e2.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                int y = D(16);
+                var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix;
+                foreach (var row in Shortcuts)
+                {
+                    if (row[1].Length == 0)
+                    {
+                        TextRenderer.DrawText(g, row[0], Theme.Heading, new Rectangle(D(24), y, D(400), D(30)), Theme.Text, flags);
+                        y += D(38);
+                        continue;
+                    }
+                    int x = D(24);
+                    var keys = row[0].Split('+');
+                    for (int i = 0; i < keys.Length; i++)
+                    {
+                        if (i > 0) { TextRenderer.DrawText(g, "+", Theme.Small, new Rectangle(x, y, D(16), D(30)), Theme.Muted, flags | TextFormatFlags.HorizontalCenter); x += D(18); }
+                        int kw = Math.Max(D(32), TextRenderer.MeasureText(keys[i], Theme.Small).Width + D(12));
+                        var r = new Rectangle(x, y, kw, D(30));
+                        using (var path = Theme.Shape(r, D(6))) using (var b = new SolidBrush(Theme.Card)) g.FillPath(b, path);
+                        using (var path = Theme.Shape(r, D(6))) using (var pen = new Pen(Theme.Border)) g.DrawPath(pen, path);
+                        TextRenderer.DrawText(g, keys[i], Theme.Small, r, Theme.Text, flags | TextFormatFlags.HorizontalCenter);
+                        x += kw + D(2);
+                    }
+                    TextRenderer.DrawText(g, row[1], Theme.Body, new Rectangle(D(140), y, D(370), D(30)), Theme.Text, flags | TextFormatFlags.EndEllipsis);
+                    y += D(38);
+                }
+            };
+            f.ShowDialog(this);
+        }
     }
 
     // Updates are notifications: one for Try Linux and one for WINQ-EMU, each with an Update button.
@@ -3983,7 +5049,7 @@ partial class MainForm : Form
         RunningVm r;
         if (running.TryGetValue(vm.Name, out r))
             return r.Held ? "Off, console open" : (r.Paused ? "Paused" : "Running") + (r.Hidden ? ", window closed" : "");
-        return vm.PendingInstall ? "Ready to install" : "";
+        return vm.PendingInstall ? "Ready to install" : "Powered off";
     }
 
     void SetCue(TextBox box, string text)
@@ -4007,6 +5073,7 @@ partial class MainForm : Form
         p.Caption("Try Linux downloads the official installer and checks it before use.", 0, 134, 640, 22, Theme.Small, Theme.Muted, ContentAlignment.MiddleCenter);
 
         var search = p.Input("", 0, 170, 640);
+        searchBox = search;
         search.Height = Theme.D(28);
         SetCue(search, "Search distributions, e.g. KDE, Xfce or Ubuntu");
         var heading = p.Caption("Recommended", 0, 206, 640, 22, Theme.Heading, Theme.Text);
@@ -4061,12 +5128,14 @@ partial class MainForm : Form
         list.SelectedIndex = 0;
 
         int y = top + box1 + 12 + box2 + 20;
+        FlatBtn back = null;
         if (hasVms)
         {
-            var back = p.Add(new FlatBtn("Back"), 0, y, 120, 42);
+            back = p.Add(new FlatBtn("Back"), 0, y, 120, 42);
             back.Click += delegate { ShowHome(); };
         }
         var next = p.Add(new FlatBtn("Next", true), 500, y, 140, 42);
+        p.Nav(back, next);
         Action<object> choose = tag =>
         {
             var plan = new InstallPlan();
@@ -4188,6 +5257,7 @@ partial class MainForm : Form
         var back = p.Add(new FlatBtn("Back"), 0, CreateButtonsY, 120, 42);
         back.Click += delegate { ShowChoose(); };
         var next = p.Add(new FlatBtn("Next", true), 500, CreateButtonsY, 140, 42);
+        p.Nav(back, next);
 
         Action refresh = () =>
         {
@@ -4339,6 +5409,7 @@ partial class MainForm : Form
         var back = p.Add(new FlatBtn("Back"), 0, CreateButtonsY, 120, 42);
         back.Click += delegate { keep(); if (d.Plan.Own) ShowOwnInstaller(d.Plan); else ShowChoose(); };
         var next = p.Add(new FlatBtn("Next", true), 500, CreateButtonsY, 140, 42);
+        p.Nav(back, next);
         next.Click += delegate
         {
             keep();
@@ -4392,6 +5463,7 @@ partial class MainForm : Form
         var back = p.Add(new FlatBtn("Back"), 0, CreateButtonsY, 120, 42);
         back.Click += delegate { keep(); ShowCreateGeneral(d); };
         var next = p.Add(new FlatBtn("Next", true), 500, CreateButtonsY, 140, 42);
+        p.Nav(back, next);
         next.Click += delegate
         {
             keep();
@@ -4455,6 +5527,7 @@ partial class MainForm : Form
         var back = p.Add(new FlatBtn("Back"), 0, CreateButtonsY, 120, 42);
         back.Click += delegate { ShowCreateResources(d); };
         var go = p.Add(new FlatBtn(plan.Disk != null ? "Import" : "Install", true), 500, CreateButtonsY, 140, 42);
+        p.Nav(back, go);
         go.Click += delegate
         {
             var cfg = d.Cfg;
@@ -4876,6 +5949,9 @@ partial class MainForm : Form
             "-device virtio-serial",
             "-chardev socket,id=qga0,host=127.0.0.1,port=" + vm.AgentPort + ",server=on,wait=off",
             "-device virtserialport,chardev=qga0,name=org.qemu.guest_agent.0",
+            // A memory balloon, only for its statistics: Linux's own driver (virtio_balloon, in every kernel)
+            // reports how much memory Linux is using, shown on Virtual Machines. Nothing is taken back.
+            "-device virtio-balloon-pci,id=balloon0",
             // Restarting Linux ends QEMU (with a "guest-reset" SHUTDOWN event) and Try Linux starts it
             // again. Resetting in place could leave QEMU's GPU state behind and stop it from coming back.
             "-action reboot=shutdown"
@@ -5256,7 +6332,8 @@ partial class MainForm : Form
             var l = new Label { Text = label, BackColor = Theme.Bg, ForeColor = Theme.Muted, Font = Theme.Small };
             l.SetBounds(D(16), D(14), D(488), D(22));
             var box = new TextBox { Font = Theme.Body, BackColor = Theme.Card, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle };
-            box.SetBounds(D(16), D(42), D(488), D(26));
+            RoundBox.Attach(box);
+            box.SetBounds(D(16), D(40), D(488), D(30));
             var ok = new FlatBtn("OK", true) { DialogResult = DialogResult.OK };
             ok.SetBounds(D(384), D(88), D(120), D(36));
             var cancel = new FlatBtn("Cancel") { DialogResult = DialogResult.Cancel };

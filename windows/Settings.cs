@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -119,7 +120,12 @@ class SectionHeader : Control
             lit ? Theme.Accent : Focused ? Theme.Highlight : Theme.Border, lit);
         TextRenderer.DrawText(g, Shown, Theme.Heading, new Rectangle(pad, 0, w, h), lit ? Theme.Highlight : Theme.Text, flags);
         int chevW = Theme.D(20);
-        TextRenderer.DrawText(g, chevron, Glyph, new Rectangle(w - pad - chevW, 0, chevW, h), Theme.Muted, flags | TextFormatFlags.HorizontalCenter);
+        if (Lucide.Has("chevron-down"))
+        {
+            int c = Theme.D(16);
+            Lucide.Draw(g, Open ? "chevron-down" : "chevron-right", new Rectangle(w - pad - chevW + (chevW - c) / 2, (h - c) / 2, c, c), Theme.Muted);
+        }
+        else TextRenderer.DrawText(g, chevron, Glyph, new Rectangle(w - pad - chevW, 0, chevW, h), Theme.Muted, flags | TextFormatFlags.HorizontalCenter);
         // The summary sits between the title and the chevron, shortened with "..." if it doesn't fit.
         int left = pad + TextRenderer.MeasureText(g, Shown, Theme.Heading, Size.Empty, TextFormatFlags.NoPadding).Width + Theme.D(24);
         int right = w - pad - chevW - Theme.D(8);
@@ -259,7 +265,7 @@ class Sheet
     {
         // In the left column the box starts where labels' and notes' text does (they draw a few pixels in).
         int inset = x == 0 ? TextInset : 0;
-        var c = Place(new CheckBox { Text = text, Checked = on, Font = Theme.Body, ForeColor = Theme.Text, BackColor = Theme.Bg, FlatStyle = FlatStyle.Flat, UseMnemonic = false }, x + inset, y, Width - x - inset, 26);
+        var c = Place(new Toggle { Text = text, Checked = on, Font = Theme.Body, ForeColor = Theme.Text, BackColor = Theme.Bg, UseMnemonic = false }, x + inset, y, Width - x - inset, 26);
         c.FlatAppearance.BorderColor = Theme.Border;
         c.FlatAppearance.CheckedBackColor = Theme.Highlight;
         y += 30;
@@ -335,7 +341,8 @@ class Sheet
         int bw = SnugWidth(button), right = Field + 410;
         Place(Lbl(text, Theme.Body, Theme.Text), 0, y + 4, right - bw - 10, 22);
         var b = Place(new FlatBtn(button), right - bw, y, bw, 30);
-        // Every Action button on a tab shares the widest one's width, so they look equal.
+        // Every Action button on a tab shares the widest one's width (now the short names keep that snug), so
+        // they look equal.
         actions.Add(b);
         int w = actions.Max(a => a.Width);
         // In front of their text, whose label was laid out for a narrower button.
@@ -349,7 +356,7 @@ class Sheet
     // A right-aligned button's width: its text with a little room each side, in design units.
     public static int SnugWidth(string text)
     {
-        return Math.Max(80, (int)Math.Ceiling(TextRenderer.MeasureText(Theme.TitleCase(text), Theme.Bold).Width / Theme.Scale) + 32);
+        return Math.Max(64, (int)Math.Ceiling(TextRenderer.MeasureText(Theme.TitleCase(text), Theme.Bold).Width / Theme.Scale) + 28);
     }
 
     // Room between right-aligned buttons and the bar's right edge, in design units.
@@ -383,6 +390,9 @@ class Sheet
     {
         var t = multiline ? new NoteBox() : new TextBox();   // several lines: with the overlay scroll bar
         t.Text = text; t.Font = Theme.Body; t.BackColor = Theme.Card; t.ForeColor = Theme.Text; t.BorderStyle = BorderStyle.FixedSingle;
+        RoundBox.Attach(t);
+        if (!multiline) t.Height = Theme.D(28);
+        Native.TextMargins(t, 4);
         return t;
     }
 
@@ -392,10 +402,14 @@ class Sheet
     }
 }
 
+// The Settings tabs, like the Linux edition's view switcher: an icon and a name each, the chosen one on a soft
+// rounded fill and the others plain until pointed at.
 class TabStrip : Control
 {
     public string[] Tabs = new string[0];
-    int selectedIndex;
+    public string[] Glyphs = new string[0];   // Segoe MDL2 Assets icons, one per tab
+    int selectedIndex, hot = -1;
+    static readonly Font IconFont = new Font("Segoe MDL2 Assets", 11.5f);
     public event EventHandler Changed;
 
     public TabStrip()
@@ -423,25 +437,60 @@ class TabStrip : Control
         for (int i = 0; i < Tabs.Length; i++) if (TabRect(i).Contains(e.Location)) SelectedIndex = i;
     }
 
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        int h = -1;
+        for (int i = 0; i < Tabs.Length; i++) if (TabRect(i).Contains(e.Location)) h = i;
+        if (h != hot) { hot = h; Invalidate(); }
+    }
+
+    protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hot = -1; Invalidate(); }
+
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
         g.Clear(Theme.Bg);
+        const TextFormatFlags flags = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding;
         for (int i = 0; i < Tabs.Length; i++)
         {
             var r = TabRect(i);
             bool sel = i == selectedIndex;
-            Theme.Surface(g, new Rectangle(r.X, r.Y, r.Width + 1, r.Height + 1), Color.Empty,
-                sel ? Theme.SelectedTop : Theme.CardTop, sel ? Theme.SelectedBottom : Theme.CardBottom, sel ? Theme.Accent : Theme.Border, false);
-            TextRenderer.DrawText(g, Tabs[i], Theme.Bold, r, sel ? Theme.Highlight : Theme.Text,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+            if (sel || i == hot)
+            {
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                using (var path = Theme.Shape(r, Theme.D(Theme.Radius)))
+                using (var b = new SolidBrush(Theme.Mix(Theme.Bg, Theme.Text, sel ? 0.12 : 0.06))) g.FillPath(b, path);
+                g.SmoothingMode = SmoothingMode.Default;
+            }
+            string glyph = i < Glyphs.Length ? Glyphs[i] : null;
+            int gap = Theme.D(8);
+            if (glyph != null && Lucide.Has(glyph))   // a Lucide icon by name
+            {
+                int icon = Theme.D(18);
+                var tsz = TextRenderer.MeasureText(g, Tabs[i], Theme.Bold, Size.Empty, flags);
+                int lx = r.X + (r.Width - icon - gap - tsz.Width) / 2;
+                Lucide.Draw(g, glyph, new Rectangle(lx, r.Y + (r.Height - icon) / 2, icon, icon), Theme.Text);
+                TextRenderer.DrawText(g, Tabs[i], Theme.Bold, new Rectangle(lx + icon + gap, r.Y, tsz.Width + 2, r.Height), Theme.Text, flags);
+                continue;
+            }
+            var iconSize = glyph != null ? TextRenderer.MeasureText(g, glyph, IconFont, Size.Empty, flags) : Size.Empty;
+            var textSize = TextRenderer.MeasureText(g, Tabs[i], Theme.Bold, Size.Empty, flags);
+            int total = textSize.Width + (glyph != null ? iconSize.Width + gap : 0);
+            int x = r.X + (r.Width - total) / 2;
+            if (glyph != null)
+            {
+                TextRenderer.DrawText(g, glyph, IconFont, new Rectangle(x, r.Y, iconSize.Width, r.Height), Theme.Text, flags);
+                x += iconSize.Width + gap;
+            }
+            TextRenderer.DrawText(g, Tabs[i], Theme.Bold, new Rectangle(x, r.Y, textSize.Width + 2, r.Height), Theme.Text, flags);
         }
     }
 }
 
 partial class MainForm
 {
-    public const string Version = "1.1.13";
+    public const string Version = "1.1.14";
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
     void ShowSettings(VmConfig cfg)
@@ -459,6 +508,11 @@ partial class MainForm
         // Renaming: a pencil after the name edits it in place; Enter (or clicking away) saves, Esc cancels.
         var pencil = root.Add(new Label { Text = "", Font = new Font("Segoe MDL2 Assets", 11f), ForeColor = Theme.Muted, BackColor = Theme.Bg,
                                           TextAlign = ContentAlignment.MiddleCenter, Cursor = Cursors.Hand }, 0, 12, 28, 28);
+        if (Lucide.Has("pencil"))
+        {
+            pencil.Text = "";
+            pencil.Paint += (s, pe) => { int c = Theme.D(16); Lucide.Draw(pe.Graphics, "pencil", new Rectangle((pencil.Width - c) / 2, (pencil.Height - c) / 2, c, c), pencil.ForeColor); };
+        }
         Action placePencil = () =>
         {
             int w = TextRenderer.MeasureText(titleLbl.Text, Theme.Title).Width;
@@ -471,7 +525,8 @@ partial class MainForm
         pencil.Click += delegate
         {
             var edit = new TextBox { Text = titleLbl.Text, Font = Theme.Title, BackColor = Theme.Card, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle };
-            edit.SetBounds(titleLbl.Left, titleLbl.Top, titleLbl.Width, titleLbl.Height + Theme.D(2));
+            RoundBox.Attach(edit);
+            edit.SetBounds(titleLbl.Left - Theme.D(4), titleLbl.Top - Theme.D(3), titleLbl.Width + Theme.D(8), titleLbl.Height + Theme.D(8));
             root.Col.Controls.Add(edit);
             edit.BringToFront();
             titleLbl.Visible = pencil.Visible = false;
@@ -502,16 +557,16 @@ partial class MainForm
         };
 
         // Header, tabs and the tab's contents are spaced twice as far apart as before.
-        var tabs = root.Add(new TabStrip { Tabs = new[] { "General", "Hardware", "Devices", "Recovery" } }, 0, 90, 640, 34);
-        var body = root.Add(new Panel { BackColor = Theme.Bg }, 0, 140, 640, 100);
-        var footer = new Panel { BackColor = Theme.Bg };
-        root.Col.Controls.Add(footer);
+        var tabs = new TabStrip { Tabs = new[] { "General", "Hardware", "Devices", "Recovery" },
+                                  Glyphs = Lucide.Has("wrench") ? new[] { "wrench", "monitor", "usb", "undo-2" }   // Lucide, as on Linux and Mac
+                                                                : new[] { "", "", "", "" },   // wrench, monitor, drive, undo
+                                  Size = new Size(Theme.D(520), Theme.D(36)) };
+        var body = root.Add(new Panel { BackColor = Theme.Bg }, 0, 76, 640, 100);
         root.Fill = () =>
         {
             int h = root.ClientSize.Height;
             root.Col.Height = h;
-            footer.SetBounds(0, h - Theme.D(60), root.Col.Width, Theme.D(60));
-            body.Height = Math.Max(Theme.D(100), footer.Top - body.Top - Theme.D(8));
+            body.Height = Math.Max(Theme.D(100), h - body.Top - Theme.D(12));
         };
 
         var general = new Sheet { Collapsible = true, Style = Sheet.HardwareStyle };
@@ -820,21 +875,9 @@ partial class MainForm
         });
         hardware.Layout();
 
-        // ---- Devices
-        devices.Section("Microphone and sound");
-        var sound = devices.Check("Enable sound", cfg.Sound);
-        var mic = devices.Check("Allow microphone access (next start)", cfg.Mic);
-        devices.Note("Turning microphone access off keeps sound playback enabled.");
-        var outDev = devices.Row("Sound output", Sheet.Combo("Windows default"), 220);
-        var inDev = devices.Row("Microphone", Sheet.Combo("Windows default"), 220);
-        outDev.Enabled = inDev.Enabled = false;
-        devices.Note("This graphics engine doesn't support separate audio choices.\nWindows defaults are used.", 2);
-        var soundBtns = devices.Buttons(Sheet.Align.Left, "Windows sound devices", "Microphone privacy");
-        devices.Note("Choose Windows playback and recording defaults before launching.\nIf a choice isn't picked up, restart " + who + ".", 2);
-        sound.CheckedChanged += delegate { mic.Enabled = sound.Checked; };
-        mic.Enabled = sound.Checked;
-        soundBtns[0].Click += delegate { OpenUri("ms-settings:sound"); };
-        soundBtns[1].Click += delegate { OpenUri("ms-settings:privacy-microphone"); };
+        // ---- Devices (sections in alphabetical order)
+        devices.Section("Camera and USB");
+        devices.Note("WINQ-EMU doesn't include camera or USB passthrough, so Windows cameras\nand USB devices can't be attached. Use the shared folder to move files.", 2);
 
         devices.Section("CD/DVD drive");
         var cd = Sheet.Input(cfg.Cd.Length > 0 ? cfg.Cd : "Empty");
@@ -878,8 +921,20 @@ partial class MainForm
         };
         ejectBtn.Click += delegate { setDisc(""); };
 
-        devices.Section("Camera and USB");
-        devices.Note("WINQ-EMU doesn't include camera or USB passthrough, so Windows cameras\nand USB devices can't be attached. Use the shared folder to move files.", 2);
+        devices.Section("Microphone and sound");
+        var sound = devices.Check("Enable sound", cfg.Sound);
+        var mic = devices.Check("Allow microphone access (next start)", cfg.Mic);
+        devices.Note("Turning microphone access off keeps sound playback enabled.");
+        var outDev = devices.Row("Sound output", Sheet.Combo("Windows default"), 220);
+        var inDev = devices.Row("Microphone", Sheet.Combo("Windows default"), 220);
+        outDev.Enabled = inDev.Enabled = false;
+        devices.Note("This graphics engine doesn't support separate audio choices.\nWindows defaults are used.", 2);
+        var soundBtns = devices.Buttons(Sheet.Align.Left, "Windows sound devices", "Microphone privacy");
+        devices.Note("Choose Windows playback and recording defaults before launching.\nIf a choice isn't picked up, restart " + who + ".", 2);
+        sound.CheckedChanged += delegate { mic.Enabled = sound.Checked; };
+        mic.Enabled = sound.Checked;
+        soundBtns[0].Click += delegate { OpenUri("ms-settings:sound"); };
+        soundBtns[1].Click += delegate { OpenUri("ms-settings:privacy-microphone"); };
 
         devices.Section("Network");
         Action<bool> forwardsEnabled = on => { };
@@ -899,98 +954,26 @@ partial class MainForm
         netType.SelectedIndexChanged += delegate { showNet(); };
         showNet();
 
-        general.Section("Shared folder");
+        devices.Section("Shared folder");
         var shared = Sheet.Input(cfg.SharedFolder);
         var browse = new FlatBtn("Browse");
-        general.RowOf("Shared folder", Tuple.Create((Control)shared, 270), Tuple.Create((Control)browse, 130));
+        devices.RowOf("Shared folder", Tuple.Create((Control)shared, 270), Tuple.Create((Control)browse, 130));
         browse.Width = Theme.D(Sheet.SnugWidth("Browse"));
         // Browse sits against the bar's right edge and the folder box takes the room up to it.
         Sheet.PinRight(browse, 0, shared);
-        var write = general.Check("Allow Linux to read and change this folder", cfg.SharedWrite, 190);
-        general.Note("Off shares it read-only. In Linux: sudo mount -t 9p -o trans=virtio host /mnt/host", 1, 190);
+        var write = devices.Check("Allow Linux to read and change this folder", cfg.SharedWrite, 190);
+        devices.Note("Off shares it read-only. In Linux: sudo mount -t 9p -o trans=virtio host /mnt/host", 1, 190);
         browse.Click += delegate
         {
             using (var dlg = new FolderBrowserDialog { Description = "Choose a Windows folder to share with " + who })
                 if (dlg.ShowDialog(this) == DialogResult.OK) shared.Text = dlg.SelectedPath;
         };
 
-        // ---- Appearance (on General): Try Linux's theme, for every system. Follow system uses Light while
-        // Windows shows apps in light mode and Dark otherwise; the theme list waits while it's on.
-        general.Section("Appearance");
-        var themePick = general.Row("Theme", Sheet.Combo(Theme.Titles), 160);
-        themePick.SelectedIndex = Math.Max(0, Array.IndexOf(Theme.Names, AppSettings.ThemeName));
-        var follow = general.Check("Follow system", AppSettings.FollowSystem);
-        general.Note("Follow system uses Light while Windows shows apps in light mode, and Dark otherwise.\nThe theme changes when you save.", 2);
-        Action lockTheme = () => themePick.Enabled = !follow.Checked;
-        follow.CheckedChanged += delegate { lockTheme(); };
-        lockTheme();
-        general.Summary("Appearance", () => follow.Checked
-            ? "Follows Windows (" + (AppSettings.WindowsUsesLight() ? "Light" : "Dark") + ")"
-            : Theme.Titles[Math.Max(0, themePick.SelectedIndex)]);
-
-        // ---- About (on General)
-        general.Section("About");
-        general.Note("Try Linux " + Version + "\nWINQ-EMU: " + (Winq.Ready ? (Winq.Version != null ? Winq.Version + ", " : "") + Winq.Bin : "not installed") +
-            (Updater.WinqAvailable != null ? "  ·  " + Updater.WinqAvailable + " available" : "") + "\nStorage: " + AppSettings.Storage, 3);
-        var aboutBtns = SelfInstall.IsInstalledCopy
-            ? general.Buttons(Sheet.Align.Left, "WINQ-EMU releases", "Open storage folder")
-            : general.Buttons(Sheet.Align.Left, "WINQ-EMU releases", "Open storage folder", "Install");
-        aboutBtns[0].Click += delegate { OpenUri("https://github.com/cmspam/winq-emu/releases"); };
-        aboutBtns[1].Click += delegate { Directory.CreateDirectory(AppSettings.Storage); Process.Start("explorer.exe", Q(AppSettings.Storage)); };
-        if (aboutBtns.Count > 2) aboutBtns[2].Click += delegate
-        {
-            if (!ThemedDialog.Show(this, "Install Try Linux?",
-                    "Try Linux copies itself to this folder and adds itself to the Start menu, so you can delete the downloaded file:", SelfInstall.Dir,
-                    "Uninstall it any time from Windows Settings > Apps > Installed apps.", "Install", "Cancel")) return;
-            try { SelfInstall.Install(); }
-            catch (Exception ex) { ThemedDialog.Show(this, "Couldn't install Try Linux", ex.Message, null, null, "OK"); return; }
-            // Open switches to the installed copy; closing the window keeps using this one for now.
-            if (!ThemedDialog.Show(this, "Try Linux is installed",
-                    "Try Linux is now available in the Windows Start menu.", null, null, "Open")) return;
-            if (running.Count > 0 && !ThemedDialog.Show(this, "Open the installed copy?",
-                    "Running systems keep running, but this copy's tray menu closes, so shut them down from inside Linux.",
-                    null, null, "Open", "Back")) return;
-            Process.Start(SelfInstall.Exe);
-            quitting = true;
-            Close();
-        };
-
-        var autoUpdate = general.Check("Check for updates automatically (once a day)", AppSettings.CheckUpdates);
-        var updateRow = general.Buttons(Sheet.Align.Left, Updater.Available != null ? "Update to " + Updater.Available : "Check for updates", "Update WINQ-EMU");
-        var updateBtn = updateRow[0];
-        var winqBtn = updateRow[1];
-        winqBtn.Visible = Updater.WinqAvailable != null;
-        winqBtn.Click += delegate { StartWinqUpdate(); };
-        updateBtn.Click += async (s, e) =>
-        {
-            if (Updater.Available != null) { StartUpdate(); return; }
-            updateBtn.Enabled = false;
-            updateBtn.Text = "Checking...";
-            string found = null, failed = null;
-            try { found = await Task.Run(() => Updater.Check(true)); }
-            catch (Exception ex) { failed = ex.Message; }
-            if (updateBtn.IsDisposed) return;
-            updateBtn.Enabled = true;
-            updateBtn.Text = "Check for updates";
-            if (failed != null) { ThemedDialog.Show(this, "Couldn't check for updates", failed, null, null, "OK"); return; }
-            winqBtn.Visible = Updater.WinqAvailable != null;
-            if (found == null && Updater.WinqAvailable == null)
-            {
-                ThemedDialog.Show(this, "Try Linux is up to date", "You have the latest Try Linux (" + Version + ")" +
-                    (Winq.Version != null ? " and WINQ-EMU (" + Winq.Version + ")." : "."), null, null, "OK");
-                return;
-            }
-            Updater.Available = found;
-            if (found != null) updateBtn.Text = "Update to " + found;
-            UpdateClicked();
-        };
-
         // ---- Recovery
         // What each closed General and Devices section holds.
         general.Summary("Display and startup", () => (full.Checked ? "Fullscreen" : "In a window") + (login.Checked ? "  ·  Starts when you sign in" : ""));
-        general.Summary("Shared folder", () => shared.Text.Trim().Length == 0 ? "Not shared"
+        devices.Summary("Shared folder", () => shared.Text.Trim().Length == 0 ? "Not shared"
             : Path.GetFileName(shared.Text.Trim().TrimEnd('\\')) + (write.Checked ? "  ·  Read and write" : "  ·  Read-only"));
-        general.Summary("About", () => "Try Linux " + Version + (Updater.Available != null ? "  ·  " + Updater.Available + " available" : ""));
         devices.Summary("Microphone and sound", () => !sound.Checked ? "Sound off" : mic.Checked ? "Sound and microphone on" : "Sound on, microphone off");
         devices.Summary("Camera and USB", () => "Not available in WINQ-EMU");
         devices.Summary("CD/DVD drive", () => cfg.Cd.Length == 0 ? "Empty" : cfg.Cd.Substring(cfg.Cd.LastIndexOfAny(new[] { '\\', '/' }) + 1));
@@ -999,7 +982,8 @@ partial class MainForm
             if (netType.SelectedIndex == 2) return "No network";
             int n = forwards.Text.Split('\n').Count(l => l.Trim().Length > 0);
             return (netType.SelectedIndex == 1 ? "Port forwards only  ·  " : "Shared (NAT)  ·  ") + (n == 0 ? "No port forwards" : n + (n == 1 ? " port forward" : " port forwards"));
-        });        general.Layout();
+        });
+        general.Layout();
         devices.Layout();
 
         recovery.Section("Backup and restore");
@@ -1007,16 +991,20 @@ partial class MainForm
         var restoreBtn = recovery.Action("Restore a backup as a separate copy; the original stays.", "Restore");
         recovery.Note("Shut " + who + " down before backing it up.", 1);
 
+        recovery.Section("Clone");
+        var cloneBtn = recovery.Action("Copy " + who + ", its disks and its settings, as a new system.", "Clone");
+        recovery.Note("Shut " + who + " down before cloning it. Snapshots aren't copied.", 1);
+
         recovery.Section("Snapshots");
         var snapBtn = recovery.Action("Save Disk 1 as it is now, or go back to a saved point.", "Snapshots");
 
         recovery.Section("Storage");
-        var moveBtn = recovery.Action("Move all systems and downloads to another folder.", "Move storage");
-        var cleanBtn = recovery.Action("Delete installers that no system still needs.", "Clean up");
+        var moveBtn = recovery.Action("Move all systems and downloads to another folder.", "Move");
+        var cleanBtn = recovery.Action("Delete installers that no system still needs.", "Clean");
 
         recovery.Section("Repair");
-        var resetBtn = recovery.Action("Erase " + who + " and run its installer again.", "Reset system");
-        var bootBtn = recovery.Action("Start " + who + " from an ISO, such as a rescue disk.", "Boot an ISO");
+        var resetBtn = recovery.Action("Erase " + who + " and run its installer again.", "Reset");
+        var bootBtn = recovery.Action("Start " + who + " from an ISO, such as a rescue disk.", "Boot ISO");
 
         recovery.Section("Delete");
         var deleteBtn = recovery.Action("Remove " + who + " and everything installed in it.", "Delete");
@@ -1026,19 +1014,16 @@ partial class MainForm
         var rec2 = new List<Button> { bootBtn, moveBtn, cleanBtn, deleteBtn };
 
         recovery.Summary("Backup and restore", () => "Back up, or restore a copy");
+        recovery.Summary("Clone", () => "Copy it as a new system");
         recovery.Summary("Snapshots", () => "Points in time for Disk 1");
         recovery.Summary("Repair",() => "Reset, or boot an ISO");
         recovery.Summary("Storage", () => "Move storage, or clean up downloads");
         recovery.Summary("Delete", () => "Remove " + who);
         recovery.Layout();
 
-        // ---- Footer
-        var back = new FlatBtn("Back");
-        back.SetBounds(0, Theme.D(8), Theme.D(120), Theme.D(42));
-        // Save is the page's main action; start a system from Your systems.
-        var save = new FlatBtn("Save", true);
-        save.SetBounds(Theme.D(520), Theme.D(8), Theme.D(120), Theme.D(42));   // the same size as Back
-        footer.Controls.AddRange(new Control[] { back, save });
+        // ---- Header bar: Back (Alt+Left), the tabs, and Save, the page's main action.
+        var back = new FlatBtn("") { Font = new Font("Segoe MDL2 Assets", 10f), Tag = "back", Size = new Size(Theme.D(40), Theme.D(36)) };
+        var save = new FlatBtn("Save", true) { Size = new Size(Theme.D(100), Theme.D(36)) };
 
         // Copies the form into cfg; false (after telling the user) when something is invalid.
         store = () =>
@@ -1051,18 +1036,10 @@ partial class MainForm
                 fwd.Add(line);
             }
             string sf = shared.Text.Trim();
-            if (sf.Length > 0 && !Directory.Exists(sf)) { tabs.SelectedIndex = 0; Error("The shared folder doesn't exist."); return false; }
-            if (sf.Contains(",")) { tabs.SelectedIndex = 0; Error("QEMU can't share a folder whose path contains a comma."); return false; }
+            if (sf.Length > 0 && !Directory.Exists(sf)) { tabs.SelectedIndex = 2; Error("The shared folder doesn't exist."); return false; }
+            if (sf.Contains(",")) { tabs.SelectedIndex = 2; Error("QEMU can't share a folder whose path contains a comma."); return false; }
 
             cfg.Description = description.Text.Trim();
-            // Appearance is for Try Linux as a whole, so it's kept in settings.ini.
-            string themeName = Theme.Names[Math.Max(0, themePick.SelectedIndex)];
-            if (themeName != AppSettings.ThemeName || follow.Checked != AppSettings.FollowSystem)
-            {
-                AppSettings.ThemeName = themeName;
-                AppSettings.FollowSystem = follow.Checked;
-                AppSettings.Save();
-            }
             cfg.Fullscreen = full.Checked;
             cfg.FullscreenDisplay = display.SelectedIndex > 0 ? screens[display.SelectedIndex - 1].DeviceName : "";
             cfg.ShortcutDirect = direct.Checked;
@@ -1081,11 +1058,6 @@ partial class MainForm
             cfg.Reclaim = reclaim.Checked;
             cfg.NetType = netType.SelectedIndex;
             cfg.Save();
-            if (AppSettings.CheckUpdates != autoUpdate.Checked)
-            {
-                AppSettings.CheckUpdates = autoUpdate.Checked;
-                try { AppSettings.Save(); } catch { }
-            }
             try
             {
                 SetRunAtLogin(cfg, login.Checked);
@@ -1106,6 +1078,7 @@ partial class MainForm
 
         rec1[0].Click += delegate { if (Stopped(cfg)) Backup(cfg); };
         rec1[1].Click += delegate { Restore(cfg); };
+        cloneBtn.Click += delegate { Clone(cfg); };
         rec1[2].Click += delegate { if (Stopped(cfg)) using (var dlg = new SnapshotDialog(cfg)) dlg.ShowDialog(this); };
         rec1[3].Click += delegate { if (Stopped(cfg)) ResetSystem(cfg); };
         rec2[0].Click += delegate
@@ -1126,6 +1099,7 @@ partial class MainForm
 
         AcceptButton = null;
         SetPage(root);
+        header.Set(back, tabs, save);
         tabs.SelectedIndex = 0;
     }
 
@@ -1453,6 +1427,42 @@ partial class MainForm
         }
         copy.Save();
         return "Restored as \"" + copy.DisplayName + "\". It uses the same port forwards as the original, so run one at a time or change them in Settings.";
+    }
+
+    // A full copy of a system as a new one: each disk copied with qemu-img (snapshots aren't carried over),
+    // and its settings. It must be off, so its disks aren't changing while they're copied.
+    void Clone(VmConfig cfg)
+    {
+        if (!Stopped(cfg)) return;
+        string id = UniqueName(cfg.Name + "-clone");
+        var copy = VmConfig.Load(cfg.Dir);
+        copy.Dir = Path.Combine(AppSettings.VmsDir, id);
+        copy.Name = id;
+        copy.DisplayName = cfg.DisplayName + " (clone)";
+        RunTool(copy, "Cloning " + cfg.DisplayName, () => CloneTo(cfg, copy));
+    }
+
+    static string CloneTo(VmConfig src, VmConfig copy)
+    {
+        Directory.CreateDirectory(copy.Dir);
+        try
+        {
+            if (File.Exists(src.Disk)) Winq.Run(Winq.Img, "convert -O qcow2 " + Q(src.Disk) + " " + Q(copy.Disk));
+            copy.ExtraDisks.Clear();
+            foreach (var entry in src.ExtraDisks)
+            {
+                string from = src.DiskPath(entry);
+                if (!File.Exists(from)) continue;
+                string name = copy.NewDiskName();
+                Winq.Run(Winq.Img, "convert -O qcow2 " + Q(from) + " " + Q(Path.Combine(copy.Dir, name)));
+                copy.ExtraDisks.Add(name);
+            }
+            string guest = Path.Combine(src.Dir, "guest-os.txt");
+            if (File.Exists(guest)) File.Copy(guest, Path.Combine(copy.Dir, "guest-os.txt"), true);
+            copy.Save();
+        }
+        catch { try { Directory.Delete(copy.Dir, true); } catch { } throw; }
+        return "Cloned as \"" + copy.DisplayName + "\". It uses the same port forwards as the original, so run one at a time or change them in Settings.";
     }
 
     // Rewrites a disk without its unused clusters; the original stays until the copy is checked.

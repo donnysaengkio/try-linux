@@ -7,6 +7,8 @@ set REFS=/r:System.Windows.Forms.dll /r:System.Drawing.dll /r:Microsoft.VisualBa
 set SRC=TryLinux.cs Settings.cs
 rem The interface fonts (Open Font License, see fonts\) are embedded in the exe.
 set RES=/resource:fonts\Prompt-SemiBold.ttf,Prompt-SemiBold.ttf /resource:fonts\WorkSans-SemiBold.ttf,WorkSans-SemiBold.ttf /resource:fonts\NotoSans-Regular.ttf,NotoSans-Regular.ttf /resource:fonts\NotoSans-SemiBold.ttf,NotoSans-SemiBold.ttf
+rem The icons (Lucide, ISC license, see ..\icons\) shared by all three editions.
+for %%f in (..\icons\*.svg) do call set RES=%%RES%% /resource:%%f,icon-%%~nxf
 
 rem First pass builds the icon writer, second pass embeds the icon.
 if not exist TryLinux.ico (
