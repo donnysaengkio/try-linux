@@ -7,7 +7,7 @@ import { ask, AskHost, problem } from "./Ask";
 import { Choose } from "./Choose";
 import { Create, type Source } from "./Create";
 import { OwnInstaller } from "./OwnInstaller";
-import { RECOMMENDED } from "./distros";
+import { loadArch, RECOMMENDED } from "./distros";
 import { Home } from "./Home";
 import { applyTheme, checkQuietly, MainMenuWindows, openAbout, openPreferences, openShortcuts, useShortcuts } from "./MainMenu";
 import { act } from "./power";
@@ -35,6 +35,8 @@ function App() {
   useShortcuts(page.kind === "create" ? null : () => setPage({ kind: "choose", back: true }));
 
   useEffect(() => {
+    // The built-in distributions for this processor (x86_64 or ARM64).
+    loadArch();
     // The theme chosen in Preferences, then a quiet look for a newer WINQ-EMU.
     appInfo().then(applyTheme).catch(() => {});
     setTimeout(checkQuietly, 3000);

@@ -303,10 +303,34 @@ fn tray_clicked(app: &AppHandle, item: &str) {
 #[tauri::command]
 async fn catalog() -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(|| {
-        ureq::get(CATALOG).call().map_err(|e| e.to_string())?.into_string().map_err(|e| e.to_string())
+        let get = |url: &str| ureq::get(url).call().map_err(|e| e.to_string())?.into_string().map_err(|e| e.to_string());
+        let main = get(CATALOG)?;
+        if vm::ARCH != "aarch64" {
+            return Ok(main);
+        }
+        // ARM64 (Apple silicon, ARM Linux), as the Mac edition does it: distros-aarch64.json's downloads, then
+        // distros.json's website-only entries (its downloads are x86_64 installers, so they're left out).
+        let arm = get(&CATALOG.replace("distros.json", "distros-aarch64.json")).unwrap_or_default();
+        let list = |text: &str| -> Vec<serde_json::Value> {
+            serde_json::from_str::<serde_json::Value>(text).ok().and_then(|v| v["distros"].as_array().cloned()).unwrap_or_default()
+        };
+        let mut out = list(&arm);
+        for d in list(&main) {
+            let website_only = d.get("base").is_none() && d.get("steps").is_none();
+            if website_only && !out.iter().any(|o| o["id"] == d["id"]) {
+                out.push(d);
+            }
+        }
+        Ok(serde_json::json!({ "version": 2, "distros": out }).to_string())
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+// This computer's processor ("x86_64" or "aarch64"), for which installers to offer.
+#[tauri::command]
+fn arch() -> &'static str {
+    vm::ARCH
 }
 
 // The page to open on (TRYLINUX_PAGE), for screenshots; empty for Virtual Machines.
@@ -367,7 +391,7 @@ fn main() {
         .manage(Probe(Mutex::new(System::new())))
         .manage(Vms::default())
         .manage(live::Live::default())
-        .invoke_handler(tauri::generate_handler![systems, start, console, power, quit, catalog, icons, open_page, start_page, settings::settings, settings::save_settings, settings::disk_info, settings::set_disc, create::create_defaults, create::free_space, create::create, create::cancel_create, create::read_disk, app::app_info, app::set_preference, app::check_updates, app::open_storage, settings::add_shortcut, disks::disk_resize, disks::disk_compact, disks::disk_add, disks::disk_remove, recovery::backup, recovery::restore, recovery::clone_system, recovery::snapshots, recovery::snapshot, recovery::move_storage, recovery::clean_list, recovery::clean_run, recovery::reset, recovery::installer_of, recovery::boot_iso, recovery::delete, setup::readiness, setup::enable_hypervisor, setup::update_winq])
+        .invoke_handler(tauri::generate_handler![systems, start, console, power, quit, catalog, arch, icons, open_page, start_page, settings::settings, settings::save_settings, settings::disk_info, settings::set_disc, create::create_defaults, create::free_space, create::create, create::cancel_create, create::read_disk, app::app_info, app::set_preference, app::check_updates, app::open_storage, settings::add_shortcut, disks::disk_resize, disks::disk_compact, disks::disk_add, disks::disk_remove, recovery::backup, recovery::restore, recovery::clone_system, recovery::snapshots, recovery::snapshot, recovery::move_storage, recovery::clean_list, recovery::clean_run, recovery::reset, recovery::installer_of, recovery::boot_iso, recovery::delete, setup::readiness, setup::enable_hypervisor, setup::update_winq])
         .setup(|app| {
             let handle = app.handle().clone();
             TrayIconBuilder::with_id("main")

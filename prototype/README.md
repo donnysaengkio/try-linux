@@ -6,7 +6,8 @@ platform's own web view (WebView2, WKWebView, WebKitGTK), so the app stays small
 
 ## Each platform
 
-Each edition's own folders and files, so the app opens the systems that edition made (see `src-tauri/src/paths.rs`
+On ARM64 (Apple silicon, ARM Linux) the built-in distributions and the catalog are the ARM64 ones, as on the Mac
+edition. Each edition's own folders and files, so the app opens the systems that edition made (see `src-tauri/src/paths.rs`
 and `config.rs`):
 
 | | Windows | Linux | macOS |
@@ -16,7 +17,7 @@ and `config.rs`):
 | Disk 1 | `<id>.qcow2` | `disk.qcow2` | `disk.img` (raw) |
 | Try Linux's preferences | `%APPDATA%\TryLinux\settings.ini` | `~/.config/TryLinux/settings.json` | the Mac edition's defaults |
 | Shortcut / at sign-in | desktop `.lnk` / Run key | app launcher / autostart `.desktop` | none / login agent |
-| Status | works | built; tested in CI | builds; running systems is the next step |
+| Status | works | builds and passes its tests in CI | builds in CI (signed for the Virtualization framework); not yet run on a Mac |
 
 [`.github/workflows/prototype.yml`](../.github/workflows/prototype.yml) builds it on Linux (x86_64 and ARM64) and
 macOS, runs the tests (on Linux also the disk and Recovery tests, on scratch systems), and keeps each build as an
@@ -72,7 +73,7 @@ Unstyled building blocks, drawn with Try Linux's own colours and fonts (`ui/src/
 | `src-tauri/src/main.rs` | The commands the interface calls, and the tray |
 | `src-tauri/src/config.rs` | A system's settings, in each edition's own file (`vm.ini`, `vm.json`, `config.json`) |
 | `src-tauri/src/paths.rs` | Where each platform keeps systems, installers and Try Linux's preferences |
-| `src-tauri/src/mac.rs` | macOS: running systems with Apple's Virtualization framework (next step) |
+| `src-tauri/src/mac.rs` | macOS: running systems with Apple's Virtualization framework, each in its own window |
 | `src-tauri/src/vm.rs` | Starting QEMU, the power actions, and what happens when it stops |
 | `src-tauri/src/disks.rs` | Disk Utilities: resizing, compacting, adding and removing disks |
 | `src-tauri/src/live.rs` | Memory and disk activity from QEMU (balloon statistics, block statistics) |

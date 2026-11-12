@@ -379,7 +379,7 @@ pub fn create(dir: &Path, values: &[(&str, String)]) -> std::io::Result<VmConfig
 }
 
 // "2026-11-12 09:30", as the Linux edition records when a system was made (UTC).
-fn now() -> String {
+pub fn now() -> String {
     let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let days = (secs / 86400) as i64;
     let (z, era) = (days + 719_468, (days + 719_468).div_euclid(146_097));

@@ -74,6 +74,15 @@ jobs:
         working-directory: prototype/src-tauri
         run: cargo test --locked resolves_built_in -- --ignored --nocapture
 
+      # Apple's Virtualization framework only runs in an app signed with its entitlement; an ad-hoc signature
+      # is enough on your own Mac.
+      - name: Sign with the Virtualization entitlement (macOS)
+        if: runner.os == 'macOS'
+        working-directory: prototype/src-tauri
+        run: |
+          codesign --force --sign - --entitlements macos/entitlements.plist target/release/try-linux-prototype
+          codesign --display --entitlements - target/release/try-linux-prototype
+
       - uses: actions/upload-artifact@v4
         with:
           name: try-linux-prototype-${{ matrix.name }}
