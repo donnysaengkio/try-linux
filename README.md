@@ -12,12 +12,13 @@ SHA-512 checksum, creates a virtual disk and boots it in a window.
 |---|---|---|---|
 | [**Try&nbsp;Linux&nbsp;for&nbsp;Windows**](prototype/README.md) | Windows&nbsp;10,&nbsp;11 | QEMU,&nbsp;Hyper-V&nbsp;platform | [Latest](https://github.com/donnysaengkio/try-linux/releases/latest) |
 | [**Try&nbsp;Linux&nbsp;for&nbsp;Mac**](macos/README.md)&nbsp;(preview) | Apple&nbsp;silicon | Apple&nbsp;Virtualization | [`macos-v`&nbsp;releases](https://github.com/donnysaengkio/try-linux/releases?q=macos-v&expanded=true) |
-| [**Try&nbsp;Linux&nbsp;for&nbsp;Linux**](linux/README.md)&nbsp;(preview) | x86_64,&nbsp;ARM64 | QEMU&nbsp;with&nbsp;KVM | [`linux-v`&nbsp;releases](https://github.com/donnysaengkio/try-linux/releases?q=linux-v&expanded=true) |
+| [**Try&nbsp;Linux&nbsp;for&nbsp;Linux**](prototype/README-linux.md) | x86_64,&nbsp;ARM64 | QEMU&nbsp;with&nbsp;KVM | [`linux-v`&nbsp;releases](https://github.com/donnysaengkio/try-linux/releases?q=linux-v&expanded=true) |
 
 The Windows edition runs QEMU through [WINQ-EMU](https://github.com/cmspam/winq-emu), with
 OpenGL and Vulkan graphics; the Linux edition needs GTK 4 and libadwaita, and uses VirGL for 3D.
 
-Try Linux for Windows 2.x replaces 1.x (in `windows/`), which updates to it on its own.
+Try Linux 2.x for Windows and Linux (in `prototype/`) replaces Windows 1.x (in `windows/`) and Linux 1.0.x (in
+`linux/`), which update to it on its own.
 
 Each edition updates itself from its own releases here: Windows releases are tagged `v1.2.3`,
 Mac releases `macos-v1.2.3-preview` and Linux releases `linux-v1.2.3-preview`.
@@ -44,7 +45,7 @@ catalog/   the shared distribution list
 prototype/ Try Linux for Windows 2.x (Tauri: Rust and React), on its way to macOS and Linux too
 windows/   Try Linux for Windows 1.x (C# WinForms), replaced by 2.x
 macos/     Try Linux for Mac (SwiftUI, built with scripts/build-app.sh)
-linux/     Try Linux for Linux (Python, GTK 4 and libadwaita)
+linux/     Try Linux 1.0.x for Linux (Python, GTK 4 and libadwaita), replaced by 2.x
 ```
 
 Each edition has its own CI workflow, run when its folder (or the catalog) changes. The Mac

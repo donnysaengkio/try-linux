@@ -331,7 +331,7 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
 
             {/* ---------------- Hardware */}
             <Tabs.Panel value="hardware" className="tab-panel">
-              <Section title="Graphics" summary={`${f.displays} ${f.displays === 1 ? "display" : "displays"}  ·  ${rendering} rendering${f.venus ? `  ·  Vulkan, ${f.gpu_mem} GiB` : ""}`}>
+              <Section title="Graphics" summary={`${f.displays} ${f.displays === 1 ? "display" : "displays"}  ·  ${rendering} rendering${win && f.venus ? `  ·  Vulkan, ${f.gpu_mem} GiB` : ""}`}>
                 <Row label="Guest displays">
                   <NumberBox value={f.displays} min={1} max={4} onChange={v => set("displays", v)} />
                   <span className="hint-text">1 to 4; each opens its own window</span>
@@ -340,12 +340,18 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
                   <Radios value={String(f.render)} options={[["0", "Automatic"], ["1", "GPU"], ["2", "CPU"]]} onChange={v => set("render", Number(v))} />
                 </Row>
                 <Note>Automatic tries the GPU and switches to CPU rendering if the GPU path fails to start. GPU retries every launch.</Note>
-                <Check label="Vulkan acceleration (Venus)" checked={f.venus} onChange={v => set("venus", v)} />
-                <Row label="GPU memory (GiB)">
-                  <NumberBox value={f.gpu_mem} min={1} max={s.max_gpu_mem} onChange={v => set("gpu_mem", v)} />
-                  <span className="hint-text">up to {s.max_gpu_mem} GiB{s.gpu_name ? ` (${s.gpu_name})` : `, shared with ${pc}`}</span>
-                </Row>
-                <Note>GPU shares {pc}'s graphics through OpenGL / Vulkan. Full GPU passthrough and NVIDIA CUDA / OptiX are not available in this runtime. Last successful boot: {s.last_render || "not started yet"}.</Note>
+                {/* Vulkan (Venus) and its GPU memory are WINQ-EMU's; elsewhere the GPU path is OpenGL (VirGL). */}
+                {win && <>
+                  <Check label="Vulkan acceleration (Venus)" checked={f.venus} onChange={v => set("venus", v)} />
+                  <Row label="GPU memory (GiB)">
+                    <NumberBox value={f.gpu_mem} min={1} max={s.max_gpu_mem} onChange={v => set("gpu_mem", v)} />
+                    <span className="hint-text">up to {s.max_gpu_mem} GiB{s.gpu_name ? ` (${s.gpu_name})` : `, shared with ${pc}`}</span>
+                  </Row>
+                </>}
+                <Note>{win
+                  ? `GPU shares ${pc}'s graphics through OpenGL / Vulkan. Full GPU passthrough and NVIDIA CUDA / OptiX are not available in this runtime.`
+                  : mac ? "Graphics come from Apple's Virtualization framework."
+                  : `GPU rendering uses ${pc}'s OpenGL drivers (VirGL). If a system's window stays black, choose CPU.`} Last successful boot: {s.last_render || "not started yet"}.</Note>
               </Section>
 
               <Section title="Resources" summary={`${PROFILES[f.profile]}  ·  ${shown[0]} cores  ·  ${shown[1]} GiB`}>
