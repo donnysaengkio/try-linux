@@ -111,4 +111,20 @@ cargo run --release
 `npm run build` puts the interface in `ui/dist`, which the app includes when Cargo builds it, so run it again
 after changing anything in `ui/`.
 
+## Releasing (Windows)
+
+The Windows release is an installer, **Try Linux Preview** (NSIS, installed for the current user, alongside Try
+Linux 1.x), that updates itself:
+
+1. Raise `version` in `src-tauri/tauri.conf.json` (and in `src-tauri/Cargo.toml`).
+2. Run `scripts/release-windows.ps1 -Notes "What's new"`. It builds the installer into `dist/`, signs it for updates
+   with the private key in `%USERPROFILE%\.tauri\try-linux-updates.key`, and writes `SHA256SUMS.txt` and
+   `latest.json`.
+3. Publish a pre-release tagged `tauri-v<version>-preview` with the installer and `SHA256SUMS.txt`, and upload
+   `latest.json` to the `tauri-updates` release (replacing the last one). Installed copies read it from there.
+
+Keep the private key safe and out of the repository: installed copies only accept updates signed with it, so
+without it they can't be updated. Its public half is in `tauri.conf.json`. The tags (`tauri-v…`) are ones the
+Windows, Mac and Linux editions' own update checks ignore.
+
 The fonts in `ui/public/fonts` are under the SIL Open Font License (see the `OFL-*.txt` files).

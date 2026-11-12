@@ -1,11 +1,10 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Try Linux Prototype",
-  "version": "0.1.0",
+  "productName": "Try Linux Preview",
+  "version": "0.2.0",
   "identifier": "io.github.donnysaengkio.trylinux.prototype",
   "build": {
-    "frontendDist": "../ui/dist",
-    "beforeBuildCommand": "npm --prefix ../ui run build"
+    "frontendDist": "../ui/dist"
   },
   "app": {
     "withGlobalTauri": true,
@@ -28,8 +27,25 @@
     }
   },
   "bundle": {
-    "active": false,
+    "active": true,
+    "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
+    "publisher": "Try Linux",
+    "shortDescription": "Try a Linux desktop in a virtual machine",
     "icon": ["icons/icon.ico", "icons/icon.png"],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "startMenuFolder": "Try Linux Preview"
+      }
+    },
     "macOS": { "entitlements": "macos/entitlements.plist" }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU3N0FCNjVEQTE3MEYwMTkKUldRWjhIQ2hYYlo2VjZyUktmcDZWejFuNEpFejRUM2ExUThCaEFqRlhRU1JDQzB2N241K1l1VmQK",
+      "endpoints": ["https://github.com/donnysaengkio/try-linux/releases/download/tauri-updates/latest.json"],
+      "windows": { "installMode": "passive" }
+    }
   }
 }

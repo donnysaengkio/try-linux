@@ -1,6 +1,6 @@
 [package]
 name = "try-linux-prototype"
-version = "0.1.0"
+version = "0.2.0"
 description = "A prototype of Try Linux as one Tauri app for Windows, macOS and Linux"
 edition = "2021"
 publish = false
@@ -19,6 +19,8 @@ regex = "1"
 sha2 = "0.10"
 tauri-plugin-single-instance = "2"
 trash = "5"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 
 [profile.release]
 opt-level = "s"
@@ -32,3 +34,7 @@ objc2 = "0.6.5"
 objc2-app-kit = "0.3.2"
 objc2-foundation = "0.3.2"
 objc2-virtualization = "0.3.2"
+
+[dev-dependencies]
+base64 = "0.22"
+minisign-verify = "0.3"
