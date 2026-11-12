@@ -12,7 +12,7 @@ use crate::config::VmConfig;
 use crate::vm::{Problem, Running, Vms};
 use block2::RcBlock;
 use objc2::rc::Retained;
-use objc2::runtime::ProtocolObject;
+use objc2::runtime::{Bool, ProtocolObject};
 use objc2::{define_class, msg_send, AnyThread, DefinedClass, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{NSApplication, NSBackingStoreType, NSResponder, NSView, NSWindow, NSWindowCollectionBehavior, NSWindowDelegate, NSWindowStyleMask};
 use objc2_foundation::{NSArray, NSData, NSError, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString, NSURL};
@@ -139,13 +139,13 @@ define_class!(
     unsafe impl NSWindowDelegate for WinDelegate {
         // Closing the window hides it; the system keeps running. A console that was never powered on closes.
         #[unsafe(method(windowShouldClose:))]
-        fn window_should_close(&self, sender: &NSWindow) -> bool {
+        fn window_should_close(&self, sender: &NSWindow) -> Bool {
             let id = self.ivars().clone();
             let held = SESSIONS.with(|s| s.borrow().get(&id).map(|x| x.held)).unwrap_or(false);
             if held {
                 SESSIONS.with(|s| if let Some(x) = s.borrow_mut().get_mut(&id) { x.quiet = true });
                 finished(&id, None);
-                return false;
+                return Bool::NO;
             }
             if sender.styleMask().contains(NSWindowStyleMask::FullScreen) {
                 sender.toggleFullScreen(None);
@@ -158,7 +158,7 @@ define_class!(
                 crate::changed(app);
                 crate::show_main(app);
             }
-            false
+            Bool::NO
         }
     }
 );
@@ -211,12 +211,14 @@ fn configuration(p: &Plan) -> Result<Retained<VZVirtualMachineConfiguration>, St
         conf.setMemorySize(p.ram_gb << 30);
 
         let platform = VZGenericPlatformConfiguration::new();
-        platform.setMachineIdentifier(&machine_identifier(&p.dir)?);
+        let machine = machine_identifier(&p.dir)?;
+        platform.setMachineIdentifier(&machine);
         let platform_ref: &VZPlatformConfiguration = &platform;
         conf.setPlatform(platform_ref);
 
         let boot = VZEFIBootLoader::new();
-        boot.setVariableStore(Some(&efi_store(&p.dir)?));
+        let store = efi_store(&p.dir)?;
+        boot.setVariableStore(Some(&store));
         let boot_ref: &VZBootLoader = &boot;
         conf.setBootLoader(Some(boot_ref));
 
