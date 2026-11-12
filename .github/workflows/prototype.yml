@@ -106,5 +106,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: try-linux-prototype-${{ matrix.name }}
-          path: prototype/src-tauri/target/release/try-linux-prototype
+          # Tauri's AppImage build (Linux) renames the program to its mainBinaryName, TryLinux.
+          path: |
+            prototype/src-tauri/target/release/try-linux-prototype
+            prototype/src-tauri/target/release/TryLinux
           if-no-files-found: error
