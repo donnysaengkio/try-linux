@@ -130,7 +130,6 @@ export async function checkQuietly() {
 const SHORTCUTS: [string, string][] = [
   ["General", ""],
   ["Ctrl+N", "Create a virtual machine"],
-  ["Ctrl+K", "Command menu: start, stop or open a system"],
   ["Ctrl+F", "Search distributions (on Choose a Linux OS)"],
   ["Ctrl+U", "Check for updates"],
   ["Ctrl+,", "Preferences"],
@@ -165,7 +164,7 @@ export function useShortcuts(onCreate: (() => void) | null) {
 // ---- the menu itself, on Virtual Machines' header bar
 export function MainMenu() {
   const items: ([string, string, () => void] | null)[] = [
-    ["Check for Updates", "Ctrl+U", checkForUpdatesNow],
+    ["Check For Updates", "Ctrl+U", checkForUpdatesNow],
     null,
     ["Preferences", "Ctrl+,", openPreferences],
     ["Keyboard Shortcuts", "Ctrl+?", openShortcuts],
