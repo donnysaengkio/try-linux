@@ -1,0 +1,3 @@
+# Files that run on Linux keep Linux line endings, also in a Windows checkout (they're copied into WSL to build).
+*.sh text eol=lf
+packaging/linux-handover/** text eol=lf
