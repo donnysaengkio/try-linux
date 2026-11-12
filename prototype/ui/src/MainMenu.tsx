@@ -9,6 +9,8 @@ import { Check, Choice, Note } from "./Form";
 import { Icon } from "./Icon";
 import { Logo } from "./Logo";
 import { listen } from "@tauri-apps/api/event";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { check, type Update } from "@tauri-apps/plugin-updater";
 import { appInfo, checkUpdates, openPage, openStorage, quit, setPreference, systems, updateWinq, type AppInfo, type Progress } from "./tauri";
 import "./settings.css";
 
@@ -25,16 +27,55 @@ export const openPreferences = () => show("preferences");
 export const openShortcuts = () => show("shortcuts");
 export const openAbout = () => show("about");
 
-// Check for Updates (Ctrl+U): the prototype has no releases of its own yet, so it checks WINQ-EMU.
+// ---- Try Linux's own updates (the updater plugin): a signed installer from the tauri-updates release, checked
+// against the public key built into the app.
+
+// A newer Try Linux, or null when there isn't one. Throws when GitHub can't be reached.
+async function findAppUpdate(): Promise<Update | null> {
+  return await check({ timeout: 20000 });
+}
+
+// Asks, downloads with its progress in a notification, installs (the installer closes Try Linux) and starts
+// the new version.
+export async function installAppUpdate(update: Update) {
+  const running = (await systems()).some(v => v.state === "running" || v.state === "paused" || v.state === "held");
+  const notes = update.body?.trim() ? `\n\n${update.body.trim()}` : "";
+  if (!await ask(`Try Linux ${update.version} is available`,
+    `You have ${update.currentVersion}. Try Linux downloads it, closes, installs it and opens again.` +
+    (running ? "\n\nRunning systems keep running, but without the tray menu until Try Linux is back." : "") + notes, "Update")) return;
+  const id = toast.loading(`Downloading Try Linux ${update.version}…`);
+  let got = 0, total = 0;
+  try {
+    await update.downloadAndInstall(e => {
+      if (e.event === "Started") total = e.data.contentLength ?? 0;
+      else if (e.event === "Progress") {
+        got += e.data.chunkLength;
+        if (total) toast.loading(`Downloading Try Linux ${update.version}…`, { id, description: `${Math.round(got / total * 100)}%` });
+      } else if (e.event === "Finished") toast.loading("Installing…", { id, description: undefined });
+    });
+    await relaunch();
+  } catch (e) {
+    toast.dismiss(id);
+    problem({ title: "Couldn't update Try Linux", text: String(e) });
+  }
+}
+
+// Check for Updates (Ctrl+U): a newer Try Linux first, then (on Windows) WINQ-EMU.
 export async function checkForUpdatesNow() {
   const info = await appInfo();
-  if (info.platform !== "windows")
-    return ask("Try Linux is up to date", `You have the Try Linux prototype ${info.version}, with ${info.engine}.\n\nThe prototype doesn't have releases of its own yet.`, null);
   const id = toast.loading("Checking for updates…");
   try {
+    const update = await findAppUpdate();
+    if (update) {
+      toast.dismiss(id);
+      return installAppUpdate(update);
+    }
+    if (info.platform !== "windows") {
+      toast.dismiss(id);
+      return ask("Try Linux is up to date", `You have Try Linux ${info.version}, the latest, with ${info.engine}.`, null);
+    }
     const u = await checkUpdates();
     toast.dismiss(id);
-    const version = (await appInfo()).version;
     if (u.newer) {
       if (await ask(`WINQ-EMU ${u.latest} is available`,
         `You have WINQ-EMU ${u.winq}. Try Linux downloads the new installer from GitHub and runs it; Windows asks for permission. Shut every system down first.`,
@@ -42,8 +83,7 @@ export async function checkForUpdatesNow() {
       return;
     }
     await ask("Try Linux is up to date",
-      `You have the Try Linux prototype ${version}` + (u.winq ? ` and WINQ-EMU ${u.winq}, the latest.` : ". WINQ-EMU isn't installed.") +
-      "\n\nThe prototype doesn't have releases of its own yet, so only WINQ-EMU is checked.", null);
+      `You have Try Linux ${info.version}` + (u.winq ? ` and WINQ-EMU ${u.winq}, the latest of both.` : ", the latest. WINQ-EMU isn't installed."), null);
   } catch (e) {
     toast.dismiss(id);
     problem({ title: "Couldn't check for updates", text: String(e) });
@@ -65,11 +105,20 @@ export async function quitApp() {
   if (!running || await ask("Quit Try Linux?", "Running systems keep running, but without the tray menu.", "Quit")) quit();
 }
 
-// Once a day is the Windows edition's rule; the prototype checks each time it opens, quietly.
+// Once a day is the Windows edition's rule; the prototype checks each time it opens, quietly: a newer Try
+// Linux, then (on Windows) WINQ-EMU.
 export async function checkQuietly() {
   try {
     const info = await appInfo();
-    if (info.platform !== "windows" || !info.check_updates || !info.winq) return;
+    if (!info.check_updates) return;
+    const update = await findAppUpdate().catch(() => null);
+    if (update) {
+      toast(`Try Linux ${update.version} is available`, {
+        description: `You have ${update.currentVersion}.`, duration: 15000, action: { label: "Update", onClick: () => installAppUpdate(update) },
+      });
+      return;
+    }
+    if (info.platform !== "windows" || !info.winq) return;
     const u = await checkUpdates();
     if (u.newer) toast(`WINQ-EMU ${u.latest} is available`, {
       description: `You have ${u.winq}.`, duration: 10000, action: { label: "Update", onClick: () => updateWinqNow() },
@@ -181,9 +230,9 @@ function Preferences({ info, onChange }: { info: AppInfo; onChange: (i: AppInfo)
     <Check label="Follow system" checked={info.follow_system} onChange={v => change("followsystem", v ? "1" : "0", { ...info, follow_system: v })} />
     <Note>Light while {info.platform === "macos" ? "macOS" : info.platform === "linux" ? "your desktop" : "Windows"} shows apps in light mode, and Dark otherwise. The {info.platform === "macos" ? "Mac" : info.platform === "linux" ? "Linux" : "Windows"} edition uses the same choice.</Note>
     <div className="pref-heading">Updates</div>
-    {info.platform === "windows" && <Check label="Check WINQ-EMU for updates when Try Linux opens" checked={info.check_updates}
-      onChange={v => change("checkupdates", v ? "1" : "0", { ...info, check_updates: v })} />}
-    <Note>You have the Try Linux prototype {info.version}, with {info.engine}.</Note>
+    <Check label={`Check for updates${info.platform === "windows" ? " (Try Linux and WINQ-EMU)" : ""} when Try Linux opens`} checked={info.check_updates}
+      onChange={v => change("checkupdates", v ? "1" : "0", { ...info, check_updates: v })} />
+    <Note>You have Try Linux {info.version} (preview), with {info.engine}.</Note>
     <div className="buttons"><button className="btn small" onClick={() => { show(null); checkForUpdatesNow(); }}>Check For Updates</button></div>
   </>;
 }
