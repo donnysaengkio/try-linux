@@ -29,13 +29,18 @@ const sameSource = (a: Source, b: Source) => a.kind === b.kind &&
 const PROFILES = ["Balanced", "Maximum", "Manual"];
 const GiB = 2 ** 30;
 const gib = (b: number) => { const g = b / GiB; return g === Math.floor(g) ? String(g) : g.toFixed(1); };
+// Tips while it installs, worded for this computer (the web view's user agent names it).
+const WIN = navigator.userAgent.includes("Windows"), MAC = navigator.userAgent.includes("Macintosh");
 const TIPS = [
-  "Ctrl+Alt+G releases the mouse and keyboard back to Windows.",
-  "Ctrl+Alt+F switches the VM window in and out of fullscreen.",
-  "The installer only sees the virtual disk, a file on your PC. Your Windows drive is never touched.",
-  "Right-click the Try Linux tray icon to shut a system down cleanly.",
+  ...(MAC ? [] : [
+    `Ctrl+Alt+G releases the mouse and keyboard back to ${WIN ? "Windows" : "your desktop"}.`,
+    "Ctrl+Alt+F switches the VM window in and out of fullscreen.",
+  ]),
+  WIN ? "The installer only sees the virtual disk, a file on your PC. Your Windows drive is never touched."
+    : "The installer only sees the virtual disk, a file on this computer. Your own drive is never touched.",
+  `${WIN ? "Right-click" : "Click"} the Try Linux ${MAC ? "menu bar" : "tray"} icon to shut a system down cleanly.`,
   "Chromium-based browsers can show black video in the VM. Firefox works best.",
-  "Settings can share a Windows folder with Linux and add a desktop shortcut.",
+  `Settings can share a ${WIN ? "Windows " : ""}folder with Linux${MAC ? "" : " and add a desktop shortcut"}.`,
 ];
 
 interface Draft {
@@ -85,7 +90,7 @@ export function Create({ source, onBack, onDone, startStep }:
   const shown = manual ? [d.cores, d.ram] : d.profile === 1 ? defaults.maximum : defaults.balanced;
   const coreTop = defaults.max_cores >= 2 ? Math.floor(defaults.max_cores / 2) * 2 : 1;
   const pickProfile = (p: number) => setD(o => o && (p === 2 && o.profile !== 2 ? { ...o, profile: p, cores: shown[0], ram: shown[1] } : { ...o, profile: p }));
-  const freeText = free?.bytes != null ? `up to ${Math.floor(free.bytes / GiB)} GiB free on drive ${free.drive}` : "";
+  const freeText = free?.bytes != null ? `up to ${Math.floor(free.bytes / GiB)} GiB free on ${free.drive}` : "";
 
   const nextFromGeneral = () => {
     const name = d.name.trim();
@@ -93,7 +98,7 @@ export function Create({ source, onBack, onDone, startStep }:
     if (defaults.taken.some(t => t.toLowerCase() === name.toLowerCase()))
       return problem({ title: "That name is taken", text: `You already have a system named "${name}". Choose another name.` });
     if (d.ownLocation) {
-      if (!/^([A-Za-z]:\\|\\\\)/.test(where)) return problem({ title: "Choose a folder", text: "Choose a full folder path for the location, or untick \"Choose a different location\"." });
+      if (!/^([A-Za-z]:\\|\\\\|\/)/.test(where)) return problem({ title: "Choose a folder", text: "Choose a full folder path for the location, or untick \"Choose a different location\"." });
       if (where.includes(",")) return problem({ title: "Choose another folder", text: "QEMU can't use a folder whose path contains a comma. Choose another location." });
     }
     setStep("resources");
@@ -200,7 +205,7 @@ export function Create({ source, onBack, onDone, startStep }:
       ["Description", !firstLine ? "None" : firstLine + (d.description.trim().includes("\n") ? " …" : "")],
       ["Operating system", source.kind === "distro" ? source.distro.name : disk ? "From the imported disk" : label],
       [disk ? "Disk" : "Installer", installer],
-      ["Location", where + "\\" + (d.name.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32) || "linux")],
+      ["Location", where.replace(/[\\/]+$/, "") + (where.startsWith("/") ? "/" : "\\") + (d.name.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32) || "linux")],
       ["Resource profile", PROFILES[d.profile]],
       ["Memory", shown[1] + " GiB"],
       ["CPU cores", String(shown[0])],

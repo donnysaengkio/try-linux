@@ -297,15 +297,24 @@ pub struct DiskReport {
     pub error: Option<String>,
 }
 
-// The room left on the drive a path is on, and the drive's name ("C:").
+// The room left on the drive a path is on, and how to name that drive in a sentence: "drive C:" on Windows,
+// "the drive" elsewhere (a mount point like "/" reads badly).
 pub fn free_on(path: &str) -> Option<(u64, String)> {
     let disks = sysinfo::Disks::new_with_refreshed_list();
-    let lower = path.to_lowercase();
+    let fold = |s: &str| if cfg!(windows) { s.to_lowercase() } else { s.to_string() };
+    let path = fold(path);
     disks
         .iter()
-        .filter(|d| lower.starts_with(&d.mount_point().to_string_lossy().to_lowercase()))
+        .filter(|d| path.starts_with(&fold(&d.mount_point().to_string_lossy())))
         .max_by_key(|d| d.mount_point().as_os_str().len())
-        .map(|d| (d.available_space(), d.mount_point().to_string_lossy().trim_end_matches('\\').to_string()))
+        .map(|d| {
+            let name = if cfg!(windows) {
+                format!("drive {}", d.mount_point().to_string_lossy().trim_end_matches('\\'))
+            } else {
+                "the drive".to_string()
+            };
+            (d.available_space(), name)
+        })
 }
 
 // What qemu-img says about a disk (its file's size, its maximum size, its snapshots) and the room left on
