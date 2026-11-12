@@ -1,7 +1,7 @@
 // The power commands, and the ones that ask first (from the Power menu, the command menu or the tray), as on
 // the Windows edition: Shut down and Restart ask Linux; Force stop and Reset lose unsaved work.
-import { ask, problem } from "./Ask";
-import { power, type PowerAction, type Vm } from "./tauri";
+import { ask, choose, problem } from "./Ask";
+import { markInstalled, power, start, type PowerAction, type Vm } from "./tauri";
 
 const CONFIRM: Partial<Record<PowerAction, (name: string) => [string, string, string, boolean]>> = {
   shutdown: n => [`Shut down ${n}?`, "Linux shuts down cleanly. Its desktop may ask first; GNOME goes ahead on its own after 60 seconds.", "Shut down", false],
@@ -34,4 +34,20 @@ export function powerItems(vm: Vm): (PowerItem | null)[] {
     { label: "Force stop", action: "force", danger: true },
     { label: "Reset", action: "reset", danger: true },
   ];
+}
+
+// Start (or Install). A system still waiting to install whose disk already holds several GB was most likely
+// installed while Try Linux was closed (so nothing marked it installed): ask whether to start it from its disk.
+export async function startSystem(vm: Vm) {
+  if (vm.maybe_installed) {
+    const a = await choose(`Is ${vm.name} already installed?`,
+      `Linux has already written ${vm.disk} to its disk, so the install probably finished while Try Linux was closed.\n\n` +
+      "Start it from its disk, or run the installer again (which can erase what's installed).",
+      "Start from disk", "Run installer");
+    if (a === null) return;
+    if (a === "main") {
+      try { await markInstalled(vm.id); } catch (e) { return problem(e); }
+    }
+  }
+  call(start(vm.id));
 }

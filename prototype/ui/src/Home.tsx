@@ -7,7 +7,7 @@ import { Header } from "./Header";
 import { Icon } from "./Icon";
 import { Logo } from "./Logo";
 import { MainMenu } from "./MainMenu";
-import { act, call, powerItems } from "./power";
+import { act, call, powerItems, startSystem } from "./power";
 import { onSystemsChanged, showConsole, start, systems, type Vm } from "./tauri";
 
 const MiB = 2 ** 20, GiB = 2 ** 30;
@@ -52,7 +52,7 @@ function VmRow({ vm, onSettings }: { vm: Vm; onSettings: (id: string) => void })
   const cores = vm.cores + (vm.cores === 1 ? " core" : " cores"), ram = vm.ram_gb + " GB";
   const on = vm.state === "running" || vm.state === "paused" || vm.state === "elsewhere";
   const live = on && vm.cpu !== null;
-  const startIt = () => call(start(vm.id));
+  const startIt = () => startSystem(vm);
   return (
     <div className="vm-row" onDoubleClick={e => {
       if (vm.state === "off" && !(e.target as HTMLElement).closest("button")) startIt();

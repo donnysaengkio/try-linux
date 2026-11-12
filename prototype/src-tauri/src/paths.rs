@@ -15,6 +15,13 @@ fn home() -> PathBuf {
     std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_default()
 }
 
+// For tests: TRYLINUX_HOME puts Try Linux's storage and its preferences file in that folder instead, so a test
+// never touches your real systems or settings.
+#[allow(dead_code)]
+fn test_home() -> Option<PathBuf> {
+    std::env::var_os("TRYLINUX_HOME").filter(|v| !v.is_empty()).map(PathBuf::from)
+}
+
 // ---------------------------------------------------------------- Windows: settings.ini
 
 #[cfg(windows)]
@@ -22,7 +29,10 @@ mod store {
     use super::*;
 
     pub fn ini() -> PathBuf {
-        std::env::var("APPDATA").map(PathBuf::from).unwrap_or_default().join("TryLinux").join("settings.ini")
+        match test_home() {
+            Some(h) => h.join("settings.ini"),
+            None => std::env::var("APPDATA").map(PathBuf::from).unwrap_or_default().join("TryLinux").join("settings.ini"),
+        }
     }
     fn lines() -> Vec<String> {
         fs::read_to_string(ini()).map(|t| t.lines().map(String::from).collect()).unwrap_or_default()
@@ -52,7 +62,7 @@ mod store {
     pub fn root() -> PathBuf {
         match get("storage").filter(|s| !s.is_empty()) {
             Some(s) => PathBuf::from(s),
-            None => std::env::var("LOCALAPPDATA").map(PathBuf::from).unwrap_or_default().join("TryLinux"),
+            None => test_home().unwrap_or_else(|| std::env::var("LOCALAPPDATA").map(PathBuf::from).unwrap_or_default().join("TryLinux")),
         }
     }
     pub fn vms() -> PathBuf {
@@ -80,10 +90,13 @@ mod store {
         }
     }
     pub fn data() -> PathBuf {
-        xdg("XDG_DATA_HOME", ".local/share").join("TryLinux")
+        test_home().unwrap_or_else(|| xdg("XDG_DATA_HOME", ".local/share").join("TryLinux"))
     }
     pub fn file() -> PathBuf {
-        xdg("XDG_CONFIG_HOME", ".config").join("TryLinux").join("settings.json")
+        match test_home() {
+            Some(h) => h.join("settings.json"),
+            None => xdg("XDG_CONFIG_HOME", ".config").join("TryLinux").join("settings.json"),
+        }
     }
     fn read() -> Map<String, Value> {
         fs::read_to_string(file()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()

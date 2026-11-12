@@ -10,7 +10,7 @@ import { OwnInstaller } from "./OwnInstaller";
 import { loadArch, RECOMMENDED } from "./distros";
 import { Home } from "./Home";
 import { applyTheme, checkQuietly, MainMenuWindows, openAbout, openPreferences, openShortcuts, useShortcuts } from "./MainMenu";
-import { act } from "./power";
+import { act, startSystem } from "./power";
 import { SettingsPage } from "./Settings";
 import { appInfo, onAskPower, onAskQuit, onProblem, quit, settings, startPage, systems, type Settings, type Vm } from "./tauri";
 import "./style.css";
@@ -44,6 +44,13 @@ function App() {
     // first system's Settings on that tab, with every section open.
     startPage().then(async p => {
       if (p === "choose") return setPage({ kind: "choose", back: true });
+      // install:ID presses that system's Install (for the question about an install that already finished).
+      if (p.startsWith("install:")) {
+        await home();
+        const vm = (await systems()).find(v => v.id === p.slice(8));
+        if (vm) setTimeout(() => startSystem(vm), 800);
+        return;
+      }
       // menu:preferences, menu:shortcuts or menu:about opens that window over Virtual Machines.
       if (p.startsWith("menu:")) {
         await home();

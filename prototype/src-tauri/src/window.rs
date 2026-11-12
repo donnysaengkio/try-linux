@@ -48,21 +48,35 @@ mod imp {
 
     // The system's window: a visible, titled top-level window of its QEMU process.
     pub fn find(pid: u32) -> Option<isize> {
+        search(pid, true)
+    }
+
+    // Its window even if hidden (one a Try Linux that has closed had hidden), for taking a system over.
+    pub fn find_any(pid: u32) -> Option<isize> {
+        search(pid, false)
+    }
+
+    pub fn visible(h: isize) -> bool {
+        unsafe { IsWindowVisible(h) != 0 }
+    }
+
+    fn search(pid: u32, visible_only: bool) -> Option<isize> {
         struct Search {
             pid: u32,
+            visible_only: bool,
             found: isize,
         }
         unsafe extern "system" fn each(h: isize, l: isize) -> i32 {
             let s = &mut *(l as *mut Search);
             let mut owner = 0u32;
             GetWindowThreadProcessId(h, &mut owner);
-            if owner == s.pid && IsWindowVisible(h) != 0 && GetWindowTextLengthW(h) > 0 {
+            if owner == s.pid && (!s.visible_only || IsWindowVisible(h) != 0) && GetWindowTextLengthW(h) > 0 {
                 s.found = h;
                 return 0;
             }
             1
         }
-        let mut s = Search { pid, found: 0 };
+        let mut s = Search { pid, visible_only, found: 0 };
         unsafe { EnumWindows(each, &mut s as *mut Search as isize) };
         (s.found != 0).then_some(s.found)
     }
@@ -137,6 +151,12 @@ mod imp {
 mod imp {
     pub fn find(_pid: u32) -> Option<isize> {
         None
+    }
+    pub fn find_any(_pid: u32) -> Option<isize> {
+        None
+    }
+    pub fn visible(_h: isize) -> bool {
+        true
     }
     pub fn front(_h: isize) {}
     pub fn hide(_h: isize) {}

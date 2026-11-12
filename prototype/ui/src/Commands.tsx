@@ -4,7 +4,7 @@ import { Dialog } from "@base-ui/react/dialog";
 import { Command } from "cmdk";
 import { useEffect, useState } from "react";
 import { checkForUpdatesNow, openPreferences, openShortcuts } from "./MainMenu";
-import { act, call, powerItems } from "./power";
+import { act, call, powerItems, startSystem } from "./power";
 import { showConsole, start, type Vm } from "./tauri";
 
 export function Commands({ vms, onCreate }: { vms: Vm[]; onCreate: () => void }) {
@@ -40,7 +40,7 @@ export function Commands({ vms, onCreate }: { vms: Vm[]; onCreate: () => void })
                   <Command.Group key={vm.id} heading={vm.name}>
                     {vm.state === "off"
                       ? <>
-                          <Command.Item className="commands-item" value={`${vm.name} start`} onSelect={() => run(() => call(start(vm.id)))}>
+                          <Command.Item className="commands-item" value={`${vm.name} start`} onSelect={() => run(() => startSystem(vm))}>
                             {vm.status === "Ready to install" ? "Install" : "Start"} <span className="commands-of">{vm.name}</span>
                           </Command.Item>
                           <Command.Item className="commands-item" value={`${vm.name} open console`} onSelect={() => run(() => call(showConsole(vm.id)))}>
