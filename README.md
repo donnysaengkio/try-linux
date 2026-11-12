@@ -4,7 +4,7 @@ Try a Linux desktop without repartitioning your drive. Pick a distribution, and 
 downloads the official installer, checks it against the distribution's published SHA-256 or
 SHA-512 checksum, creates a virtual disk and boots it in a window.
 
-![Choose a Linux OS](windows/docs/images/choose-os.png)
+![Try Linux for Windows: Virtual Machines, with Fedora Workstation, Linux Mint and Ubuntu Desktop](prototype/docs/images/virtual-machines.png)
 
 ## Editions
 
@@ -16,6 +16,8 @@ SHA-512 checksum, creates a virtual disk and boots it in a window.
 
 The Windows edition runs QEMU through [WINQ-EMU](https://github.com/cmspam/winq-emu), with
 OpenGL and Vulkan graphics; the Linux edition needs GTK 4 and libadwaita, and uses VirGL for 3D.
+
+Try Linux for Windows 2.x replaces 1.x (in `windows/`), which updates to it on its own.
 
 Each edition updates itself from its own releases here: Windows releases are tagged `v1.2.3`,
 Mac releases `macos-v1.2.3-preview` and Linux releases `linux-v1.2.3-preview`.

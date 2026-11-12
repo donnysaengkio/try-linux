@@ -1,4 +1,9 @@
-# Try Linux
+# Try Linux 1.x for Windows
+
+> **Replaced by [Try Linux for Windows 2.x](../prototype/README.md).** 1.x updates to 2.x on its own (click
+> **Update** when it's offered), or download `TryLinux-<version>-Setup.exe` from
+> [the latest release](https://github.com/donnysaengkio/try-linux/releases/latest). Your systems carry over.
+> This page and the code here describe 1.x, which gets no more updates.
 
 Try a Linux desktop on Windows without repartitioning your drive.
 Pick a distribution, and Try Linux downloads the official installer, checks it
