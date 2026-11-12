@@ -11,10 +11,9 @@ import { findDistro, type Distro } from "./distros";
 import { Action, Check, Choice, Note, NumberBox, Radios, Row, Section, SectionsContext, Segmented, SubHeading } from "./Form";
 import { Header } from "./Header";
 import { Icon, type IconName } from "./Icon";
-import { addShortcut, backupSystem, bootIso, cleanList, cleanRun, cloneSystem, deleteSystem, installerOf, moveStorage, resetSystem, restoreBackup, diskAdd, diskCompact, diskInfo, diskRemove, diskResize, openPage, saveSettings, setDisc, settings, type Changes, type DiskReport, type Settings } from "./tauri";
+import { addShortcut, appInfo, backupSystem, bootIso, cleanList, cleanRun, cloneSystem, deleteSystem, installerOf, moveStorage, resetSystem, restoreBackup, diskAdd, diskCompact, diskInfo, diskRemove, diskResize, openPage, saveSettings, setDisc, settings, type Changes, type DiskReport, type Settings } from "./tauri";
 import "./settings.css";
 
-const VERSION = "0.1.0";
 const TABS: [string, string, IconName][] = [
   ["general", "General", "wrench"], ["hardware", "Hardware", "monitor"], ["devices", "Devices", "usb"], ["recovery", "Recovery", "undo-2"],
 ];
@@ -29,9 +28,6 @@ const GiB = 2 ** 30;
 const size = (b: number) => b >= 1024 * GiB ? (b / 1024 / GiB).toFixed(2) + " TB" : b >= GiB ? (b / GiB).toFixed(1) + " GB" : Math.round(b / 2 ** 20) + " MB";
 const fileName = (p: string) => p.slice(Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/")) + 1);
 
-// Remembered while the app runs, as on Windows: which sections were open, and the tab last shown.
-const opened = new Set<string>();
-let lastOpened: string | null = null;
 
 export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool }:
   { first: Settings; onBack: (saved: boolean) => void; tab?: string; openAll?: boolean; startTool?: "resize" | "add" | "snapshots" }) {
@@ -48,15 +44,23 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
   }));
   const set = <K extends keyof Changes>(k: K, v: Changes[K]) => setF(o => ({ ...o, [k]: v }));
   const [tab, setTab] = useState(startTab ?? "general");
-  const [open, setOpen] = useState(() => openAll ? new Set(["*"]) : new Set(opened));
-  const [last, setLast] = useState(lastOpened);
+  // Which sections are open, and the one opened last (the only one highlighted): for this visit only, so every
+  // section is closed again the next time Settings opens.
+  const [open, setOpen] = useState<Set<string>>(() => openAll ? new Set(["*"]) : new Set());
+  const [last, setLast] = useState<string | null>(null);
+  // The app's own version, for the subtitle.
+  const [version, setVersion] = useState("");
+  useEffect(() => { appInfo().then(i => setVersion(i.version)).catch(() => {}); }, []);
   const sections = useMemo(() => ({
     open: open.has("*") ? { has: () => true } as unknown as Set<string> : open,
     last,
     toggle: (title: string, isOpen: boolean) => {
-      if (isOpen) opened.add(title); else opened.delete(title);
-      lastOpened = isOpen ? title : lastOpened === title ? null : lastOpened;
-      setOpen(new Set(opened)); setLast(lastOpened);
+      setOpen(o => {
+        const next = new Set(o);
+        if (isOpen) next.add(title); else next.delete(title);
+        return next;
+      });
+      setLast(l => isOpen ? title : l === title ? null : l);
     },
   }), [open, last]);
 
@@ -285,7 +289,7 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
                   <button className="pencil" title="Rename" aria-label="Rename" onClick={() => setRenaming(true)}><Icon name="pencil" size={16} /></button>
                 </>}
           </div>
-          <div className="settings-sub">{s.os.toUpperCase()}  ·  TRY LINUX v{VERSION}{s.running ? "  ·  RUNNING" : ""}</div>
+          <div className="settings-sub">{s.os.toUpperCase()}  ·  TRY LINUX v{version}{s.running ? "  ·  RUNNING" : ""}</div>
 
           <SectionsContext.Provider value={sections}>
             {/* ---------------- General */}
