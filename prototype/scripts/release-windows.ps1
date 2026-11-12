@@ -1,12 +1,14 @@
-# Builds the Windows installer of Try Linux Preview and the files for a GitHub release, in prototype\dist:
-#   TryLinux-Preview-<version>-x64-setup.exe   the installer (NSIS, installs for the current user)
-#   SHA256SUMS.txt                              its checksum
-#   latest.json                                 what the app's updater reads: the version and the signed installer
+# Builds the Windows installer of Try Linux and the files for a GitHub release, in prototype\dist:
+#   TryLinux-<version>-Setup.exe   the installer (NSIS, installs for the current user)
+#   TryLinux.exe                   the same installer under the name the Windows edition before 2.0 updates to:
+#                                  it swaps itself for this file and runs it, which installs this version
+#   SHA256SUMS.txt                 checksums of both (that edition checks TryLinux.exe against it)
+#   latest.json                    what the app's updater reads: the version and the signed installer
 # The installer is signed for updates with the private key in %USERPROFILE%\.tauri\try-linux-updates.key (never
 # put it in the repository); the app only installs updates signed with it.
 #
-# Then: a release tagged tauri-v<version>-preview with the installer and SHA256SUMS.txt, and latest.json uploaded
-# to the "tauri-updates" release (replacing the old one), which is where installed copies look for updates.
+# Then: a release tagged v<version> (Latest) with the two exes and SHA256SUMS.txt, and latest.json uploaded to
+# the "tauri-updates" release (replacing the old one), which is where installed copies look for updates.
 
 param([string]$Notes = "")
 # Programs here print progress to their error output, which "Stop" would treat as a failure: each step's exit
@@ -16,9 +18,10 @@ function Check($what) { if ($LASTEXITCODE) { throw "$what failed (exit code $LAS
 $root = Split-Path $PSScriptRoot -Parent   # prototype\
 $key = Join-Path $env:USERPROFILE ".tauri\try-linux-updates.key"
 if (-not (Test-Path $key)) { throw "The update signing key isn't at $key." }
-$version = (Get-Content (Join-Path $root "src-tauri\tauri.conf.json") -Raw | ConvertFrom-Json).version
-$tag = "tauri-v$version-preview"
-$name = "TryLinux-Preview-$version-x64-setup.exe"
+$conf = Get-Content (Join-Path $root "src-tauri\tauri.conf.json") -Raw | ConvertFrom-Json
+$version = $conf.version
+$tag = "v$version"
+$name = "TryLinux-$version-Setup.exe"
 $repo = "https://github.com/donnysaengkio/try-linux/releases/download"
 
 Push-Location (Join-Path $root "ui")
@@ -33,13 +36,14 @@ try { & .\ui\node_modules\.bin\tauri.cmd build 2>&1 | Out-Host; Check "Building 
 finally { Remove-Item Env:TAURI_SIGNING_PRIVATE_KEY, Env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD -ErrorAction SilentlyContinue }
 Pop-Location
 
-$built = Join-Path $root "src-tauri\target\release\bundle\nsis\Try Linux Preview_${version}_x64-setup.exe"
+$built = Join-Path $root "src-tauri\target\release\bundle\nsis\$($conf.productName)_${version}_x64-setup.exe"
 $dist = Join-Path $root "dist"
 New-Item -ItemType Directory -Force $dist | Out-Null
 Get-ChildItem $dist | Remove-Item -Force
 Copy-Item $built (Join-Path $dist $name)
+Copy-Item $built (Join-Path $dist "TryLinux.exe")
 $hash = (Get-FileHash (Join-Path $dist $name) -Algorithm SHA256).Hash.ToLower()
-[IO.File]::WriteAllText((Join-Path $dist "SHA256SUMS.txt"), "$hash  $name`n")
+[IO.File]::WriteAllText((Join-Path $dist "SHA256SUMS.txt"), "$hash  $name`n$hash  TryLinux.exe`n")
 $latest = [ordered]@{
     version = $version
     notes = $Notes

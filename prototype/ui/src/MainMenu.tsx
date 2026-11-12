@@ -227,11 +227,11 @@ function Preferences({ info, onChange }: { info: AppInfo; onChange: (i: AppInfo)
         onChange={v => change("theme", v, { ...info, theme: v })} />
     </div>
     <Check label="Follow system" checked={info.follow_system} onChange={v => change("followsystem", v ? "1" : "0", { ...info, follow_system: v })} />
-    <Note>Light while {info.platform === "macos" ? "macOS" : info.platform === "linux" ? "your desktop" : "Windows"} shows apps in light mode, and Dark otherwise. The {info.platform === "macos" ? "Mac" : info.platform === "linux" ? "Linux" : "Windows"} edition uses the same choice.</Note>
+    <Note>Light while {info.platform === "macos" ? "macOS" : info.platform === "linux" ? "your desktop" : "Windows"} shows apps in light mode, and Dark otherwise.{info.platform === "windows" ? "" : ` The ${info.platform === "macos" ? "Mac" : "Linux"} edition uses the same choice.`}</Note>
     <div className="pref-heading">Updates</div>
     <Check label={`Check for updates${info.platform === "windows" ? " (Try Linux and WINQ-EMU)" : ""} when Try Linux opens`} checked={info.check_updates}
       onChange={v => change("checkupdates", v ? "1" : "0", { ...info, check_updates: v })} />
-    <Note>You have Try Linux {info.version} (preview), with {info.engine}.</Note>
+    <Note>You have Try Linux {info.version}, with {info.engine}.</Note>
     <div className="buttons"><button className="btn small" onClick={() => { show(null); checkForUpdatesNow(); }}>Check For Updates</button></div>
   </>;
 }

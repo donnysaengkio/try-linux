@@ -1,8 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Try Linux Preview",
-  "version": "0.2.0",
-  "identifier": "io.github.donnysaengkio.trylinux.prototype",
+  "productName": "Try Linux",
+  "mainBinaryName": "TryLinux",
+  "version": "2.0.0",
+  "identifier": "io.github.donnysaengkio.trylinux",
   "build": {
     "frontendDist": "../ui/dist"
   },
@@ -35,8 +36,7 @@
     "icon": ["icons/icon.ico", "icons/icon.png"],
     "windows": {
       "nsis": {
-        "installMode": "currentUser",
-        "startMenuFolder": "Try Linux Preview"
+        "installMode": "currentUser"
       }
     },
     "macOS": { "entitlements": "macos/entitlements.plist" }
