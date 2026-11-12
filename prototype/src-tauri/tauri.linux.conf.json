@@ -1,0 +1,11 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": ["appimage"]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": ["https://github.com/donnysaengkio/try-linux/releases/download/tauri-updates/latest-linux.json"]
+    }
+  }
+}

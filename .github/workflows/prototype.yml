@@ -68,6 +68,26 @@ jobs:
         run: |
           TRYLINUX_TEST_DIR="$RUNNER_TEMP/disk-test" cargo test --locked disk_utilities -- --ignored --nocapture
           TRYLINUX_TEST_DIR="$RUNNER_TEMP/recovery-test" cargo test --locked recovery_actions -- --ignored --nocapture
+          TRYLINUX_TEST_DIR="$RUNNER_TEMP/legacy-test" cargo test --locked takes_over_linux_edition -- --ignored --nocapture
+
+      # The AppImage, as released. Its update signature is added on the developer's PC (scripts/release-linux.sh
+      # --add), where the signing key stays. linuxdeploy runs extracted, as runners have no FUSE.
+      - name: AppImage (Linux)
+        if: runner.os == 'Linux'
+        working-directory: prototype
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          sudo apt-get install -y --no-install-recommends file
+          ./ui/node_modules/.bin/tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          ls -la src-tauri/target/release/bundle/appimage/
+
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
+        with:
+          name: try-linux-appimage-${{ matrix.name }}
+          path: prototype/src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
 
       # Finding each built-in distribution's current installer on its mirror (listings and checksums only).
       - name: Installer search test

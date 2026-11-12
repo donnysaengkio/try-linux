@@ -95,7 +95,7 @@ pub fn compact_disk(cfg: &VmConfig, index: usize, mut progress: impl FnMut(&str,
     let before = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
     if let Some((free, drive)) = free_on(&path.to_string_lossy()) {
         if free < before {
-            return Err(format!("Compacting needs room for a second copy while it works: {}, but drive {drive} has {} free.", bytes(before), bytes(free)));
+            return Err(format!("Compacting needs room for a second copy while it works: {}, but {drive} has {} free.", bytes(before), bytes(free)));
         }
     }
     // A preallocated boot disk stops being preallocated once it's rewritten as a sparse file.

@@ -27,6 +27,12 @@ const NET_NOTES = [
 const GiB = 2 ** 30;
 const size = (b: number) => b >= 1024 * GiB ? (b / 1024 / GiB).toFixed(2) + " TB" : b >= GiB ? (b / GiB).toFixed(1) + " GB" : Math.round(b / 2 ** 20) + " MB";
 const fileName = (p: string) => p.slice(Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/")) + 1);
+// Whether `path` is in folder `dir` (Windows paths compare without case; either separator).
+const inside = (dir: string, path: string) => {
+  const win = /^[A-Za-z]:|^\\\\/.test(dir);
+  const [d, p] = win ? [dir.toLowerCase(), path.toLowerCase()] : [dir, path];
+  return p.startsWith(d.replace(/[\\/]+$/, "") + (win ? "\\" : "/"));
+};
 
 
 export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool }:
@@ -120,9 +126,10 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
   };
   const remove = async () => {
     const entry = s.disks[disk];
-    const ours = entry.toLowerCase().startsWith(s.dir.toLowerCase() + "\\");
+    const ours = inside(s.dir, entry);
+    const bin = s.platform === "windows" ? "the Recycle Bin" : "the Trash";
     if (!await ask(`Remove ${diskName} from ${who}?`, ours
-      ? "Its file goes to the Recycle Bin, with everything Linux stored on it.\n\nTo get it back, restore the file from the Recycle Bin and add it with Add disk."
+      ? `Its file goes to ${bin}, with everything Linux stored on it.\n\nTo get it back, restore the file from ${bin} and add it with Add disk.`
       : `The disk file is kept where it is:\n${entry}\n\nYou can add it again with Add disk.`, "Remove", ours)) return;
     diskRemove(s.id, disk).then(m => afterTool(m, disk - 1)).catch(failed("remove the disk"));
   };
@@ -215,7 +222,7 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
       try { await bootIso(s.id, iso); onBack(false); } catch (e) { problem({ title: "Couldn't start it", text: String(e) }); }
     },
     remove: async () => {
-      const attached = s.disks.slice(1).some(d => !d.toLowerCase().startsWith(s.dir.toLowerCase() + "\\"));
+      const attached = s.disks.slice(1).some(d => !inside(s.dir, d));
       if (!await ask(`Delete ${who}?`, `This permanently removes its virtual ${s.disks.length > 1 ? "disks" : "disk"} and everything installed in it.\n\n` +
         (attached ? "Disks added from other folders and downloaded ISOs are kept." : "Downloaded ISOs are kept."), "Delete", true)) return;
       try { toast(await deleteSystem(s.id)); onBack(false); } catch (e) { problem({ title: "Couldn't delete it", text: String(e) }); }
@@ -362,7 +369,7 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
 
                 <SubHeading>Capacity</SubHeading>
                 <Row label="Current size"><span className="value-text">{!report ? "Checking…" : report.error ?? (report.actual != null ? size(report.actual) : "")}</span></Row>
-                <Row label="System free"><span className="value-text">{report?.free != null && !report.error ? `${size(report.free)} on drive ${report.drive}` : ""}</span></Row>
+                <Row label="System free"><span className="value-text">{report?.free != null && !report.error ? `${size(report.free)} on ${report.drive}` : ""}</span></Row>
                 <Row label="Maximum size"><span className="value-text">{report?.size != null && !report.error ? size(report.size) : ""}</span></Row>
 
                 <SubHeading>Disk information</SubHeading>
@@ -422,7 +429,7 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
                   <textarea className="text-box mono" rows={4} spellCheck={false} disabled={f.net_type === 2}
                     value={f.forwards.join("\n")} onChange={e => set("forwards", e.target.value.split("\n"))} />
                 </Row>
-                <Note>One per line. tcp:HOST:GUEST is reachable from this PC only; lan tcp:HOST:GUEST also accepts other devices on your network (Windows Firewall asks the first time). SSH uses the rule for guest port 22.</Note>
+                <Note>One per line. tcp:HOST:GUEST is reachable from this PC only; lan tcp:HOST:GUEST also accepts other devices on your network{win ? " (Windows Firewall asks the first time)" : ""}. SSH uses the rule for guest port 22.</Note>
               </Section>
 
               <Section title="Shared folder" summary={!f.shared.trim() ? "Not shared"

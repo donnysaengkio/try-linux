@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9F85F5"/>
+      <stop offset="1" stop-color="#5E4898"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="112" height="112" rx="26" fill="url(#bg)"/>
+  <rect x="8" y="8" width="112" height="112" rx="26" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="2"/>
+  <!-- ">_" in pixels, like the logo -->
+  <g fill="#15141A">
+    <rect x="30" y="36" width="10" height="10"/>
+    <rect x="40" y="46" width="10" height="10"/>
+    <rect x="50" y="56" width="10" height="10"/>
+    <rect x="40" y="66" width="10" height="10"/>
+    <rect x="30" y="76" width="10" height="10"/>
+    <rect x="62" y="80" width="38" height="10"/>
+  </g>
+</svg>

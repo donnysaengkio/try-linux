@@ -125,8 +125,12 @@ mod imp {
     }
 
     // The entry both use, as the Linux edition writes it (Exec quoted, as the path may have spaces).
+    // An AppImage runs from a temporary mount, so entries name the AppImage itself.
     pub fn entry(id: &str, display_name: &str, direct: bool) -> Result<String, String> {
-        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let exe = match crate::legacy::appimage() {
+            Some(app) => app,
+            None => std::env::current_exe().map_err(|e| e.to_string())?,
+        };
         let exec = format!("\"{}\"{}", exe.to_string_lossy().replace('"', "\\\""), if direct { format!(" --start {id}") } else { String::new() });
         let name = display_name.replace('\n', " ");
         Ok(format!("[Desktop Entry]\nType=Application\nName={name}\nComment={} {name} in Try Linux\nExec={exec}\n\

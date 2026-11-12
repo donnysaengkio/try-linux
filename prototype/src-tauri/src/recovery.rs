@@ -276,7 +276,7 @@ pub fn plan_move(from: &Path, parent: &Path) -> Result<(PathBuf, u64), String> {
     let need = tree_size(from);
     if let Some((free, drive)) = crate::settings::free_on(&to.to_string_lossy()) {
         if free < need + GIB {
-            return Err(format!("Not enough space on drive {drive}: {} needed.", bytes(need)));
+            return Err(format!("Not enough space on {drive}: {} needed.", bytes(need)));
         }
     }
     Ok((to, need))
