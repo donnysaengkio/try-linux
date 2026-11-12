@@ -67,6 +67,45 @@ struct Vm {
     // Live, once Linux reports it: the memory Linux is using (else `mem`), and disk reads and writes per second.
     guest_mem: Option<u64>,
     disk_rate: Option<f64>,
+    // Waiting to install, but its disk already holds several GB (installed while Try Linux was closed?).
+    maybe_installed: bool,
+}
+
+// Systems left running by a Try Linux that closed (or crashed) while they ran: taken over, so they're shown and
+// controlled here, and what happens when they stop (an install finishing, a restart) is handled as for any other.
+// One started by a Try Linux that's still open stays with it.
+fn adopt_orphans(app: &AppHandle, probe: &Probe, vms: &Vms) {
+    if cfg!(target_os = "macos") {
+        return; // systems run inside Try Linux there, so they end with it
+    }
+    let mut found = vec![];
+    {
+        let mut sys = probe.0.lock().unwrap();
+        refresh_processes(&mut sys);
+        let mine = vms.0.lock().unwrap();
+        for dir in config::system_dirs() {
+            let Some(cfg) = VmConfig::load(&dir) else { continue };
+            if mine.contains_key(&cfg.id) {
+                continue;
+            }
+            if let Some(p) = qemu_for(&sys, &cfg).filter(|p| !controlled_elsewhere(&sys, p)) {
+                let args: Vec<String> = p.cmd().iter().map(|a| a.to_string_lossy().to_string()).collect();
+                found.push((cfg.id.clone(), p.pid().as_u32(), args, p.run_time()));
+            }
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    for (id, pid, args, secs) in found {
+        vm::adopt(app, vms, &id, pid, &args, std::time::Duration::from_secs(secs));
+    }
+    #[cfg(target_os = "macos")]
+    let _ = (app, found);
+}
+
+// Install, for a system whose disk looks installed already: start it from its disk from now on.
+#[tauri::command]
+fn mark_installed(id: String) -> Result<(), String> {
+    config::find(&id).ok_or("This system's folder can't be found any more.")?.set_all(&[("pending", "0".into())]).map_err(|e| e.to_string())
 }
 
 // One System kept between calls, so CPU use is measured over the time since the last look.
@@ -83,21 +122,39 @@ impl Probe {
     }
 }
 
-// A QEMU process that uses this system's boot disk but wasn't started here (another copy of Try Linux).
-fn qemu_for(sys: &System, cfg: &VmConfig) -> Option<u32> {
-    let disk = cfg.disk().to_string_lossy().to_lowercase();
-    sys.processes()
-        .values()
-        .find(|p| {
-            p.name().to_string_lossy().to_lowercase().starts_with("qemu-system")
-                && p.cmd().iter().any(|a| a.to_string_lossy().to_lowercase().contains(&disk))
-        })
-        .map(|p| p.pid().as_u32())
+// Processes with their command lines (a plain refresh leaves those out, and a running system is recognised by
+// the disk on QEMU's command line), memory and CPU.
+fn refresh_processes(sys: &mut System) {
+    use sysinfo::{ProcessRefreshKind, UpdateKind};
+    let kind = ProcessRefreshKind::new().with_memory().with_cpu().with_cmd(UpdateKind::OnlyIfNotSet).with_exe(UpdateKind::OnlyIfNotSet);
+    sys.refresh_processes_specifics(ProcessesToUpdate::All, true, kind);
 }
 
+// A QEMU process that uses this system's boot disk but wasn't started here.
+fn qemu_for<'a>(sys: &'a System, cfg: &VmConfig) -> Option<&'a sysinfo::Process> {
+    let disk = cfg.disk().to_string_lossy().to_lowercase();
+    sys.processes().values().find(|p| {
+        p.name().to_string_lossy().to_lowercase().starts_with("qemu-system")
+            && p.cmd().iter().any(|a| a.to_string_lossy().to_lowercase().contains(&disk))
+    })
+}
+
+// Whether a Try Linux that's still open runs this QEMU (the Windows, Mac or Linux edition): its parent process is
+// alive, is Try Linux, and started before it (so it isn't another program that got the same process id).
+fn controlled_elsewhere(sys: &System, p: &sysinfo::Process) -> bool {
+    let Some(parent) = p.parent().and_then(|pid| sys.process(pid)) else { return false };
+    if parent.pid().as_u32() == std::process::id() || parent.start_time() > p.start_time() {
+        return false;
+    }
+    let what = format!("{} {}", parent.name().to_string_lossy(), parent.cmd().iter().map(|a| a.to_string_lossy()).collect::<Vec<_>>().join(" "));
+    let what = what.to_lowercase();
+    what.contains("trylinux") || what.contains("try-linux")
+}
+
+// Some QEMU is using this system's disk (so it mustn't be started again).
 pub fn running_elsewhere(cfg: &VmConfig) -> bool {
     let mut sys = System::new();
-    sys.refresh_processes(ProcessesToUpdate::All, true);
+    refresh_processes(&mut sys);
     qemu_for(&sys, cfg).is_some()
 }
 
@@ -133,11 +190,12 @@ pub fn os_label(cfg: &VmConfig) -> String {
 
 // Off the main thread: reading a running system's activity asks QEMU, which can take a moment.
 #[tauri::command(async)]
-fn systems(probe: State<Probe>, vms: State<Vms>, live: State<live::Live>) -> Vec<Vm> {
+fn systems(app: AppHandle, probe: State<Probe>, vms: State<Vms>, live: State<live::Live>) -> Vec<Vm> {
+    adopt_orphans(&app, &probe, &vms);
     let host = probe.host();
     let mut asks = vec![];   // (index, id, QMP port) of the systems to read activity from, after the locks are let go
     let mut sys = probe.0.lock().unwrap();
-    sys.refresh_processes(ProcessesToUpdate::All, true);
+    refresh_processes(&mut sys);
     let mine = vms.0.lock().unwrap();
     let mut out = vec![];
     for dir in config::system_dirs() {
@@ -150,11 +208,14 @@ fn systems(probe: State<Probe>, vms: State<Vms>, live: State<live::Live>) -> Vec
             Some(r) if r.paused => ("paused", if r.hidden { "Paused, window closed" } else { "Paused" }, Some(r.pid)),
             Some(r) => ("running", if r.hidden { "Running, window closed" } else { "Running" }, Some(r.pid)),
             None => match qemu_for(&sys, &cfg) {
-                Some(p) => ("elsewhere", "Running", Some(p)),
+                Some(p) => ("elsewhere", "Running", Some(p.pid().as_u32())),
                 None if cfg.pending() => ("off", "Ready to install", None),
                 None => ("off", "Powered off", None),
             },
         };
+        // Waiting to install, but Linux has already written several GB to its disk: most likely it was installed
+        // while Try Linux was closed, so Install asks first.
+        let maybe_installed = state == "off" && cfg.pending() && fs::metadata(cfg.disk()).map(|m| m.len()).unwrap_or(0) > 2 << 30;
         let process = pid.and_then(|p| sys.process(sysinfo::Pid::from_u32(p)));
         let live = process.filter(|_| state == "running" || state == "elsewhere" || state == "paused");
         if live.is_some() {
@@ -180,6 +241,7 @@ fn systems(probe: State<Probe>, vms: State<Vms>, live: State<live::Live>) -> Vec
             mem: live.map(|p| p.memory()),
             guest_mem: None,
             disk_rate: None,
+            maybe_installed,
         });
     }
     drop(mine);
@@ -393,7 +455,7 @@ fn main() {
         .manage(Probe(Mutex::new(System::new())))
         .manage(Vms::default())
         .manage(live::Live::default())
-        .invoke_handler(tauri::generate_handler![systems, start, console, power, quit, catalog, arch, icons, open_page, start_page, settings::settings, settings::save_settings, settings::disk_info, settings::set_disc, create::create_defaults, create::free_space, create::create, create::cancel_create, create::read_disk, app::app_info, app::set_preference, app::check_updates, app::open_storage, settings::add_shortcut, disks::disk_resize, disks::disk_compact, disks::disk_add, disks::disk_remove, recovery::backup, recovery::restore, recovery::clone_system, recovery::snapshots, recovery::snapshot, recovery::move_storage, recovery::clean_list, recovery::clean_run, recovery::reset, recovery::installer_of, recovery::boot_iso, recovery::delete, setup::readiness, setup::enable_hypervisor, setup::update_winq])
+        .invoke_handler(tauri::generate_handler![systems, start, console, power, quit, catalog, arch, mark_installed, icons, open_page, start_page, settings::settings, settings::save_settings, settings::disk_info, settings::set_disc, create::create_defaults, create::free_space, create::create, create::cancel_create, create::read_disk, app::app_info, app::set_preference, app::check_updates, app::open_storage, settings::add_shortcut, disks::disk_resize, disks::disk_compact, disks::disk_add, disks::disk_remove, recovery::backup, recovery::restore, recovery::clone_system, recovery::snapshots, recovery::snapshot, recovery::move_storage, recovery::clean_list, recovery::clean_run, recovery::reset, recovery::installer_of, recovery::boot_iso, recovery::delete, setup::readiness, setup::enable_hypervisor, setup::update_winq])
         .setup(|app| {
             let handle = app.handle().clone();
             TrayIconBuilder::with_id("main")

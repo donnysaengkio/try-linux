@@ -433,33 +433,7 @@ fn start_qemu(app: &AppHandle, vms: &Vms, host: &Host, cfg: &VmConfig, cpu: Opti
             }
         });
     }
-    // Why QEMU stopped, from its SHUTDOWN event: "guest-shutdown" for a power-off, "guest-reset" for a restart.
-    let reason = Arc::new(Mutex::new(None));
-    {
-        let reason = reason.clone();
-        thread::spawn(move || {
-            for _ in 0..240 {
-                if let Ok(s) = TcpStream::connect(format!("127.0.0.1:{events}")) {
-                    let mut w = s.try_clone().unwrap();
-                    let mut r = BufReader::new(s);
-                    let mut line = String::new();
-                    let _ = r.read_line(&mut line);
-                    let _ = w.write_all(b"{\"execute\":\"qmp_capabilities\"}\n");
-                    for l in r.lines().map_while(Result::ok) {
-                        if l.contains("\"SHUTDOWN\"") {
-                            if let Some(i) = l.find("\"reason\"") {
-                                let v: String = l[i + 8..].split('"').nth(1).unwrap_or("").to_string();
-                                *reason.lock().unwrap() = Some(v);
-                            }
-                        }
-                    }
-                    return;
-                }
-                thread::sleep(Duration::from_millis(250));
-            }
-        });
-    }
-
+    let reason = watch_shutdown(events);
     let pid = child.id();
     vms.0.lock().unwrap().insert(
         id.to_string(),
@@ -498,6 +472,94 @@ fn start_qemu(app: &AppHandle, vms: &Vms, host: &Host, cfg: &VmConfig, cpu: Opti
         }
     });
     Ok(())
+}
+
+// Why QEMU stopped, from its SHUTDOWN event on its events channel: "guest-shutdown" for a power-off,
+// "guest-reset" for a restart.
+#[cfg(not(target_os = "macos"))]
+fn watch_shutdown(events: u16) -> Arc<Mutex<Option<String>>> {
+    let reason = Arc::new(Mutex::new(None));
+    let out = reason.clone();
+    thread::spawn(move || {
+        for _ in 0..240 {
+            if let Ok(s) = TcpStream::connect(format!("127.0.0.1:{events}")) {
+                let mut w = s.try_clone().unwrap();
+                let mut r = BufReader::new(s);
+                let mut line = String::new();
+                let _ = r.read_line(&mut line);
+                let _ = w.write_all(b"{\"execute\":\"qmp_capabilities\"}\n");
+                for l in r.lines().map_while(Result::ok) {
+                    if l.contains("\"SHUTDOWN\"") {
+                        if let Some(i) = l.find("\"reason\"") {
+                            let v: String = l[i + 8..].split('"').nth(1).unwrap_or("").to_string();
+                            *reason.lock().unwrap() = Some(v);
+                        }
+                    }
+                }
+                return;
+            }
+            thread::sleep(Duration::from_millis(250));
+        }
+    });
+    out
+}
+
+// Whether a process is still running.
+#[cfg(not(target_os = "macos"))]
+fn alive(pid: u32) -> bool {
+    let mut sys = sysinfo::System::new();
+    let p = sysinfo::Pid::from_u32(pid);
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[p]), true);
+    sys.process(p).is_some()
+}
+
+// Takes over a system whose QEMU outlived the Try Linux that started it (closed, crashed, or replaced by an
+// update): its control channels are on QEMU's command line, so the Power menu, the console, live activity and
+// what happens when it stops (an installer finishing, Linux restarting) work as if it had been started here.
+#[cfg(not(target_os = "macos"))]
+pub fn adopt(app: &AppHandle, vms: &Vms, id: &str, pid: u32, args: &[String], running_for: Duration) {
+    // -qmp tcp:127.0.0.1:PORT,... : the control channel, then the events channel.
+    let ports: Vec<u16> = args
+        .windows(2)
+        .filter(|w| w[0] == "-qmp")
+        .filter_map(|w| w[1].strip_prefix("tcp:127.0.0.1:").and_then(|r| r.split(',').next()).and_then(|p| p.parse().ok()))
+        .collect();
+    let Some(&control) = ports.first() else { return };
+    // Started from its installer: the ISO as a CD that boots once (Windows) or first (Linux).
+    let installer = args.iter().any(|a| a == "-cdrom" || a.contains("bootindex=0"));
+    let cpu = !args.iter().any(|a| a.contains("gl=on"));
+    let status = qmp_query(control, "query-status", None).ok().and_then(|v| v["return"]["status"].as_str().map(String::from)).unwrap_or_default();
+    let reason = match ports.get(1) {
+        Some(&events) => watch_shutdown(events),
+        None => Arc::new(Mutex::new(None)),
+    };
+    // Its visible window, or one a closed Try Linux had hidden.
+    let window = crate::window::find(pid).or_else(|| crate::window::find_any(pid));
+    {
+        let mut map = vms.0.lock().unwrap();
+        if map.contains_key(id) {
+            return;
+        }
+        map.insert(id.to_string(), Running {
+            pid, qmp: control, paused: status == "paused", held: status == "prelaunch", cpu, installer,
+            started: Instant::now().checked_sub(running_for).unwrap_or_else(Instant::now),
+            restart_asked: None, reset_asked: false, force_stopped: false, reason, err: Arc::new(Mutex::new(String::new())),
+            window: window.unwrap_or(0), hidden: window.is_some_and(|h| !crate::window::visible(h)),
+        });
+    }
+    crate::window::watch_clicks({
+        let app = app.clone();
+        move |x, y| close_clicked(&app, x, y)
+    });
+    // When it ends (there's no handle to wait on, so its process is watched).
+    let (app, id) = (app.clone(), id.to_string());
+    thread::spawn(move || {
+        while alive(pid) {
+            thread::sleep(Duration::from_secs(1));
+        }
+        thread::sleep(Duration::from_millis(600)); // the SHUTDOWN event can arrive just after the exit
+        exited(&app, &id, true);
+    });
 }
 
 // A system's window to the front, shown again if it was hidden.

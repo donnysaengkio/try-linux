@@ -16,6 +16,7 @@ export interface Vm {
   mem: number | null;        // bytes QEMU holds on this PC
   guest_mem: number | null;  // bytes Linux says it uses, once the balloon reports
   disk_rate: number | null;  // bytes a second
+  maybe_installed: boolean;  // waiting to install, but its disk already holds several GB
 }
 export interface Problem { title?: string; text?: string }
 export type PowerAction =
@@ -23,6 +24,8 @@ export type PowerAction =
 
 export const systems = () => invoke<Vm[]>("systems");
 export const start = (id: string) => invoke("start", { id });
+// From now on it starts from its disk, not its installer.
+export const markInstalled = (id: string) => invoke("mark_installed", { id });
 export const showConsole = (id: string) => invoke("console", { id });
 export const power = (id: string, action: PowerAction) => invoke("power", { id, action });
 export const quit = () => invoke("quit");
