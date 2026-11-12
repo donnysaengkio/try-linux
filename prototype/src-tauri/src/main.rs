@@ -11,6 +11,7 @@ mod config;
 mod paths;
 mod create;
 mod disks;
+mod legacy;
 mod live;
 #[cfg(target_os = "macos")]
 mod mac;
@@ -478,6 +479,10 @@ fn main() {
                     std::thread::spawn(move || start_from_arg(&h, &id));
                 }
                 None => show_main(&handle),
+            }
+            // What the Windows edition before 2.0 left (not for screenshot copies, TRYLINUX_PAGE).
+            if std::env::var("TRYLINUX_PAGE").unwrap_or_default().is_empty() {
+                legacy::take_over();
             }
             Ok(())
         })

@@ -1,6 +1,6 @@
 [package]
 name = "try-linux-prototype"
-version = "0.2.0"
+version = "2.0.0"
 description = "A prototype of Try Linux as one Tauri app for Windows, macOS and Linux"
 edition = "2021"
 publish = false

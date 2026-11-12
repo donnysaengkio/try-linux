@@ -1,4 +1,4 @@
-# Try Linux on Tauri (in progress)
+# Try Linux on Tauri (Try Linux for Windows 2.x; macOS and Linux in progress)
 
 Try Linux as **one app for Windows, macOS and Linux**. The interface in [`ui/`](ui) is React and TypeScript, the
 same on every platform, and [`src-tauri/`](src-tauri) is the Rust side that does the work. It uses each
@@ -111,18 +111,25 @@ after changing anything in `ui/`.
 
 ## Releasing (Windows)
 
-The Windows release is an installer, **Try Linux Preview** (NSIS, installed for the current user, alongside Try
-Linux 1.x), that updates itself:
+Since 2.0.0 this is **Try Linux for Windows**: an installer (NSIS, installed for the current user in
+`%LOCALAPPDATA%\Try Linux`) that updates itself, and that takes over from the 1.x edition in [`../windows`](../windows):
 
 1. Raise `version` in `src-tauri/tauri.conf.json` (and in `src-tauri/Cargo.toml`).
 2. Run `scripts/release-windows.ps1 -Notes "What's new"`. It builds the installer into `dist/`, signs it for updates
    with the private key in `%USERPROFILE%\.tauri\try-linux-updates.key`, and writes `SHA256SUMS.txt` and
    `latest.json`.
-3. Publish a pre-release tagged `tauri-v<version>-preview` with the installer and `SHA256SUMS.txt`, and upload
-   `latest.json` to the `tauri-updates` release (replacing the last one). Installed copies read it from there.
+3. Publish a release tagged `v<version>` (Latest) with `TryLinux-<version>-Setup.exe`, `TryLinux.exe` and
+   `SHA256SUMS.txt`, and upload `latest.json` to the `tauri-updates` release (replacing the last one). Installed
+   copies read it from there.
 
 Keep the private key safe and out of the repository: installed copies only accept updates signed with it, so
-without it they can't be updated. Its public half is in `tauri.conf.json`. The tags (`tauri-v…`) are ones the
-Windows, Mac and Linux editions' own update checks ignore.
+without it they can't be updated. Its public half is in `tauri.conf.json`.
+
+**From 1.x:** the 1.x edition updates to the newest `v…` release by swapping its `TryLinux.exe` for that release's
+`TryLinux.exe` (checked against `SHA256SUMS.txt`) and running it. That file is this installer, so 1.x users get 2.x
+by clicking Update. On its first start (and each start until it's done) Try Linux then points 1.x's desktop
+shortcuts and start-at-sign-in entries to itself and removes 1.x's Start menu entry, its Installed apps entry and
+`%LOCALAPPDATA%\Programs\TryLinux` (see `src-tauri/src/legacy.rs`). Systems, downloads and preferences are the same
+files, so they carry over as they are.
 
 The fonts in `ui/public/fonts` are under the SIL Open Font License (see the `OFL-*.txt` files).

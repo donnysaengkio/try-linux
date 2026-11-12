@@ -10,7 +10,7 @@ SHA-512 checksum, creates a virtual disk and boots it in a window.
 
 | Edition | Runs on | Virtual machines | Download |
 |---|---|---|---|
-| [**Try&nbsp;Linux&nbsp;for&nbsp;Windows**](windows/README.md) | Windows&nbsp;10,&nbsp;11 | QEMU,&nbsp;Hyper-V&nbsp;platform | [Latest](https://github.com/donnysaengkio/try-linux/releases/latest) |
+| [**Try&nbsp;Linux&nbsp;for&nbsp;Windows**](prototype/README.md) | Windows&nbsp;10,&nbsp;11 | QEMU,&nbsp;Hyper-V&nbsp;platform | [Latest](https://github.com/donnysaengkio/try-linux/releases/latest) |
 | [**Try&nbsp;Linux&nbsp;for&nbsp;Mac**](macos/README.md)&nbsp;(preview) | Apple&nbsp;silicon | Apple&nbsp;Virtualization | [`macos-v`&nbsp;releases](https://github.com/donnysaengkio/try-linux/releases?q=macos-v&expanded=true) |
 | [**Try&nbsp;Linux&nbsp;for&nbsp;Linux**](linux/README.md)&nbsp;(preview) | x86_64,&nbsp;ARM64 | QEMU&nbsp;with&nbsp;KVM | [`linux-v`&nbsp;releases](https://github.com/donnysaengkio/try-linux/releases?q=linux-v&expanded=true) |
 
@@ -39,7 +39,8 @@ release. Their addresses are part of the released apps, so they stay in `catalog
 
 ```
 catalog/   the shared distribution list
-windows/   Try Linux for Windows (C# WinForms, built with build.cmd)
+prototype/ Try Linux for Windows 2.x (Tauri: Rust and React), on its way to macOS and Linux too
+windows/   Try Linux for Windows 1.x (C# WinForms), replaced by 2.x
 macos/     Try Linux for Mac (SwiftUI, built with scripts/build-app.sh)
 linux/     Try Linux for Linux (Python, GTK 4 and libadwaita)
 ```
