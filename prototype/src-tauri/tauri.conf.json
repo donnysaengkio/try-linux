@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "identifier": "io.github.donnysaengkio.trylinux.prototype",
   "build": {
-    "frontendDist": "../ui"
+    "frontendDist": "../ui/dist",
+    "beforeBuildCommand": "npm --prefix ../ui run build"
   },
   "app": {
     "withGlobalTauri": true,
@@ -18,7 +19,8 @@
         "minHeight": 520,
         "center": true,
         "decorations": false,
-        "shadow": true
+        "shadow": true,
+        "visible": false
       }
     ],
     "security": {
@@ -27,6 +29,6 @@
   },
   "bundle": {
     "active": false,
-    "icon": ["icons/icon.ico"]
+    "icon": ["icons/icon.ico", "icons/icon.png"]
   }
 }

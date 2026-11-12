@@ -1,9 +1,9 @@
 /* Try Linux's look, from the Windows edition's Theme: the same colours, fonts and rounding, in CSS. */
 
-@font-face { font-family: "Prompt"; font-weight: 600; src: url("fonts/Prompt-SemiBold.ttf"); }
-@font-face { font-family: "Work Sans"; font-weight: 600; src: url("fonts/WorkSans-SemiBold.ttf"); }
-@font-face { font-family: "Noto Sans"; font-weight: 400; src: url("fonts/NotoSans-Regular.ttf"); }
-@font-face { font-family: "Noto Sans"; font-weight: 600; src: url("fonts/NotoSans-SemiBold.ttf"); }
+@font-face { font-family: "Prompt"; font-weight: 600; src: url("/fonts/Prompt-SemiBold.ttf"); }
+@font-face { font-family: "Work Sans"; font-weight: 600; src: url("/fonts/WorkSans-SemiBold.ttf"); }
+@font-face { font-family: "Noto Sans"; font-weight: 400; src: url("/fonts/NotoSans-Regular.ttf"); }
+@font-face { font-family: "Noto Sans"; font-weight: 600; src: url("/fonts/NotoSans-SemiBold.ttf"); }
 
 :root {
   --bg: #111113; --card: #252429; --card-hover: #2E2D33; --card-selected: #352E48;
@@ -11,18 +11,29 @@
   --selected-top: #372F4D; --selected-bottom: #2C263D; --border: #39383D; --box-fill: #1C1B22;
   --text: #FBFBFE; --muted: #BFBFC9; --accent: #B89CFE; --accent-hover: #C7B1FF; --accent-dark: #A487F2;
   --accent2: #5E4898; --highlight: #C7B1FF; --highlight2: #B89CFE; --on-accent: #15141A;
-  --success: #7ED68A; --danger: #F26D6D;
+  --success: #7ED68A; --danger: #F26D6D; --primary-hover-top: #D6C7FF; --primary-hover-bottom: #C2A9FF;
   --radius: 8px;
   color-scheme: dark;
 }
+/* Light: chosen in Preferences (data-theme="light"), or Windows' own light mode with Follow system
+   (data-theme="system"). The same colours in both rules. */
+:root[data-theme="light"] {
+  --bg: #FCF9FE; --card: #FFFFFF; --card-hover: #F6F2FC; --card-selected: #EEE8FF;
+  --card-top: #FFFFFF; --card-bottom: #FBF9FE; --hover-top: #F8F5FD; --hover-bottom: #F2EEFA;
+  --selected-top: #F3EEFF; --selected-bottom: #E9E1FF; --border: #DEDBE8; --box-fill: #F4F1F9;
+  --text: #0C0C14; --muted: #6B6880; --accent: #6D4AFF; --accent-hover: #8466FF; --accent-dark: #5A37E6;
+  --accent2: #3A1F99; --highlight: #5B2BD1; --highlight2: #3A1F99; --on-accent: #FFFFFF;
+  --success: #1C8A4E; --danger: #D6332E; --primary-hover-top: #9A82FF; --primary-hover-bottom: #7A5CFF;
+  color-scheme: light;
+}
 @media (prefers-color-scheme: light) {
-  :root {
+  :root[data-theme="system"] {
     --bg: #FCF9FE; --card: #FFFFFF; --card-hover: #F6F2FC; --card-selected: #EEE8FF;
     --card-top: #FFFFFF; --card-bottom: #FBF9FE; --hover-top: #F8F5FD; --hover-bottom: #F2EEFA;
     --selected-top: #F3EEFF; --selected-bottom: #E9E1FF; --border: #DEDBE8; --box-fill: #F4F1F9;
     --text: #0C0C14; --muted: #6B6880; --accent: #6D4AFF; --accent-hover: #8466FF; --accent-dark: #5A37E6;
     --accent2: #3A1F99; --highlight: #5B2BD1; --highlight2: #3A1F99; --on-accent: #FFFFFF;
-    --success: #1C8A4E; --danger: #D6332E;
+    --success: #1C8A4E; --danger: #D6332E; --primary-hover-top: #9A82FF; --primary-hover-bottom: #7A5CFF;
     color-scheme: light;
   }
 }
@@ -35,8 +46,18 @@ body {
   display: flex; flex-direction: column; overflow: hidden;
   user-select: none; -webkit-user-select: none; cursor: default;
 }
+#root { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 button { font: inherit; color: inherit; }
-svg.icon { width: 18px; height: 18px; display: block; }
+.icon-box { width: 18px; height: 18px; display: block; flex: none; }
+svg.icon { width: 100%; height: 100%; display: block; }
+
+/* Motion: short and eased out, so things respond rather than perform; none if Windows asks for less. */
+:root { --ease-out: cubic-bezier(.23, 1, .32, 1); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; } }
+
+/* Keyboard focus: a clear ring, only when using the keyboard. */
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* ---- header bar */
 .headerbar { height: 54px; flex: none; display: flex; align-items: center; padding: 0 12px; gap: 8px; }
@@ -50,18 +71,20 @@ svg.icon { width: 18px; height: 18px; display: block; }
   height: 36px; padding: 0 16px; border-radius: var(--radius); border: 1px solid var(--border);
   background: linear-gradient(var(--card-top), var(--card-bottom)); font-weight: 600; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap;
+  transition: transform 120ms var(--ease-out);
 }
+.btn:active:not(:disabled) { transform: scale(.97); }
 .btn:hover { background: linear-gradient(var(--hover-top), var(--hover-bottom)); }
 .btn.primary { border-color: var(--accent); color: var(--on-accent);
   background: linear-gradient(var(--accent-hover), var(--accent)); }
-.btn.primary:hover { background: linear-gradient(#D6C7FF, #C2A9FF); }
-@media (prefers-color-scheme: light) { .btn.primary:hover { background: linear-gradient(#9A82FF, #7A5CFF); } }
+.btn.primary:hover { background: linear-gradient(var(--primary-hover-top), var(--primary-hover-bottom)); }
 .btn.icon { width: 38px; padding: 0; }
 .btn.small { height: 34px; }
-.btn .chev svg.icon { width: 14px; height: 14px; }
+.btn .chev .icon-box { width: 14px; height: 14px; transition: transform 160ms var(--ease-out); }
+.btn[data-popup-open] .chev .icon-box { transform: rotate(180deg); }
 
 /* ---- pages */
-#page { flex: 1; overflow: auto; padding: 0 24px 24px; }
+.page { flex: 1; overflow: auto; padding: 0 24px 24px; scrollbar-gutter: stable both-edges; }   /* no sideways jump when a scroll bar appears */
 .column { width: 640px; max-width: 100%; margin: 0 auto; }
 .column.wide { width: min(1200px, max(760px, calc(100vw - 220px))); }
 .logo { display: block; margin: 0 auto 8px; }
@@ -79,10 +102,15 @@ h1 { font: 600 20px "Prompt", "Segoe UI", sans-serif; margin: 0; }
 .vm-row { display: flex; align-items: center; height: 62px; padding: 0 14px 0 18px; border-top: 1px solid var(--border); }
 .vm-row:first-child { border-top: 0; }
 .vm-row:hover { background: var(--card-hover); }
+.vm-row { transition: background-color 120ms; }
+.stat .value { font-variant-numeric: tabular-nums; }
+.hint { font: 600 10.5px "Noto Sans", "Segoe UI", sans-serif; color: var(--muted); border: 1px solid var(--border);
+  border-radius: 5px; padding: 1px 6px; opacity: .8; }
 .vm-name { flex: 1; min-width: 0; }
 .vm-name .title { font-weight: 600; font-size: 13.3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vm-name .os { color: var(--muted); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.status { width: 76px; font-size: 11.3px; color: var(--muted); margin-right: 10px; }
+/* A longer status ("Running, window closed") widens to the left rather than being cut off. */
+.status { min-width: 76px; font-size: 11.3px; color: var(--muted); margin-right: 10px; white-space: nowrap; }
 .status.on { color: var(--success); }
 .divider { width: 1px; align-self: stretch; margin: 12px 10px 12px 0; background: var(--border); }
 .stat { width: 86px; }
@@ -110,6 +138,8 @@ h1 { font: 600 20px "Prompt", "Segoe UI", sans-serif; margin: 0; }
 .option .link { color: var(--highlight); padding-left: 20px; margin-left: 16px; border-left: 1px solid var(--border);
   height: 46px; display: flex; align-items: center; white-space: nowrap; }
 .option .link:hover { text-decoration: underline; }
+.box.own { margin-top: 12px; }
+.option { transition: background-color 120ms, border-color 120ms; }
 .empty { color: var(--muted); text-align: center; padding: 40px 0; }
 .nav { display: flex; justify-content: space-between; margin-top: 20px; }
 .nav .btn { width: 88px; }
@@ -123,19 +153,47 @@ h1 { font: 600 20px "Prompt", "Segoe UI", sans-serif; margin: 0; }
 .btn:disabled { opacity: .5; cursor: default; }
 .btn.danger { border-color: var(--danger); color: var(--danger); }
 
-/* menus (the Power menu) and dialogs */
-.menu { position: fixed; z-index: 10; background: var(--card); border: 1px solid var(--border); border-radius: 10px;
-  padding: 4px; box-shadow: 0 8px 28px #0007; display: flex; flex-direction: column; }
-.menu-item { background: none; border: 0; text-align: left; padding: 7px 12px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
-.menu-item:hover { background: var(--card-selected); }
+/* menus (the Power menu, Base UI's Menu): they grow from their button */
+.menu-positioner { z-index: 10; outline: none; }
+.menu { min-width: var(--anchor-width); background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 4px; box-shadow: 0 8px 28px #0007; display: flex; flex-direction: column; outline: none;
+  transform-origin: var(--transform-origin); transition: opacity 150ms var(--ease-out), transform 150ms var(--ease-out); }
+.menu[data-starting-style], .menu[data-ending-style] { opacity: 0; transform: scale(.96); }
+.menu-item { text-align: left; padding: 7px 12px; border-radius: 6px; cursor: pointer; white-space: nowrap; outline: none; }
+.menu-item[data-highlighted] { background: var(--card-selected); }
 .menu-item.danger { color: var(--danger); }
 .menu-line { height: 1px; background: var(--border); margin: 4px 2px; }
-.modal-back { position: fixed; inset: 0; z-index: 20; background: #0008; display: flex; align-items: center; justify-content: center; }
-.modal { width: 440px; max-width: calc(100vw - 32px); background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; }
+
+/* dialogs (Base UI's AlertDialog and Dialog) */
+.modal-back { position: fixed; inset: 0; z-index: 20; background: #0008; transition: opacity 180ms var(--ease-out); }
+.modal-back[data-starting-style], .modal-back[data-ending-style] { opacity: 0; }
+.modal-viewport { position: fixed; inset: 0; z-index: 21; display: flex; align-items: center; justify-content: center; }
+.modal-viewport.top { align-items: flex-start; padding-top: 96px; }
+.modal { width: 440px; max-width: calc(100vw - 32px); background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px;
+  box-shadow: 0 16px 48px #0008; transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out); }
+.modal[data-starting-style], .modal[data-ending-style] { opacity: 0; transform: scale(.96); }
 .modal-title { font: 600 15px "Work Sans", "Segoe UI", sans-serif; margin-bottom: 8px; }
 .modal-text { color: var(--muted); line-height: 1.45; white-space: pre-wrap; user-select: text; max-height: 50vh; overflow: auto; }
 .modal-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 .modal-buttons .btn { min-width: 88px; }
 
-.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--card);
-  border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; box-shadow: 0 6px 24px #0006; }
+/* the command menu (Ctrl+K: cmdk) */
+.commands { width: 520px; max-width: calc(100vw - 32px); background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: 0 16px 48px #0008; overflow: hidden; outline: none;
+  transition: opacity 160ms var(--ease-out), transform 160ms var(--ease-out); }
+.commands[data-starting-style], .commands[data-ending-style] { opacity: 0; transform: scale(.97); }
+.commands-input { width: 100%; height: 48px; border: 0; border-bottom: 1px solid var(--border); background: none; color: var(--text);
+  font: inherit; font-size: 13.3px; padding: 0 16px; outline: none; user-select: text; }
+.commands-input::placeholder { color: var(--muted); opacity: .7; }
+.commands-list { max-height: 340px; overflow-y: auto; padding: 6px; }
+.commands [cmdk-group-heading] { color: var(--muted); font-size: 11.3px; padding: 8px 10px 4px; }
+.commands-item { padding: 8px 10px; border-radius: 6px; cursor: pointer; display: flex; gap: 6px; }
+.commands-item[data-selected="true"] { background: var(--card-selected); }
+.commands-item.danger { color: var(--danger); }
+.commands-of { color: var(--muted); }
+.commands-empty { color: var(--muted); text-align: center; padding: 24px 0; }
+
+/* toasts (Sonner), in the app's colours */
+[data-sonner-toaster] { --normal-bg: var(--card); --normal-border: var(--border); --normal-text: var(--text);
+  --border-radius: 10px; font-family: "Noto Sans", "Segoe UI", sans-serif; }
+[data-sonner-toast] { font-size: 12.7px !important; box-shadow: 0 6px 24px #0006 !important; }

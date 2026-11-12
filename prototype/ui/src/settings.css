@@ -1,0 +1,186 @@
+/* ---- Settings: a title, tabs in the header bar, and sections as bars that open */
+.settings-root { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.headerbar .middle { flex: none; }
+.btn.save { width: 100px; }
+.tabs { position: relative; display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--box-fill); border: 1px solid var(--border); }
+.tab { position: relative; z-index: 1; height: 30px; padding: 0 14px; display: inline-flex; align-items: center; gap: 7px;
+  border: 0; border-radius: 7px; background: none; color: var(--muted); font-weight: 600; cursor: pointer; transition: color 150ms; }
+.tab:hover { color: var(--text); }
+.tab[data-active] { color: var(--highlight); }
+.tab-indicator { position: absolute; z-index: 0; left: var(--active-tab-left); top: var(--active-tab-top);
+  width: var(--active-tab-width); height: var(--active-tab-height); border-radius: 7px;
+  background: linear-gradient(var(--selected-top), var(--selected-bottom)); border: 1px solid var(--accent);
+  transition: left 220ms var(--ease-out), width 220ms var(--ease-out); }
+
+.column.settings { padding-top: 14px; }
+.settings-title { display: flex; align-items: center; gap: 4px; min-height: 34px; }
+.settings-title h1 { font-size: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pencil { flex: none; width: 28px; height: 28px; border: 0; background: none; color: var(--muted); border-radius: 6px;
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.pencil:hover { color: var(--highlight); }
+.rename { font: 600 22px "Prompt", "Segoe UI", sans-serif; color: var(--text); background: var(--card); width: 100%;
+  border: 1px solid var(--accent); border-radius: 8px; padding: 0 8px; height: 34px; outline: none; user-select: text; }
+.settings-sub { color: var(--muted); font-size: 11.3px; letter-spacing: .04em; margin: 4px 0 20px; white-space: pre; }
+.tab-panel { outline: none; }
+
+.section { margin-bottom: 10px; }
+.section-bar { width: 100%; height: 44px; display: flex; align-items: center; gap: 16px; padding: 0 12px 0 14px;
+  border: 1px solid var(--border); border-radius: var(--radius); background: linear-gradient(var(--card-top), var(--card-bottom));
+  cursor: pointer; text-align: left; transition: border-color 150ms; }
+.section-bar:hover { background: linear-gradient(var(--hover-top), var(--hover-bottom)); }
+.section-bar.lit { border-color: var(--accent); background: linear-gradient(var(--selected-top), var(--selected-bottom)); }
+.section-bar.lit .section-title { color: var(--highlight); }
+.section-title { font: 600 13.3px "Work Sans", "Segoe UI", sans-serif; white-space: nowrap; }
+.section-summary { flex: 1; min-width: 0; text-align: right; color: var(--muted); font-size: 11.3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.section-chev { color: var(--muted); }
+.section-chev .icon-box { width: 16px; height: 16px; }
+.section-body { height: var(--collapsible-panel-height); overflow: hidden; transition: height 200ms var(--ease-out); }
+.section-body[data-starting-style], .section-body[data-ending-style] { height: 0; }
+.section-inner { padding: 12px 4px 10px; display: flex; flex-direction: column; gap: 8px; }
+
+.subheading { font-weight: 600; margin-top: 10px; }
+.row { display: flex; align-items: center; gap: 10px; min-height: 30px; }
+.row.top { align-items: flex-start; }
+.row.top .row-label { padding-top: 6px; }
+.row-label { flex: none; width: 180px; }
+.row-label.inset { padding-left: 26px; }
+.row-field { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
+.value-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: text; }
+.hint-text { color: var(--muted); font-size: 11.3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note { margin: 0; color: var(--muted); font-size: 11.3px; line-height: 1.5; }
+.note.inset { padding-left: 26px; }
+.note code { font: 11px Consolas, monospace; user-select: text; }
+.link { color: var(--highlight); cursor: pointer; }
+.link:hover { text-decoration: underline; }
+.buttons { display: flex; gap: 8px; }
+.action-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 40px; }
+.action-row .btn.action { width: 96px; flex: none; }
+
+/* text boxes */
+.text-box { width: 100%; min-height: 30px; padding: 5px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--card);
+  color: var(--text); font: inherit; outline: none; resize: vertical; user-select: text; transition: border-color 120ms; }
+.text-box.grow { flex: 1; width: auto; min-width: 0; }
+.text-box.mono { font: 12px Consolas, monospace; line-height: 1.5; }
+.text-box:focus { border-color: var(--accent); }
+.text-box:disabled, .text-box[readonly] { color: var(--muted); }
+.text-box::placeholder { color: var(--muted); opacity: .7; }
+
+/* check boxes and radio buttons */
+.check-row, .radio-row { display: inline-flex; align-items: center; gap: 9px; min-height: 26px; cursor: pointer; align-self: flex-start; }
+.check-row.disabled { color: var(--muted); cursor: default; }
+.check { flex: none; width: 17px; height: 17px; padding: 0; border: 1px solid var(--border); border-radius: 5px; background: var(--card);
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: background-color 120ms, border-color 120ms; }
+.check[data-checked] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.check[data-disabled] { opacity: .5; cursor: default; }
+.check-mark { width: 12px; height: 12px; display: flex; }
+.radios { display: flex; gap: 22px; }
+.radio { flex: none; width: 17px; height: 17px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--card);
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.radio[data-checked] { border-color: var(--accent); }
+.radio-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
+
+/* drop-downs (Select): a rounded box like a button, its list a menu */
+.select { height: 30px; padding: 0 8px 0 10px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border);
+  border-radius: 6px; background: linear-gradient(var(--card-top), var(--card-bottom)); cursor: pointer; text-align: left; }
+.select:hover { background: linear-gradient(var(--hover-top), var(--hover-bottom)); }
+.select[data-disabled] { color: var(--muted); cursor: default; opacity: .7; }
+.select-value { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.select-icon { display: flex; color: var(--muted); }
+.select-icon .icon-box { width: 14px; height: 14px; }
+.select-item { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.select-tick { width: 12px; height: 12px; display: flex; color: var(--highlight); }
+
+/* numbers (NumberField) */
+.number-group { display: inline-flex; height: 30px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--card); }
+.number-group:focus-within { border-color: var(--accent); }
+.number-input { width: 46px; border: 0; background: none; color: var(--text); font: inherit; font-weight: 600; text-align: center;
+  outline: none; font-variant-numeric: tabular-nums; user-select: text; }
+.number-step { width: 28px; border: 0; background: none; color: var(--muted); font-size: 15px; cursor: pointer; }
+.number-step:hover:not(:disabled) { color: var(--text); background: var(--card-hover); }
+.number[data-disabled] .number-group { opacity: .55; }
+.number[data-disabled] .number-step { cursor: default; }
+
+/* the resource profile's buttons (ToggleGroup) */
+.segmented { display: inline-flex; padding: 3px; gap: 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--box-fill); }
+.segment { height: 26px; padding: 0 16px; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--muted);
+  font-weight: 600; cursor: pointer; transition: color 120ms, background-color 120ms; }
+.segment:hover { color: var(--text); }
+.segment[data-pressed] { color: var(--highlight); border-color: var(--accent); background: linear-gradient(var(--selected-top), var(--selected-bottom)); }
+
+/* ---- Create: General, Resources and Summary, laid out like Settings' rows; then the progress */
+.create-body { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; min-height: 300px; }
+.under-field { display: flex; flex-direction: column; gap: 4px; padding-left: 190px; }
+.box.summary { padding: 10px 16px; display: flex; flex-direction: column; }
+.summary-row { display: flex; height: 28px; align-items: center; }
+.summary-key { width: 180px; flex: none; color: var(--muted); }
+.summary-value { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: text; }
+
+.progress-page { text-align: center; }
+.progress-page h1 { margin-bottom: 40px; }
+.progress-status { font-size: 13.3px; margin-bottom: 14px; }
+.bar { width: 400px; max-width: 100%; height: 10px; margin: 0 auto; border-radius: 5px; background: var(--box-fill);
+  border: 1px solid var(--border); overflow: hidden; position: relative; }
+.bar-fill { height: 100%; border-radius: 5px; background: linear-gradient(90deg, var(--accent-dark), var(--accent));
+  transition: width 200ms linear; }
+.bar.busy .bar-fill { position: absolute; width: 30%; animation: bar-busy 1.4s var(--ease-out) infinite; }
+@keyframes bar-busy { from { left: -30%; } to { left: 100%; } }
+.progress-detail { color: var(--muted); font-size: 11.3px; margin-top: 10px; min-height: 18px; font-variant-numeric: tabular-nums; }
+.progress-tip { color: var(--highlight); font-size: 11.3px; margin: 34px auto 30px; max-width: 520px; min-height: 36px; }
+
+/* ---- Use Your Own Installer: three choices, with OR between them */
+.own .own-option { display: flex; flex-direction: column; gap: 8px; }
+.own-heading { font: 600 13.3px "Work Sans", "Segoe UI", sans-serif; }
+.own-pick { display: flex; align-items: center; gap: 14px; }
+.own-pick .btn { width: 170px; }
+.own-pick .none { color: var(--muted); }
+.own-pick .chosen { color: var(--highlight); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note.bad { color: var(--danger); }
+.or-line { display: flex; align-items: center; gap: 10px; margin: 18px 0; color: var(--muted); font-size: 11.3px; }
+.or-line::before, .or-line::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.own .nav { margin-top: 28px; }
+
+/* ---- the main menu: each item with its shortcut on the right */
+.main-menu { min-width: 230px; }
+.menu-item.with-keys { display: flex; justify-content: space-between; gap: 24px; }
+.menu-keys { font: 11.3px "Noto Sans", "Segoe UI", sans-serif; color: var(--muted); }
+
+/* ---- its windows: Preferences, Keyboard Shortcuts, About */
+.modal.app-window { width: 460px; padding: 16px 22px 22px; display: flex; flex-direction: column; gap: 8px; }
+.app-window-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.app-window-head .modal-title { margin: 0; }
+.app-window-head .btn.icon.small { width: 32px; height: 32px; }
+.pref-heading { font: 600 13.3px "Work Sans", "Segoe UI", sans-serif; color: var(--highlight); margin-top: 10px; }
+.row-label.short { width: 80px; }
+
+.shortcuts { display: flex; flex-direction: column; gap: 6px; }
+.shortcut { display: flex; align-items: center; min-height: 32px; }
+.keys { width: 130px; flex: none; display: flex; align-items: center; }
+.keycap { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; height: 28px; padding: 0 7px;
+  font: 600 11.3px "Noto Sans", "Segoe UI", sans-serif; border: 1px solid var(--border); border-bottom-width: 2px;
+  border-radius: 6px; background: var(--card-top); color: var(--text); }
+.plus { color: var(--muted); font-size: 11px; margin: 0 4px; }
+
+.about { display: flex; flex-direction: column; align-items: center; text-align: center; padding-top: 8px; }
+.about .logo { margin: 6px auto 4px; }
+.about-version { font-weight: 600; color: var(--highlight); }
+.about-text { color: var(--muted); line-height: 1.5; margin: 12px 20px 8px; }
+.about-small { color: var(--muted); font-size: 11.3px; line-height: 1.6; margin: 0 0 16px; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: text; }
+.about-links { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; }
+
+/* Sonner's loading spinner and action button in the app's colours */
+[data-sonner-toast] [data-button] { background: var(--accent) !important; color: var(--on-accent) !important; border-radius: 6px !important; }
+
+/* ---- Disk Utilities' dialogs */
+.app-window .row.faded { opacity: .5; }
+.note .warning { color: var(--danger); }
+.bar.wide { width: 100%; margin: 6px 0 0; }
+.app-window .progress-status { text-align: left; margin: 4px 0 8px; }
+.app-window .progress-detail { text-align: left; }
+
+/* ---- Snapshots */
+.box.list.snaps { max-height: 260px; min-height: 120px; }
+.option.small { height: 54px; }
+.modal-buttons.spread { justify-content: flex-start; }
+.modal-buttons.spread .btn:last-child { margin-left: auto; }

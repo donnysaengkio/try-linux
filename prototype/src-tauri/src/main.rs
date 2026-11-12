@@ -6,8 +6,18 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod app;
 mod config;
+mod paths;
+mod create;
+mod disks;
 mod live;
+#[cfg(target_os = "macos")]
+mod mac;
+mod recovery;
+mod settings;
+mod setup;
+mod shortcuts;
 mod vm;
 mod window;
 
@@ -17,7 +27,9 @@ use std::collections::HashMap;
 use std::fs;
 use std::sync::Mutex;
 use sysinfo::{ProcessesToUpdate, System};
-use tauri::{AppHandle, State};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::tray::{TrayIconBuilder, TrayIconEvent};
+use tauri::{AppHandle, Emitter, Manager, State, WindowEvent, Wry};
 use vm::{Problem, Vms};
 
 const CATALOG: &str = "https://raw.githubusercontent.com/donnysaengkio/try-linux/main/catalog/distros.json";
@@ -109,6 +121,16 @@ fn distro_name(id: &str) -> Option<&'static str> {
     }
 }
 
+// What it runs: as its guest agent last reported, else the distribution it was installed from.
+pub fn os_label(cfg: &VmConfig) -> String {
+    fs::read_to_string(cfg.dir.join("guest-os.txt"))
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .or_else(|| distro_name(cfg.get("distro")).map(String::from))
+        .unwrap_or_else(|| "Linux".into())
+}
+
 // Off the main thread: reading a running system's activity asks QEMU, which can take a moment.
 #[tauri::command(async)]
 fn systems(probe: State<Probe>, vms: State<Vms>, live: State<live::Live>) -> Vec<Vm> {
@@ -122,16 +144,11 @@ fn systems(probe: State<Probe>, vms: State<Vms>, live: State<live::Live>) -> Vec
         let Some(cfg) = VmConfig::load(&dir) else { continue };
         let (cores, ram_gb) = cfg.resources(&host);
         let used: u64 = cfg.all_disks().iter().filter_map(|d| fs::metadata(d).ok()).map(|m| m.len()).sum();
-        let os = fs::read_to_string(dir.join("guest-os.txt"))
-            .ok()
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .or_else(|| distro_name(cfg.get("distro")).map(String::from))
-            .unwrap_or_else(|| "Linux".into());
+        let os = os_label(&cfg);
         let (state, status, pid) = match mine.get(&cfg.id) {
             Some(r) if r.held => ("held", "Off, console open", Some(r.pid)),
-            Some(r) if r.paused => ("paused", "Paused", Some(r.pid)),
-            Some(r) => ("running", "Running", Some(r.pid)),
+            Some(r) if r.paused => ("paused", if r.hidden { "Paused, window closed" } else { "Paused" }, Some(r.pid)),
+            Some(r) => ("running", if r.hidden { "Running, window closed" } else { "Running" }, Some(r.pid)),
             None => match qemu_for(&sys, &cfg) {
                 Some(p) => ("elsewhere", "Running", Some(p)),
                 None if cfg.pending() => ("off", "Ready to install", None),
@@ -184,9 +201,8 @@ fn start(app: AppHandle, probe: State<Probe>, vms: State<Vms>, id: String) -> Re
 // Console: a running system's window to the front; for one that's off, its window with the machine still off.
 #[tauri::command]
 fn console(app: AppHandle, probe: State<Probe>, vms: State<Vms>, id: String) -> Result<(), Problem> {
-    let pid = vms.0.lock().unwrap().get(&id).map(|r| r.pid);
-    if let Some(pid) = pid {
-        window::front(pid);
+    if vms.0.lock().unwrap().contains_key(&id) {
+        vm::show_window(&app, &vms, &id);
         return Ok(());
     }
     vm::start(&app, &vms, &probe.host(), &id, None, true)
@@ -195,6 +211,92 @@ fn console(app: AppHandle, probe: State<Probe>, vms: State<Vms>, id: String) -> 
 #[tauri::command]
 fn power(app: AppHandle, vms: State<Vms>, id: String, action: String) -> Result<(), String> {
     vm::power(&app, &vms, &id, &action)
+}
+
+// Quits Try Linux (systems keep running, without the tray menu).
+#[tauri::command]
+fn quit(app: AppHandle) {
+    app.exit(0);
+}
+
+// ---- the window and the tray
+
+// Something about the running systems changed: the interface and the tray menu catch up.
+pub fn changed(app: &AppHandle) {
+    let _ = app.emit("systems-changed", ());
+    if let (Some(tray), Ok(menu)) = (app.tray_by_id("main"), tray_menu(app)) {
+        let _ = tray.set_menu(Some(menu));
+    }
+}
+
+pub fn show_main(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+}
+
+// The tray menu: each running system with its window and power commands, then Show and Quit.
+fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
+    let menu = Menu::new(app)?;
+    let vms = app.state::<Vms>();
+    let mut running: Vec<(String, String, bool, bool)> = vms.0.lock().unwrap().iter()
+        .map(|(id, r)| (id.clone(), config::find(id).map(|c| c.name()).unwrap_or_else(|| id.clone()), r.held, r.paused))
+        .collect();
+    running.sort_by(|a, b| a.1.to_lowercase().cmp(&b.1.to_lowercase()));
+    let item = |id: &str, action: &str, text: &str| MenuItem::with_id(app, format!("{action}|{id}"), text, true, None::<&str>);
+    for (id, name, held, paused) in &running {
+        let sub = Submenu::new(app, name, true)?;
+        sub.append(&item(id, "open", "Open window")?)?;
+        sub.append(&PredefinedMenuItem::separator(app)?)?;
+        if *held {
+            sub.append(&item(id, "power-on", "Power on")?)?;
+            sub.append(&item(id, "close-console", "Close console")?)?;
+        } else {
+            sub.append(&item(id, "shutdown", "Shut down")?)?;
+            sub.append(&item(id, "restart", "Restart")?)?;
+            sub.append(&if *paused { item(id, "resume", "Resume")? } else { item(id, "pause", "Pause")? })?;
+            sub.append(&PredefinedMenuItem::separator(app)?)?;
+            sub.append(&item(id, "force", "Force stop")?)?;
+            sub.append(&item(id, "reset", "Reset")?)?;
+        }
+        menu.append(&sub)?;
+    }
+    if !running.is_empty() {
+        menu.append(&PredefinedMenuItem::separator(app)?)?;
+    }
+    menu.append(&MenuItem::with_id(app, "show", "Show Try Linux", true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(app, "quit", "Quit Try Linux", true, None::<&str>)?)?;
+    Ok(menu)
+}
+
+#[derive(Clone, Serialize)]
+struct AskPower {
+    id: String,
+    action: String,
+}
+
+fn tray_clicked(app: &AppHandle, item: &str) {
+    let (action, id) = item.split_once('|').unwrap_or((item, ""));
+    match action {
+        "show" => show_main(app),
+        // Quitting, and the commands that lose work or ask Linux, are confirmed in the window first.
+        "quit" => {
+            show_main(app);
+            let _ = app.emit("ask-quit", ());
+        }
+        "shutdown" | "restart" | "force" | "reset" => {
+            show_main(app);
+            let _ = app.emit("ask-power", AskPower { id: id.into(), action: action.into() });
+        }
+        "open" => vm::show_window(app, &app.state::<Vms>(), id),
+        _ => {
+            if let Err(e) = vm::power(app, &app.state::<Vms>(), id, action) {
+                let _ = app.emit("problem", Problem { title: "Couldn't do that".into(), text: e });
+            }
+        }
+    }
 }
 
 // The catalog's text, as published in the repository.
@@ -221,7 +323,9 @@ fn icons() -> HashMap<&'static str, &'static str> {
 // A distribution's web page, in the default browser (https only).
 #[tauri::command]
 fn open_page(url: String) -> Result<(), String> {
-    if !url.starts_with("https://") {
+    // Web pages, and on Windows its Settings pages (Sound, Microphone privacy).
+    let settings_page = cfg!(windows) && url.starts_with("ms-settings:") && url[12..].chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
+    if !url.starts_with("https://") && !settings_page {
         return Err("Only https pages open.".into());
     }
     #[cfg(target_os = "windows")]
@@ -233,12 +337,71 @@ fn open_page(url: String) -> Result<(), String> {
     r.map(|_| ()).map_err(|e| e.to_string())
 }
 
+// --start <id> (a desktop shortcut, or signing in to Windows): the system starts and Try Linux stays in the
+// tray. One already running is brought to the front instead. If it can't start, the window opens and says why.
+fn start_from_arg(app: &AppHandle, id: &str) {
+    let vms = app.state::<Vms>();
+    if vms.0.lock().unwrap().contains_key(id) {
+        vm::show_window(app, &vms, id);
+        return;
+    }
+    let host = app.state::<Probe>().host();
+    if let Err(p) = vm::start(app, &vms, &host, id, None, false) {
+        show_main(app);
+        let _ = app.emit("problem", p);
+    }
+}
+
 fn main() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    // One Try Linux at a time: opening it again (or a shortcut) goes to the one that's running. Screenshots
+    // (TRYLINUX_PAGE) run a copy of their own.
+    if std::env::var("TRYLINUX_PAGE").unwrap_or_default().is_empty() {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| match shortcuts::start_arg(&argv) {
+            Some(id) => start_from_arg(app, &id),
+            None => show_main(app),
+        }));
+    }
+    builder
+        .plugin(tauri_plugin_dialog::init())
         .manage(Probe(Mutex::new(System::new())))
         .manage(Vms::default())
         .manage(live::Live::default())
-        .invoke_handler(tauri::generate_handler![systems, start, console, power, catalog, icons, open_page, start_page])
+        .invoke_handler(tauri::generate_handler![systems, start, console, power, quit, catalog, icons, open_page, start_page, settings::settings, settings::save_settings, settings::disk_info, settings::set_disc, create::create_defaults, create::free_space, create::create, create::cancel_create, create::read_disk, app::app_info, app::set_preference, app::check_updates, app::open_storage, settings::add_shortcut, disks::disk_resize, disks::disk_compact, disks::disk_add, disks::disk_remove, recovery::backup, recovery::restore, recovery::clone_system, recovery::snapshots, recovery::snapshot, recovery::move_storage, recovery::clean_list, recovery::clean_run, recovery::reset, recovery::installer_of, recovery::boot_iso, recovery::delete, setup::readiness, setup::enable_hypervisor, setup::update_winq])
+        .setup(|app| {
+            let handle = app.handle().clone();
+            TrayIconBuilder::with_id("main")
+                .icon(app.default_window_icon().cloned().expect("the app's icon"))
+                .tooltip("Try Linux")
+                .menu(&tray_menu(&handle)?)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, e| tray_clicked(app, e.id().as_ref()))
+                .on_tray_icon_event(|tray, e| {
+                    if let TrayIconEvent::DoubleClick { .. } = e {
+                        show_main(tray.app_handle());
+                    }
+                })
+                .build(app)?;
+            // The window starts hidden (tauri.conf.json), so --start can go straight to the tray.
+            let args: Vec<String> = std::env::args().collect();
+            match shortcuts::start_arg(&args) {
+                Some(id) => {
+                    let h = handle.clone();
+                    std::thread::spawn(move || start_from_arg(&h, &id));
+                }
+                None => show_main(&handle),
+            }
+            Ok(())
+        })
+        // Closing the window while systems run keeps Try Linux in the tray, where they can be shut down.
+        .on_window_event(|window, e| {
+            if let WindowEvent::CloseRequested { api, .. } = e {
+                if !window.state::<Vms>().0.lock().unwrap().is_empty() {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .run(tauri::generate_context!())
         .expect("Try Linux couldn't start");
 }
