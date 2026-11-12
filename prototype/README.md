@@ -10,6 +10,8 @@ uses the Windows Hypervisor Platform and passes OpenGL / Vulkan graphics through
 Version 2 is a new app that replaces Try Linux 1.x. It keeps your systems, downloads and settings, and 1.x moves to
 it on its own: see [Updating from 1.x](#updating-from-1x).
 
+On a Linux PC? See [Try Linux for Linux](README-linux.md), the same app as an AppImage.
+
 ![Virtual Machines: Fedora Workstation, Linux Mint and Ubuntu Desktop, each with its status, CPU cores, memory and disk use, and Console, Start and Settings buttons](docs/images/virtual-machines.png)
 
 ## Screenshots
@@ -211,11 +213,12 @@ and `config.rs`):
 | Disk 1 | `<id>.qcow2` | `disk.qcow2` | `disk.img` (raw) |
 | Try Linux's preferences | `%APPDATA%\TryLinux\settings.ini` | `~/.config/TryLinux/settings.json` | the Mac edition's defaults |
 | Shortcut / at sign-in | desktop `.lnk` / Run key | app launcher / autostart `.desktop` | none / login agent |
-| Status | works | builds and passes its tests in CI | builds in CI (signed for the Virtualization framework); not yet run on a Mac |
+| Released as | NSIS installer (`scripts/release-windows.ps1`) | AppImage, x86_64 and ARM64 (`scripts/release-linux.sh`) | not yet |
+| Status | works | works (tested on Ubuntu 24.04 with KVM, in WSL) | builds in CI (signed for the Virtualization framework); not yet run on a Mac |
 
 [`.github/workflows/prototype.yml`](../.github/workflows/prototype.yml) builds it on Linux (x86_64 and ARM64) and
-macOS, runs the tests (on Linux also the disk and Recovery tests, on scratch systems), and keeps each build as an
-artifact.
+macOS, runs the tests (on Linux also the disk, Recovery and 1.0.x takeover tests, on scratch folders), and keeps
+each build, and each Linux AppImage, as an artifact.
 
 ## How it matches the 1.x edition (Windows)
 
@@ -325,5 +328,27 @@ by clicking Update. On its first start (and each start until it's done) Try Linu
 shortcuts and start-at-sign-in entries to itself and removes 1.x's Start menu entry, its Installed apps entry and
 `%LOCALAPPDATA%\Programs\TryLinux` (see `src-tauri/src/legacy.rs`). Systems, downloads and preferences are the same
 files, so they carry over as they are.
+
+## Releasing (Linux)
+
+Try Linux for Linux is an AppImage for each processor (`tauri.linux.conf.json`), with its own update feed
+(`tauri-updates/latest-linux.json`), so Linux and Windows versions can move separately:
+
+1. Raise `version` as for Windows.
+2. On an x86_64 Linux PC (or WSL), run `scripts/release-linux.sh "What's new"`: it builds the x86_64 AppImage into
+   `dist-linux/`, signs it for updates, and writes the 1.0.x stand-in (`TryLinux-<version>-linux.tar.gz`),
+   `SHA256SUMS.txt` and `latest-linux.json`.
+3. Take the ARM64 AppImage from the prototype workflow's `try-linux-appimage-linux-aarch64` artifact and add it with
+   `scripts/release-linux.sh --add <file> aarch64 "What's new"`, which signs it here (the key never goes to GitHub)
+   and rewrites the checksums and the feed.
+4. Publish a release tagged `linux-v<version>` with both AppImages, the `.tar.gz` and `SHA256SUMS.txt`, and upload
+   `latest-linux.json` to the `tauri-updates` release.
+
+**From 1.0.x:** 1.0.x updates to the newest `linux-v…` release by putting that release's `.tar.gz` in place of its
+Python code (checked against `SHA256SUMS.txt`) and starting it again. That's the stand-in in
+[`linux-handover/`](linux-handover): it downloads the AppImage for its processor into `~/.local/share/try-linux`,
+checks it and starts it. Run as an AppImage, Try Linux adds itself to the apps menu and `~/.local/bin`, points
+1.0.x's shortcuts and sign-in entries at itself, and removes 1.0.x's Python files (`src-tauri/src/legacy.rs`).
+Publish both AppImages at once: 1.0.x on either processor takes the update.
 
 The fonts in `ui/public/fonts` are under the SIL Open Font License (see the `OFL-*.txt` files).

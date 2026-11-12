@@ -1,4 +1,8 @@
-# Try Linux for Linux
+# Try Linux 1.0.x for Linux
+
+> **Replaced by [Try Linux 2 for Linux](../prototype/README-linux.md),** an AppImage for x86_64 and ARM64 that
+> updates itself. 1.0.x updates to it on its own (click **Update** when it's offered), and your systems carry
+> over. This page and the code here describe 1.0.x, which gets no more updates.
 
 Try another Linux distribution on your Linux PC without repartitioning your drive. Pick a
 distribution, and Try Linux downloads the official installer, checks it against the
