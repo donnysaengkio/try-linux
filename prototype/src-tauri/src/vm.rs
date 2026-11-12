@@ -37,6 +37,16 @@ impl Running {
     pub fn port(&self) -> u16 {
         self.qmp
     }
+
+    // A system run by Apple's framework (mac.rs): no QEMU process or QMP port, so no live readings.
+    #[cfg(target_os = "macos")]
+    pub fn mac(held: bool, installer: bool) -> Running {
+        Running {
+            pid: 0, qmp: 0, paused: false, held, cpu: false, installer, started: Instant::now(), restart_asked: None,
+            reset_asked: false, force_stopped: false, reason: Arc::new(Mutex::new(None)), err: Arc::new(Mutex::new(String::new())),
+            window: 0, hidden: false,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -492,6 +502,17 @@ fn start_qemu(app: &AppHandle, vms: &Vms, host: &Host, cfg: &VmConfig, cpu: Opti
 
 // A system's window to the front, shown again if it was hidden.
 pub fn show_window(app: &AppHandle, vms: &Vms, id: &str) {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = vms;
+        crate::mac::show(app, id)
+    }
+    #[cfg(not(target_os = "macos"))]
+    show_qemu_window(app, vms, id)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn show_qemu_window(app: &AppHandle, vms: &Vms, id: &str) {
     let h = {
         let mut map = vms.0.lock().unwrap();
         let Some(vm) = map.get_mut(id) else { return };
@@ -575,6 +596,19 @@ fn exited(app: &AppHandle, id: &str, ok: bool) {
 
 // The Power menu's actions.
 pub fn power(app: &AppHandle, vms: &Vms, id: &str, action: &str) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        if !vms.0.lock().unwrap().contains_key(id) {
+            return Err("It isn't running.".into());
+        }
+        crate::mac::power(app, id, action)
+    }
+    #[cfg(not(target_os = "macos"))]
+    qemu_power(app, vms, id, action)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn qemu_power(app: &AppHandle, vms: &Vms, id: &str, action: &str) -> Result<(), String> {
     let (port, pid, paused, window) = {
         let mut map = vms.0.lock().unwrap();
         let vm = map.get_mut(id).ok_or("It isn't running.")?;

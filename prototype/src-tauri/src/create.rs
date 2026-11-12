@@ -521,8 +521,19 @@ fn import(app: &AppHandle, from: &str, to: &Path, name: &str) -> Result<(), Stri
     let what = format!("Importing {file}");
     let detail = format!("{}, copied into a new disk for {name}", fs::metadata(from).map(|m| bytes(m.len())).unwrap_or_default());
     report(app, &what, 0.0, &detail);
+    // macOS keeps raw disks: a raw one is copied as it is (a quick clone on APFS); others need qemu-img.
+    let mac = config::NATIVE == config::Format::Mac;
+    if mac && vm::qemu_img().is_none() {
+        let lower = file.to_lowercase();
+        if lower.ends_with(".img") || lower.ends_with(".raw") {
+            report(app, &what, -1.0, &detail);
+            return fs::copy(from, to).map(|_| ()).map_err(|e| format!("Couldn't import {file}: {e}"));
+        }
+        return Err(format!("{file} isn't a raw disk image, so it needs qemu-img to be converted. Install it with Homebrew (brew install qemu), then try again."));
+    }
     let to = to.to_string_lossy().to_string();
-    qemu_img_progress(&["convert", "-p", "-O", "qcow2", from, &to], |v| report(app, &what, v, &detail), || CANCEL.load(Ordering::Relaxed))
+    let format = if mac { "raw" } else { "qcow2" };
+    qemu_img_progress(&["convert", "-p", "-O", format, from, &to], |v| report(app, &what, v, &detail), || CANCEL.load(Ordering::Relaxed))
         .map_err(|e| if e == "cancelled" { e } else { format!("Couldn't import {file}. qemu-img said:\n\n{e}") })
 }
 
@@ -600,6 +611,13 @@ fn run(app: &AppHandle, probe: &Probe, vms: &Vms, p: &Plan) -> Result<Option<Str
             fs::remove_dir(&dir).ok();
             return Err(e);
         }
+    } else if config::NATIVE == config::Format::Mac {
+        // macOS: a raw disk.img, as the Mac edition makes it: a sparse file of its full size, which takes space
+        // on the drive only as Linux stores data.
+        report(app, "Creating the virtual disk", -1.0, &format!("{} GiB", p.disk_gb));
+        File::create(&disk)
+            .and_then(|f| f.set_len(p.disk_gb.clamp(16, 2048) << 30))
+            .map_err(|e| format!("Couldn't make the virtual disk: {e}"))?;
     } else {
         report(app, "Creating the virtual disk", -1.0, &format!("{} GiB{}", p.disk_gb, if p.disk_full { ", allocating its full size" } else { "" }));
         let size = format!("{}G", p.disk_gb.clamp(16, 2048));
@@ -789,5 +807,30 @@ mod disk_tests {
         let mut s = super::DiskSource::default();
         super::beside(&mut s, std::path::Path::new(&path), &host);
         println!("from={} name={} ram={} cores={} desc={:?}", s.from, s.name, s.ram_gb, s.cores, s.description);
+    }
+}
+
+// The ARM64 built-ins (the Mac edition's four) found on their mirrors, as on an Apple silicon Mac.
+// cargo test resolves_arm_built_in -- --ignored --nocapture
+#[cfg(test)]
+mod arm_tests {
+    use super::*;
+    #[test]
+    #[ignore]
+    fn resolves_arm_built_in() {
+        let d = |id: &str, base: &str, steps: &[&str], sum: &str| Distro {
+            id: id.into(), name: id.into(), base: base.into(), steps: steps.iter().map(|s| s.to_string()).collect(), checksum: Some(sum.into()),
+        };
+        for x in [
+            d("fedora", "https://mirrors.kernel.org/fedora/releases/", &[r"~^\d+/$", "Workstation/aarch64/iso/", r"~^Fedora-Workstation-Live-.*\.aarch64\.iso$"], "~CHECKSUM$"),
+            d("ubuntu", "https://cdimage.ubuntu.com/releases/", &[r"~^\d\d\.\d\d(\.\d+)?/$", "release/", r"~^ubuntu-.*-desktop-arm64\.iso$"], "SHA256SUMS"),
+            d("debian", "https://cdimage.debian.org/debian-cd/current/arm64/iso-cd/", &[r"~^debian-.*-arm64-netinst\.iso$"], "SHA256SUMS"),
+            d("opensuse", "https://download.opensuse.org/ports/aarch64/tumbleweed/iso/", &["openSUSE-Tumbleweed-KDE-Live-aarch64-Current.iso"], "{iso}.sha256"),
+        ] {
+            match resolve(&x) {
+                Ok(r) => println!("{}\t{}\t{:?}\t{}", x.id, r.url, r.size, r.hash.map_or("no checksum".into(), |h| h[..12].to_string())),
+                Err(e) => println!("{}\tERROR {e}", x.id),
+            }
+        }
     }
 }

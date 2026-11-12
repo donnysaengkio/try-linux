@@ -1,6 +1,7 @@
 // The distributions: the built-in five (Recommended, the Windows edition's Distro.Catalog) and the repository's
 // catalog, loaded once. Each says where its installer is: `base`, then `steps` added to it (a step starting
 // with ~ is a pattern for the newest matching link), and the file with its official checksum.
+import { invoke } from "@tauri-apps/api/core";
 import { catalog } from "./tauri";
 
 export interface Distro {
@@ -8,7 +9,8 @@ export interface Distro {
   base?: string; steps?: string[]; checksum?: string; diskGB?: number;
 }
 
-export const RECOMMENDED: Distro[] = [
+// x86_64 PCs: the Windows edition's five.
+const X86: Distro[] = [
   { id: "fedora", name: "Fedora Workstation", home: "https://fedoraproject.org/",
     about: "A community distribution sponsored by Red Hat that ships new GNOME, kernel and Mesa releases soon after they come out",
     base: "https://mirrors.kernel.org/fedora/releases/",
@@ -30,6 +32,32 @@ export const RECOMMENDED: Distro[] = [
     base: "https://mirrors.edge.kernel.org/zorinos-isos/",
     steps: ["~^\\d+/$", "~^Zorin-OS-(?<v>\\d+(\\.\\d+)*)-Core-64-bit(-r\\d+)?\\.iso$"], checksum: "SHA256SUMS.txt" },
 ];
+
+// ARM64 (Apple silicon Macs, ARM Linux PCs): the Mac edition's four, which have ARM64 installers.
+const ARM: Distro[] = [
+  { id: "fedora", name: "Fedora Workstation", home: "https://fedoraproject.org/",
+    about: "A community distribution sponsored by Red Hat that ships new GNOME, kernel and Mesa releases soon after they come out",
+    base: "https://mirrors.kernel.org/fedora/releases/",
+    steps: ["~^\\d+/$", "Workstation/aarch64/iso/", "~^Fedora-Workstation-Live-.*\\.aarch64\\.iso$"], checksum: "~CHECKSUM$" },
+  { id: "ubuntu", name: "Ubuntu Desktop", home: "https://ubuntu.com/",
+    about: "The most widely used desktop Linux, made by Canonical, with long-term support releases and a large software catalog",
+    base: "https://cdimage.ubuntu.com/releases/",
+    steps: ["~^\\d\\d\\.\\d\\d(\\.\\d+)?/$", "release/", "~^ubuntu-.*-desktop-arm64\\.iso$"], checksum: "SHA256SUMS" },
+  { id: "debian", name: "Debian", home: "https://www.debian.org/",
+    about: "One of the oldest community distributions, known for stability and the base of Ubuntu, Mint and many others",
+    base: "https://cdimage.debian.org/debian-cd/current/arm64/iso-cd/",
+    steps: ["~^debian-.*-arm64-netinst\\.iso$"], checksum: "SHA256SUMS" },
+  { id: "opensuse", name: "openSUSE Tumbleweed", home: "https://www.opensuse.org/",
+    about: "A rolling-release distribution from the openSUSE community that always has the newest KDE Plasma and kernel",
+    base: "https://download.opensuse.org/ports/aarch64/tumbleweed/iso/",
+    steps: ["openSUSE-Tumbleweed-KDE-Live-aarch64-Current.iso"], checksum: "{iso}.sha256" },
+];
+
+// The built-in ones for this computer's processor; loadArch() picks them when Try Linux opens.
+export let RECOMMENDED: Distro[] = X86;
+export async function loadArch() {
+  try { if ((await invoke<string>("arch")) === "aarch64") RECOMMENDED = ARM; } catch { /* x86_64 */ }
+}
 
 let loading: Promise<Distro[]> | null = null;
 

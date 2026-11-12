@@ -323,6 +323,15 @@ pub fn disk_info(path: String) -> DiskReport {
         r.drive = drive;
     }
     let Some(img) = crate::vm::qemu_img() else {
+        // A raw disk (macOS) without qemu-img: its size is the file's length, and what it takes on the drive
+        // is the space the file really uses (it's sparse).
+        #[cfg(unix)]
+        if let Ok(m) = std::fs::metadata(p) {
+            use std::os::unix::fs::MetadataExt;
+            r.size = Some(m.len());
+            r.actual = Some(m.blocks() * 512);
+            return r;
+        }
         r.error = Some("qemu-img isn't installed.".into());
         return r;
     };
