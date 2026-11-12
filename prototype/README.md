@@ -29,8 +29,7 @@ artifact.
   WINQ-EMU the same way, with the Power menu (shut down, restart, pause, force stop, reset) and the console.
   Running systems show live CPU, the memory Linux is using and disk activity. A system started by the Windows
   edition shows as running here, but only that copy controls it.
-- **Ctrl+K** opens a command menu to start, stop or open any system by typing.
-- **The main menu (☰)**: Check for Updates (WINQ-EMU, as the prototype has no releases yet), Preferences
+- **The main menu (☰)**: Check For Updates (WINQ-EMU, as the prototype has no releases yet), Preferences
   (Dark, Light or Follow system, kept in `settings.ini` so both editions match), Keyboard Shortcuts, About, and
   Quit, with the Windows edition's shortcuts (Ctrl+N, Ctrl+F, Ctrl+U, Ctrl+comma, Ctrl+?, Ctrl+Q, Alt+Left).
 - A system's close button hides its window; it keeps running, and the tray icon's menu controls it.
@@ -66,7 +65,6 @@ Unstyled building blocks, drawn with Try Linux's own colours and fonts (`ui/src/
 | --- | --- |
 | [Base UI](https://base-ui.com) | Menus, dialogs, tabs, drop-downs, check boxes and number fields: keyboard use, focus and screen readers |
 | [Sonner](https://sonner.emilkowal.ski) | Notifications |
-| [cmdk](https://cmdk.paco.me) | The Ctrl+K command menu |
 
 | File | What it does |
 | --- | --- |

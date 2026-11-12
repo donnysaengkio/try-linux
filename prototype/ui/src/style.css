@@ -153,8 +153,8 @@ h1 { font: 600 20px "Prompt", "Segoe UI", sans-serif; margin: 0; }
 .btn:disabled { opacity: .5; cursor: default; }
 .btn.danger { border-color: var(--danger); color: var(--danger); }
 
-/* menus (the Power menu, Base UI's Menu): they grow from their button */
-.menu-positioner { z-index: 10; outline: none; }
+/* menus (the Power menu, Base UI's Menu) and drop-downs: they grow from their button, above any dialog they're in */
+.menu-positioner { z-index: 30; outline: none; }
 .menu { min-width: var(--anchor-width); background: var(--card); border: 1px solid var(--border); border-radius: 10px;
   padding: 4px; box-shadow: 0 8px 28px #0007; display: flex; flex-direction: column; outline: none;
   transform-origin: var(--transform-origin); transition: opacity 150ms var(--ease-out), transform 150ms var(--ease-out); }
@@ -176,22 +176,6 @@ h1 { font: 600 20px "Prompt", "Segoe UI", sans-serif; margin: 0; }
 .modal-text { color: var(--muted); line-height: 1.45; white-space: pre-wrap; user-select: text; max-height: 50vh; overflow: auto; }
 .modal-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 .modal-buttons .btn { min-width: 88px; }
-
-/* the command menu (Ctrl+K: cmdk) */
-.commands { width: 520px; max-width: calc(100vw - 32px); background: var(--card); border: 1px solid var(--border); border-radius: 14px;
-  box-shadow: 0 16px 48px #0008; overflow: hidden; outline: none;
-  transition: opacity 160ms var(--ease-out), transform 160ms var(--ease-out); }
-.commands[data-starting-style], .commands[data-ending-style] { opacity: 0; transform: scale(.97); }
-.commands-input { width: 100%; height: 48px; border: 0; border-bottom: 1px solid var(--border); background: none; color: var(--text);
-  font: inherit; font-size: 13.3px; padding: 0 16px; outline: none; user-select: text; }
-.commands-input::placeholder { color: var(--muted); opacity: .7; }
-.commands-list { max-height: 340px; overflow-y: auto; padding: 6px; }
-.commands [cmdk-group-heading] { color: var(--muted); font-size: 11.3px; padding: 8px 10px 4px; }
-.commands-item { padding: 8px 10px; border-radius: 6px; cursor: pointer; display: flex; gap: 6px; }
-.commands-item[data-selected="true"] { background: var(--card-selected); }
-.commands-item.danger { color: var(--danger); }
-.commands-of { color: var(--muted); }
-.commands-empty { color: var(--muted); text-align: center; padding: 24px 0; }
 
 /* toasts (Sonner), in the app's colours */
 [data-sonner-toaster] { --normal-bg: var(--card); --normal-border: var(--border); --normal-text: var(--text);

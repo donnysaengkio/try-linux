@@ -1,4 +1,4 @@
-// The power commands, and the ones that ask first (from the Power menu, the command menu or the tray), as on
+// The power commands, and the ones that ask first (from the Power menu or the tray), as on
 // the Windows edition: Shut down and Restart ask Linux; Force stop and Reset lose unsaved work.
 import { ask, choose, problem } from "./Ask";
 import { markInstalled, power, start, type PowerAction, type Vm } from "./tauri";
