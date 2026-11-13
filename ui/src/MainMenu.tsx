@@ -184,8 +184,6 @@ export const setNewGroup = (f: (() => void) | null) => { newGroupHere = f; };
 // ---- the menu itself, on Virtual Machines' header bar
 export function MainMenu() {
   const items: ([string, string, () => void] | null)[] = [
-    ["New Group…", "Ctrl+G", () => newGroupHere?.()],
-    null,
     ["Check For Updates", "Ctrl+U", checkForUpdatesNow],
     null,
     ["Preferences", "Ctrl+,", openPreferences],
