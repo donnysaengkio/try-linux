@@ -142,7 +142,7 @@ export function SnapshotsDialog({ open, id, name, onClose }: { open: boolean; id
               </div>))}
       </div>
       <div className="modal-buttons spread">
-        <button className="btn primary" disabled={busy} onClick={() => act("take")}>Take snapshot</button>
+        <button className="btn primary" disabled={busy} onClick={() => act("take")}>Take Snapshot</button>
         <button className="btn" disabled={busy || !chosen} onClick={() => act("revert")}>Revert</button>
         <button className="btn danger" disabled={busy || !chosen} onClick={() => act("delete")}>Delete</button>
         <button className="btn" onClick={onClose}>Close</button>

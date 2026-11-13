@@ -184,3 +184,5 @@
 .option.small { height: 54px; }
 .modal-buttons.spread { justify-content: flex-start; }
 .modal-buttons.spread .btn:last-child { margin-left: auto; }
+/* A row of several actions: each button as wide as its words. */
+.modal-buttons.spread .btn { min-width: 0; padding: 0 14px; }
