@@ -2,6 +2,7 @@
 // (Base UI's Checkbox, Radio, Select, NumberField and ToggleGroup), drawn in Try Linux's style.
 import { Checkbox } from "@base-ui/react/checkbox";
 import { Collapsible } from "@base-ui/react/collapsible";
+import { ContextMenu } from "@base-ui/react/context-menu";
 import { NumberField } from "@base-ui/react/number-field";
 import { Radio } from "@base-ui/react/radio";
 import { RadioGroup } from "@base-ui/react/radio-group";
@@ -9,26 +10,42 @@ import { Select } from "@base-ui/react/select";
 import { Toggle } from "@base-ui/react/toggle";
 import { ToggleGroup } from "@base-ui/react/toggle-group";
 import { createContext, useContext, type ReactNode } from "react";
+import { useArranging } from "./Arrange";
 import { Icon } from "./Icon";
 
 // Which sections are open (kept while Settings is open), and the one opened last, the only one highlighted.
-export interface Sections { open: Set<string>; last: string | null; toggle: (title: string, open: boolean) => void }
+// While searching, every section is open, so what's inside can be found.
+export interface Sections { open: Set<string>; last: string | null; toggle: (title: string, open: boolean) => void; all?: boolean }
 export const SectionsContext = createContext<Sections>({ open: new Set(), last: null, toggle: () => {} });
 
 // Each word starts with a capital letter, as on the other editions ("Camera And USB").
 const titleCase = (t: string) => t.split(" ").map(w => w && w[0].toUpperCase() + w.slice(1)).join(" ");
 
-// A bar that opens and closes its section; closed, it shows a summary of what's inside.
+// A bar that opens and closes its section; closed, it shows a summary of what's inside. Its title can be dragged
+// to move the section, and right-clicked to move it or sort the tab (Arrange.tsx).
 export function Section({ title, summary, children }: { title: string; summary: string; children: ReactNode }) {
   const s = useContext(SectionsContext);
-  const open = s.open.has(title);
+  const open = s.all || s.open.has(title);
+  const arrange = useArranging(title);
   return (
     <Collapsible.Root open={open} onOpenChange={o => s.toggle(title, o)} className="section">
-      <Collapsible.Trigger className={"section-bar" + (open && s.last === title ? " lit" : "")}>
-        <span className="section-title">{titleCase(title)}</span>
-        <span className="section-summary">{open ? "" : summary}</span>
-        <span className="section-chev"><Icon name={open ? "chevron-down" : "chevron-right"} /></span>
-      </Collapsible.Trigger>
+      <ContextMenu.Root>
+        <ContextMenu.Trigger render={<Collapsible.Trigger />} className={"section-bar" + (open && s.last === title ? " lit" : "")}>
+          <span className="section-title">{titleCase(title)}</span>
+          <span className="section-summary">{open ? "" : summary}</span>
+          <span className="section-chev"><Icon name={open ? "chevron-down" : "chevron-right"} /></span>
+        </ContextMenu.Trigger>
+        <ContextMenu.Portal>
+          <ContextMenu.Positioner className="menu-positioner">
+            <ContextMenu.Popup className="menu">
+              <ContextMenu.Item className="menu-item" disabled={!arrange.up} onClick={arrange.up}>Move Up</ContextMenu.Item>
+              <ContextMenu.Item className="menu-item" disabled={!arrange.down} onClick={arrange.down}>Move Down</ContextMenu.Item>
+              <ContextMenu.Separator className="menu-line" />
+              <ContextMenu.Item className="menu-item" disabled={!arrange.sort} onClick={arrange.sort}>Sort A to Z</ContextMenu.Item>
+            </ContextMenu.Popup>
+          </ContextMenu.Positioner>
+        </ContextMenu.Portal>
+      </ContextMenu.Root>
       <Collapsible.Panel className="section-body">
         <div className="section-inner">{children}</div>
       </Collapsible.Panel>

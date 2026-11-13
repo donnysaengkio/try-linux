@@ -6,6 +6,7 @@ import { open as pick, save as pickSave } from "@tauri-apps/plugin-dialog";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ask, problem } from "./Ask";
+import { Arranged, useSectionOrder } from "./Arrange";
 import { AddDiskDialog, LogDialog, ResizeDialog, SnapshotsDialog, WorkingDialog } from "./DiskTools";
 import { findDistro, type Distro } from "./distros";
 import { Action, Check, Choice, Note, NumberBox, Radios, Row, Section, SectionsContext, Segmented, SubHeading } from "./Form";
@@ -57,8 +58,41 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
   // The app's own version, for the subtitle.
   const [version, setVersion] = useState("");
   useEffect(() => { appInfo().then(i => setVersion(i.version)).catch(() => {}); }, []);
+  // The order of each tab's sections (dragged, or Move Up and Down), and Search: every tab's sections at once,
+  // opened, showing only those with the words typed (in their title, summary or anything inside).
+  const [order, setOrder] = useSectionOrder();
+  const [query, setQuery] = useState("");
+  const searchBox = useRef<HTMLInputElement>(null);
+  const searching = query.trim() !== "";
+  const [found, setFound] = useState(-1);
+  const page = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    let n = 0;
+    page.current?.querySelectorAll<HTMLElement>(".tab-panel").forEach(panel => {
+      let inPanel = 0;
+      panel.querySelectorAll<HTMLElement>("[data-section]").forEach(sec => {
+        const text = (sec.textContent ?? "").toLowerCase();
+        const show = !words.length || words.every(w => text.includes(w));
+        sec.hidden = !show;
+        if (show) inPanel++;
+      });
+      panel.classList.toggle("no-match", words.length > 0 && inPanel === 0);
+      n += inPanel;
+    });
+    setFound(words.length ? n : -1);
+  });
+  useEffect(() => {
+    // Ctrl+F: Search.
+    const key = (e: KeyboardEvent) => {
+      if (e.ctrlKey && !e.altKey && e.key.toLowerCase() === "f") { e.preventDefault(); searchBox.current?.focus(); searchBox.current?.select(); }
+    };
+    addEventListener("keydown", key);
+    return () => removeEventListener("keydown", key);
+  }, []);
   const sections = useMemo(() => ({
     open: open.has("*") ? { has: () => true } as unknown as Set<string> : open,
+    all: searching,
     last,
     toggle: (title: string, isOpen: boolean) => {
       setOpen(o => {
@@ -68,7 +102,7 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
       });
       setLast(l => isOpen ? title : l === title ? null : l);
     },
-  }), [open, last]);
+  }), [open, last, searching]);
 
   // ---- General: the distribution's home page, and the displays to open fullscreen on
   const [distro, setDistro] = useState<Distro>();
@@ -265,7 +299,7 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
   const rendering = ["Automatic", "GPU", "CPU"][f.render];
 
   return (
-    <Tabs.Root value={tab} onValueChange={v => setTab(String(v))} className="settings-root">
+    <Tabs.Root value={tab} onValueChange={v => { setTab(String(v)); setQuery(""); }} className={"settings-root" + (searching ? " searching" : "")}>
       <Header
         left={<button className="btn icon" data-back title="Back (Alt+Left)" aria-label="Back" onClick={() => onBack(false)}><Icon name="arrow-left" /></button>}
         middle={
@@ -279,7 +313,7 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
         right={<button className="btn primary save" disabled={saving} onClick={save}>Save</button>} />
 
       <main className="page">
-        <div className="column settings">
+        <div className="column settings" ref={page}>
           <div className="settings-title">
             {renaming
               ? <input ref={nameBox} className="rename" defaultValue={f.name} spellCheck={false}
@@ -291,10 +325,19 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
                 </>}
           </div>
           <div className="settings-sub">{s.os.toUpperCase()}  ·  TRY LINUX v{version}{s.running ? "  ·  RUNNING" : ""}</div>
+          <div className="filter settings-search">
+            <span className="filter-icon"><Icon name="search" /></span>
+            <input ref={searchBox} className="text-box filter-box" placeholder="Search settings  (Ctrl+F)" value={query} spellCheck={false}
+              aria-label="Search settings" onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === "Escape") setQuery(""); }} />
+          </div>
+          {searching && <div className="search-note">{found === 0
+            ? <>No settings match. <button className="link-button" onClick={() => setQuery("")}>Clear the search</button></>
+            : `${found} ${found === 1 ? "section" : "sections"} on every tab. Clear the search to go back to ${TABS.find(t => t[0] === tab)?.[1]}.`}</div>}
 
           <SectionsContext.Provider value={sections}>
             {/* ---------------- General */}
-            <Tabs.Panel value="general" className="tab-panel">
+            <Tabs.Panel value="general" className="tab-panel" keepMounted data-label="General">
+              <Arranged tab="general" order={order} onOrder={setOrder}>
               <Section title="Display and startup" summary={(f.fullscreen ? "Fullscreen" : "In a window") + (f.sign_in ? "  ·  Starts when you sign in" : "")
                 + (mac ? "" : f.on_quit === "suspend" ? "  ·  Suspends on quit" : f.on_quit === "shutdown" ? "  ·  Shuts down on quit" : "")}>
                 <Check label="Open fullscreen" checked={f.fullscreen} onChange={v => set("fullscreen", v)} />
@@ -333,10 +376,12 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
               <Section title="Log" summary="When it started and stopped">
                 <Action text={`See when ${who} started and stopped, and any problems while it ran.`} label="Log" onClick={() => setLogOpen(true)} />
               </Section>
+              </Arranged>
             </Tabs.Panel>
 
             {/* ---------------- Hardware */}
-            <Tabs.Panel value="hardware" className="tab-panel">
+            <Tabs.Panel value="hardware" className="tab-panel" keepMounted data-label="Hardware">
+              <Arranged tab="hardware" order={order} onOrder={setOrder}>
               <Section title="Disks" summary={`${s.disks.length} ${s.disks.length === 1 ? "disk" : "disks"}  ·  Disk ${disk + 1}: ${report?.actual != null ? size(report.actual) + (report.size != null ? " of " + size(report.size) : "") : "…"}`}>
                 <Row label="Disk">
                   <Choice width={110} value={String(disk)} onChange={v => setDisk(Number(v))}
@@ -408,10 +453,12 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
                   <span className="hint-text">up to {coreTop} of {s.threads}</span>
                 </Row>
               </Section>
+              </Arranged>
             </Tabs.Panel>
 
             {/* ---------------- Devices (sections in alphabetical order) */}
-            <Tabs.Panel value="devices" className="tab-panel">
+            <Tabs.Panel value="devices" className="tab-panel" keepMounted data-label="Devices">
+              <Arranged tab="devices" order={order} onOrder={setOrder}>
               <Section title="Camera and USB" summary={win ? "Not available in WINQ-EMU" : "Not available yet"}>
                 <Note>{win ? "WINQ-EMU doesn't include camera or USB passthrough, so Windows cameras and USB devices can't be attached." : `Cameras and USB devices on ${pc} can't be attached yet.`} Use the shared folder to move files.</Note>
               </Section>
@@ -470,10 +517,12 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
                 <Check label="Allow Linux to read and change this folder" checked={f.shared_write} onChange={v => set("shared_write", v)} />
                 <Note inset>Off shares it read-only. In Linux: <code>sudo mount -t 9p -o trans=virtio host /mnt/host</code></Note>
               </Section>
+              </Arranged>
             </Tabs.Panel>
 
             {/* ---------------- Recovery */}
-            <Tabs.Panel value="recovery" className="tab-panel">
+            <Tabs.Panel value="recovery" className="tab-panel" keepMounted data-label="Recovery">
+              <Arranged tab="recovery" order={order} onOrder={setOrder}>
               <Section title="Backup and restore" summary="Back up, or restore a copy">
                 <Action text={`Save a copy of ${who}, its disks and its settings.`} label="Back up" onClick={rec.backup} />
                 <Action text="Restore a backup as a separate copy; the original stays." label="Restore" onClick={rec.restore} />
@@ -493,6 +542,7 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
                 <Action text="Move all systems and downloads to another folder." label="Move" onClick={rec.move} />
                 <Action text="Delete installers that no system still needs." label="Clean" onClick={rec.clean} />
               </Section>
+              </Arranged>
             </Tabs.Panel>
           </SectionsContext.Provider>
           <ResizeDialog open={tool === "resize"} name={diskName} report={report} onDone={resized} />

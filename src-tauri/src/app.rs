@@ -79,6 +79,19 @@ pub fn set_layout(layout: String) -> Result<(), String> {
     set_pref("layout", &v.to_string()).map_err(|e| format!("Couldn't save how Virtual Machines is arranged: {e}"))
 }
 
+// The order of Settings' sections on each tab, as arranged by dragging their titles: {"general": [titles], ...}.
+// The same for every system; kept with the preferences.
+#[tauri::command]
+pub fn section_order() -> String {
+    read("sections").filter(|s| serde_json::from_str::<serde_json::Value>(s).is_ok()).unwrap_or_else(|| "{}".into())
+}
+
+#[tauri::command]
+pub fn set_section_order(order: String) -> Result<(), String> {
+    let v: serde_json::Value = serde_json::from_str(&order).map_err(|e| e.to_string())?;
+    set_pref("sections", &v.to_string()).map_err(|e| format!("Couldn't save the order of Settings' sections: {e}"))
+}
+
 // Where a system comes in the tray menu: its group (A to Z, systems in no group last), then its place in the
 // arranged order.
 pub fn layout_rank() -> impl Fn(&str) -> (usize, usize) {

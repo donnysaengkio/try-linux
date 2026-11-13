@@ -193,3 +193,18 @@
 .box.log-text { margin: 0; height: 320px; overflow: auto; padding: 10px 12px; font: 11.5px/1.5 Consolas, "DejaVu Sans Mono", Menlo, monospace;
   white-space: pre-wrap; word-break: break-word; user-select: text; -webkit-user-select: text; color: var(--text); }
 .radios.disabled { opacity: .55; }
+/* Settings: sections in the order you arrange them; dragging one shows where it will go. */
+.arranged.moving { opacity: .45; }
+.arranged.drop-before { box-shadow: 0 -2px 0 var(--accent); border-radius: 2px; }
+.arranged.drop-after { box-shadow: 0 2px 0 var(--accent); border-radius: 2px; }
+/* Search: every tab's matching sections, under the tab's name; tabs with none are left out. */
+.settings-search { margin: 14px 0 14px; }
+.search-note { color: var(--muted); font-size: 11.3px; margin: 6px 2px 2px; }
+.settings-root.searching .tab-panel[hidden], .settings-root.searching .tab-panel { display: block !important; }
+.settings-root.searching .tab-panel.no-match { display: none !important; }
+.settings-root.searching .tab-panel::before { content: attr(data-label); display: block; margin: 18px 2px 8px;
+  color: var(--muted); font-size: 11.3px; letter-spacing: .04em; text-transform: uppercase; }
+.settings-root.searching .tab { opacity: .5; }
+.menu-item[data-disabled] { opacity: .4; cursor: default; }
+.menu-item[data-disabled]:hover, .menu-item[data-disabled][data-highlighted] { background: none; }
+.settings-root.searching .settings-search { margin-bottom: 4px; }
