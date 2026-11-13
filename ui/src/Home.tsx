@@ -2,6 +2,7 @@
 import { Menu } from "@base-ui/react/menu";
 import { Fragment, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Commands } from "./Commands";
 import { Header } from "./Header";
 import { Icon } from "./Icon";
 import { Logo } from "./Logo";
@@ -115,6 +116,7 @@ export function Home({ first, onCreate, onSettings }: { first: Vm[]; onCreate: (
           <div className="card">{vms.map(vm => <VmRow key={vm.id} vm={vm} onSettings={onSettings} />)}</div>
         </div>
       </main>
+      <Commands vms={vms} onCreate={onCreate} />
     </Fragment>
   );
 }

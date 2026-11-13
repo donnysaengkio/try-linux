@@ -130,6 +130,7 @@ export async function checkQuietly() {
 const SHORTCUTS: [string, string][] = [
   ["General", ""],
   ["Ctrl+N", "Create a virtual machine"],
+  ["Ctrl+K", "Command menu: start, stop or open a system"],
   ["Ctrl+F", "Search distributions (on Choose a Linux OS)"],
   ["Ctrl+U", "Check for updates"],
   ["Ctrl+,", "Preferences"],
