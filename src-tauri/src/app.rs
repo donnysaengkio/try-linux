@@ -66,6 +66,34 @@ pub fn set_preference(key: String, value: String) -> Result<(), String> {
     set_pref(&key, &value).map_err(|e| format!("Couldn't save the preference: {e}"))
 }
 
+// How Virtual Machines is arranged, as the interface saves it (Home.tsx): {"order": [ids], "groups": [names],
+// "member": {id: group}, "folded": [names], "sort": {"col", "dir"} or null}. Kept with the preferences.
+#[tauri::command]
+pub fn layout() -> String {
+    read("layout").filter(|s| serde_json::from_str::<serde_json::Value>(s).is_ok()).unwrap_or_else(|| "{}".into())
+}
+
+#[tauri::command]
+pub fn set_layout(layout: String) -> Result<(), String> {
+    let v: serde_json::Value = serde_json::from_str(&layout).map_err(|e| e.to_string())?;
+    set_pref("layout", &v.to_string()).map_err(|e| format!("Couldn't save how Virtual Machines is arranged: {e}"))
+}
+
+// Where a system comes in the tray menu: its group (A to Z, systems in no group last), then its place in the
+// arranged order.
+pub fn layout_rank() -> impl Fn(&str) -> (usize, usize) {
+    let v: serde_json::Value = serde_json::from_str(&layout()).unwrap_or_default();
+    let strings = |k: &str| v[k].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect::<Vec<_>>()).unwrap_or_default();
+    let mut groups = strings("groups");
+    groups.sort_by_key(|g| g.to_lowercase());
+    let order = strings("order");
+    let member = v["member"].clone();
+    move |id: &str| {
+        let g = member[id].as_str().and_then(|g| groups.iter().position(|x| x == g)).unwrap_or(groups.len());
+        (g, order.iter().position(|x| x == id).unwrap_or(usize::MAX))
+    }
+}
+
 #[derive(Serialize)]
 pub struct Updates {
     winq: Option<String>,   // installed

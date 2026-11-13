@@ -4605,6 +4605,7 @@ version = "2.0.0"
 dependencies = [
  "base64 0.22.1",
  "block2",
+ "chrono",
  "minisign-verify",
  "objc2",
  "objc2-app-kit",

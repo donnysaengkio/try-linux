@@ -6,7 +6,7 @@ import { open as pick, save as pickSave } from "@tauri-apps/plugin-dialog";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ask, problem } from "./Ask";
-import { AddDiskDialog, ResizeDialog, SnapshotsDialog, WorkingDialog } from "./DiskTools";
+import { AddDiskDialog, LogDialog, ResizeDialog, SnapshotsDialog, WorkingDialog } from "./DiskTools";
 import { findDistro, type Distro } from "./distros";
 import { Action, Check, Choice, Note, NumberBox, Radios, Row, Section, SectionsContext, Segmented, SubHeading } from "./Form";
 import { Header } from "./Header";
@@ -36,7 +36,7 @@ const inside = (dir: string, path: string) => {
 
 
 export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool }:
-  { first: Settings; onBack: (saved: boolean) => void; tab?: string; openAll?: boolean; startTool?: "resize" | "add" | "snapshots" }) {
+  { first: Settings; onBack: (saved: boolean) => void; tab?: string; openAll?: boolean; startTool?: "resize" | "add" | "snapshots" | "log" }) {
   const [s, setS] = useState(first);
   const who = s.name;
   // What the page says differs a little on Linux and macOS.
@@ -90,7 +90,7 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
   }, [disk, reread]);
 
   // ---- Disk Utilities: each needs the system shut down; the disks are read again afterwards.
-  const [tool, setTool] = useState<"resize" | "add" | "compact" | null>(startTool === "snapshots" ? null : startTool ?? null);
+  const [tool, setTool] = useState<"resize" | "add" | "compact" | null>(startTool === "snapshots" || startTool === "log" ? null : startTool ?? null);
   const diskName = "Disk " + (disk + 1);
   const afterTool = async (message: string, select?: number) => {
     toast(message, { duration: 7000 });
@@ -163,6 +163,7 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
   // now (or Virtual Machines, once it's deleted or started).
   const [working, setWorking] = useState<string | null>(null);
   const [snapsOpen, setSnapsOpen] = useState(startTool === "snapshots");
+  const [logOpen, setLogOpen] = useState(startTool === "log");
   const isoFilter = [{ name: "Disc images", extensions: ["iso"] }, { name: "All files", extensions: ["*"] }];
   const backupFilter = [{ name: "Try Linux backup", extensions: ["qcow2"] }];
   const slow = async (title: string, work: () => Promise<string>, tell: "dialog" | "toast" = "dialog") => {
@@ -467,7 +468,8 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
                 <Action text="Move all systems and downloads to another folder." label="Move" onClick={rec.move} />
                 <Action text="Delete installers that no system still needs." label="Clean" onClick={rec.clean} />
               </Section>
-              <Section title="Repair" summary="Reset, or boot an ISO">
+              <Section title="Repair" summary="See its log, reset, or boot an ISO">
+                <Action text={`See when ${who} started and stopped, and any problems while it ran.`} label="Log" onClick={() => setLogOpen(true)} />
                 <Action text={`Erase ${who} and run its installer again.`} label="Reset" onClick={rec.reset} />
                 <Action text={`Start ${who} from an ISO, such as a rescue disk.`} label="Boot ISO" onClick={rec.boot} />
               </Section>
@@ -480,6 +482,7 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
           <AddDiskDialog open={tool === "add"} onDone={added} />
           <WorkingDialog open={tool === "compact"} title={`Compacting ${diskName} of ${who}`} />
           <WorkingDialog open={working !== null} title={working ?? ""} />
+          <LogDialog open={logOpen} id={s.id} name={who} onClose={() => setLogOpen(false)} />
           <SnapshotsDialog open={snapsOpen} id={s.id} name={who} onClose={() => { setSnapsOpen(false); setReread(n => n + 1); }} />
         </div>
       </main>

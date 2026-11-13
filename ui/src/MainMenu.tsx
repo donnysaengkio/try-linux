@@ -131,6 +131,7 @@ const SHORTCUTS: [string, string][] = [
   ["General", ""],
   ["Ctrl+N", "Create a virtual machine"],
   ["Ctrl+K", "Command menu: start, stop or open a system"],
+  ["Ctrl+G", "New group (on Virtual Machines)"],
   ["Ctrl+F", "Search distributions (on Choose a Linux OS)"],
   ["Ctrl+U", "Check for updates"],
   ["Ctrl+,", "Preferences"],
@@ -153,7 +154,7 @@ export function useShortcuts(onCreate: (() => void) | null) {
         return;
       }
       if (!e.ctrlKey || e.altKey) return;
-      const act = k === "n" ? onCreate : k === "u" ? checkForUpdatesNow : k === "," ? openPreferences
+      const act = k === "n" ? onCreate : k === "g" ? newGroupHere : k === "u" ? checkForUpdatesNow : k === "," ? openPreferences
         : k === "?" || k === "/" ? openShortcuts : k === "q" ? quitApp : null;
       if (act) { e.preventDefault(); act(); }
     };
@@ -162,9 +163,15 @@ export function useShortcuts(onCreate: (() => void) | null) {
   }, [onCreate]);
 }
 
+// New Group, which Virtual Machines handles while it's open (Home.tsx).
+let newGroupHere: (() => void) | null = null;
+export const setNewGroup = (f: (() => void) | null) => { newGroupHere = f; };
+
 // ---- the menu itself, on Virtual Machines' header bar
 export function MainMenu() {
   const items: ([string, string, () => void] | null)[] = [
+    ["New Group…", "Ctrl+G", () => newGroupHere?.()],
+    null,
     ["Check For Updates", "Ctrl+U", checkForUpdatesNow],
     null,
     ["Preferences", "Ctrl+,", openPreferences],

@@ -13,6 +13,7 @@ mod create;
 mod disks;
 mod legacy;
 mod live;
+mod log;
 #[cfg(target_os = "macos")]
 mod mac;
 mod recovery;
@@ -307,7 +308,9 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let mut running: Vec<(String, String, bool, bool)> = vms.0.lock().unwrap().iter()
         .map(|(id, r)| (id.clone(), config::find(id).map(|c| c.name()).unwrap_or_else(|| id.clone()), r.held, r.paused))
         .collect();
-    running.sort_by(|a, b| a.1.to_lowercase().cmp(&b.1.to_lowercase()));
+    // In the order Virtual Machines shows them: by group, then as arranged (app.rs, layout).
+    let rank = app::layout_rank();
+    running.sort_by(|a, b| rank(&a.0).cmp(&rank(&b.0)).then_with(|| a.1.to_lowercase().cmp(&b.1.to_lowercase())));
     let item = |id: &str, action: &str, text: &str| MenuItem::with_id(app, format!("{action}|{id}"), text, true, None::<&str>);
     for (id, name, held, paused) in &running {
         let sub = Submenu::new(app, name, true)?;
@@ -456,7 +459,7 @@ fn main() {
         .manage(Probe(Mutex::new(System::new())))
         .manage(Vms::default())
         .manage(live::Live::default())
-        .invoke_handler(tauri::generate_handler![systems, start, console, power, quit, catalog, arch, mark_installed, icons, open_page, start_page, settings::settings, settings::save_settings, settings::disk_info, settings::set_disc, create::create_defaults, create::free_space, create::create, create::cancel_create, create::read_disk, app::app_info, app::set_preference, app::check_updates, app::open_storage, settings::add_shortcut, disks::disk_resize, disks::disk_compact, disks::disk_add, disks::disk_remove, recovery::backup, recovery::restore, recovery::clone_system, recovery::snapshots, recovery::snapshot, recovery::move_storage, recovery::clean_list, recovery::clean_run, recovery::reset, recovery::installer_of, recovery::boot_iso, recovery::delete, setup::readiness, setup::enable_hypervisor, setup::update_winq])
+        .invoke_handler(tauri::generate_handler![systems, start, console, power, quit, catalog, arch, mark_installed, icons, open_page, start_page, settings::settings, settings::save_settings, settings::disk_info, settings::set_disc, create::create_defaults, create::free_space, create::create, create::cancel_create, create::read_disk, app::app_info, app::set_preference, app::check_updates, app::open_storage, app::layout, app::set_layout, log::system_log, log::open_log, settings::add_shortcut, disks::disk_resize, disks::disk_compact, disks::disk_add, disks::disk_remove, recovery::backup, recovery::restore, recovery::clone_system, recovery::snapshots, recovery::snapshot, recovery::move_storage, recovery::clean_list, recovery::clean_run, recovery::reset, recovery::installer_of, recovery::boot_iso, recovery::delete, setup::readiness, setup::enable_hypervisor, setup::update_winq])
         .setup(|app| {
             let handle = app.handle().clone();
             TrayIconBuilder::with_id("main")

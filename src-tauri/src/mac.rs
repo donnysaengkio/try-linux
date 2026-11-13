@@ -337,6 +337,9 @@ pub fn start(app: &AppHandle, _vms: &Vms, cfg: &VmConfig, held: bool) -> Result<
             }
         }
     }
+    crate::log::started(&cfg.dir, &format!("Started {}: {}, Apple Virtualization{}", cfg.name(),
+        if cfg.pending() && cfg.iso().exists() { "from its installer" } else { "from its disk" },
+        if held { ", console only (machine off)" } else { "" }));
     let plan = Plan {
         id: cfg.id.clone(),
         name: cfg.name(),
@@ -617,6 +620,14 @@ fn finished(id: &str, error: Option<String>) {
         }
     }
     let again = x.reset_asked || (error.is_none() && x.restart_asked.is_some_and(|t| t.elapsed() < Duration::from_secs(300)));
+    let why = match &error {
+        _ if x.reset_asked => "Reset".to_string(),
+        _ if again => "Linux restarted".to_string(),
+        Some(e) if !x.quiet => format!("Stopped with an error: {e}"),
+        _ if x.quiet => "Force stopped".to_string(),
+        _ => "Linux shut down".to_string(),
+    };
+    crate::log::line(&x.dir, &format!("{why} after {}", crate::log::duration(x.started.elapsed().as_secs())));
     if again {
         let host = app.state::<crate::Probe>().host();
         if let Err(p) = crate::vm::start(app, &vms, &host, id, None, false) {

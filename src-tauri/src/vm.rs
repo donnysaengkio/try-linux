@@ -419,14 +419,23 @@ fn start_qemu(app: &AppHandle, vms: &Vms, host: &Host, cfg: &VmConfig, cpu: Opti
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     }
-    let mut child: Child = cmd.spawn().map_err(|e| problem("Couldn't start QEMU", e.to_string()))?;
+    crate::log::started(&cfg.dir, &format!("Started {}: {}, {} rendering{}", cfg.name(),
+        if installer { "from its installer" } else { "from its disk" }, if cpu { "CPU" } else { "GPU" },
+        if held { ", console only (machine off)" } else { "" }));
+    crate::log::line(&cfg.dir, &format!("Command: {} {}", bin.display(), args.join(" ")));
+    let mut child: Child = cmd.spawn().map_err(|e| {
+        crate::log::line(&cfg.dir, &format!("QEMU couldn't start: {e}"));
+        problem("Couldn't start QEMU", e.to_string())
+    })?;
 
-    // QEMU's error output, for the message if it fails to start.
+    // QEMU's error output: in the log, and for the message if it fails to start.
     let err = Arc::new(Mutex::new(String::new()));
     if let Some(stderr) = child.stderr.take() {
         let err = err.clone();
+        let dir = cfg.dir.clone();
         thread::spawn(move || {
             for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                crate::log::line(&dir, &format!("QEMU: {line}"));
                 let mut e = err.lock().unwrap();
                 e.push_str(&line);
                 e.push('\n');
@@ -540,6 +549,9 @@ pub fn adopt(app: &AppHandle, vms: &Vms, id: &str, pid: u32, args: &[String], ru
         if map.contains_key(id) {
             return;
         }
+        if let Some(c) = crate::config::find(id) {
+            crate::log::line(&c.dir, "Try Linux took it over: it kept running while Try Linux was closed.");
+        }
         map.insert(id.to_string(), Running {
             pid, qmp: control, paused: status == "paused", held: status == "prelaunch", cpu, installer,
             started: Instant::now().checked_sub(running_for).unwrap_or_else(Instant::now),
@@ -624,6 +636,16 @@ fn exited(app: &AppHandle, id: &str, ok: bool) {
     }
     let reason = vm.reason.lock().unwrap().clone().unwrap_or_default();
     let restart_asked = reason == "guest-shutdown" && vm.restart_asked.map(|t| t.elapsed() < Duration::from_secs(300)).unwrap_or(false);
+    if let Some(c) = &cfg {
+        let why = if vm.force_stopped { "Force stopped".to_string() }
+            else if vm.reset_asked { "Reset".to_string() }
+            else if reason == "guest-reset" || restart_asked { "Linux restarted".to_string() }
+            else if reason == "guest-shutdown" { "Linux shut down".to_string() }
+            else if !reason.is_empty() { format!("Stopped ({reason})") }
+            else if ok { "QEMU closed".to_string() }
+            else { "QEMU stopped with an error".to_string() };
+        crate::log::line(&c.dir, &format!("{why} after {}", crate::log::duration(secs)));
+    }
     let host = app.state::<crate::Probe>().host();
     if reason == "guest-reset" || restart_asked || vm.reset_asked {
         // Linux restarted (or Restart / Reset): start it again, with any changed settings.
@@ -658,6 +680,9 @@ fn exited(app: &AppHandle, id: &str, ok: bool) {
 
 // The Power menu's actions.
 pub fn power(app: &AppHandle, vms: &Vms, id: &str, action: &str) -> Result<(), String> {
+    if let Some(c) = crate::config::find(id) {
+        crate::log::line(&c.dir, &format!("Power menu: {}", crate::log::action(action)));
+    }
     #[cfg(target_os = "macos")]
     {
         if !vms.0.lock().unwrap().contains_key(id) {

@@ -52,13 +52,14 @@ keeps the files its 1.x edition used, so 2.x opens the systems 1.x made (see `sr
 | `src-tauri/src/disks.rs` | Disk Utilities: resizing, compacting, adding and removing disks |
 | `src-tauri/src/recovery.rs` | Recovery: back up, restore, clone, snapshots, move, clean, reset, boot an ISO, delete |
 | `src-tauri/src/live.rs` | Memory and disk activity from QEMU (balloon statistics, block statistics) |
+| `src-tauri/src/log.rs` | Each system's log (`trylinux.log` in its folder): starts, stops and why, Power menu commands, QEMU's messages |
 | `src-tauri/src/setup.rs` | What the computer needs: virtualization, Windows Hypervisor Platform, WINQ-EMU, KVM |
 | `src-tauri/src/shortcuts.rs` | A system's shortcut and starting it at sign-in |
 | `src-tauri/src/window.rs` | Systems' windows on Windows: bringing them forward, hiding them from their close button |
 | `src-tauri/src/legacy.rs` | Taking over from Windows 1.x and Linux 1.0.x; the Linux AppImage adding itself to the apps menu |
 | `src-tauri/src/app.rs` | Preferences, About's details, and checking WINQ-EMU for updates |
 | `ui/src/main.tsx` | Which page shows, and messages from the Rust side |
-| `ui/src/Home.tsx`, `ui/src/Choose.tsx` | Virtual Machines, and Choose a Linux OS |
+| `ui/src/Home.tsx`, `ui/src/Choose.tsx` | Virtual Machines (sortable columns, groups, dragging; the arrangement is the `layout` preference, which the tray follows), and Choose a Linux OS |
 | `ui/src/Create.tsx`, `ui/src/distros.ts` | Create's steps and progress; the built-in distributions and where their installers are |
 | `ui/src/OwnInstaller.tsx` | Use Your Own Installer |
 | `ui/src/Settings.tsx`, `ui/src/Form.tsx` | Settings, and its sections and controls |

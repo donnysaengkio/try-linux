@@ -19,7 +19,7 @@ import "./style.css";
 roundCorners();
 
 type Page = { kind: "loading" } | { kind: "home"; vms: Vm[] } | { kind: "choose"; back: boolean }
-  | { kind: "settings"; s: Settings; tab?: string; openAll?: boolean; tool?: "resize" | "add" | "snapshots" } | { kind: "create"; source: Source; back: boolean; step?: "general" | "resources" | "summary" }
+  | { kind: "settings"; s: Settings; tab?: string; openAll?: boolean; tool?: "resize" | "add" | "snapshots" | "log" } | { kind: "create"; source: Source; back: boolean; step?: "general" | "resources" | "summary" }
   | { kind: "own"; back: boolean; last?: Source };
 
 function App() {
@@ -31,7 +31,7 @@ function App() {
     setPage(vms.length ? { kind: "home", vms } : { kind: "choose", back: false });
   };
 
-  const openSettings = (id: string, tab?: string, openAll?: boolean, tool?: "resize" | "add" | "snapshots") =>
+  const openSettings = (id: string, tab?: string, openAll?: boolean, tool?: "resize" | "add" | "snapshots" | "log") =>
     settings(id).then(s => setPage({ kind: "settings", s, tab, openAll, tool })).catch(e => problem({ title: "Couldn't open Settings", text: String(e) }));
 
   // Ctrl+N and the other shortcuts; Create can't be opened while a system is being set up.

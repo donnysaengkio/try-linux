@@ -185,3 +185,10 @@
 .modal-buttons.spread { justify-content: flex-start; }
 /* A row of several actions: the buttons share the row evenly, from edge to edge (wider only where the words need it). */
 .modal-buttons.spread .btn { flex: 1 1 0; min-width: max-content; padding: 0 14px; }
+/* the name asked for in a dialog (New Group, Rename Group) */
+.modal-field { margin-top: 14px; }
+.field-error { color: var(--danger); font-size: 11.3px; margin-top: 6px; }
+/* the Log: wider, the text as written, newest at the bottom */
+.modal.app-window.wide { width: 680px; }
+.box.log-text { margin: 0; height: 320px; overflow: auto; padding: 10px 12px; font: 11.5px/1.5 Consolas, "DejaVu Sans Mono", Menlo, monospace;
+  white-space: pre-wrap; word-break: break-word; user-select: text; -webkit-user-select: text; color: var(--text); }

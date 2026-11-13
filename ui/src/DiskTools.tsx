@@ -1,25 +1,25 @@
 // The Disk Utilities' dialogs (Settings > Hardware > Disks): the new size for Resize, what to add for Add disk,
-// and the progress while a disk is compacted.
+// and the progress while a disk is compacted; and Recovery's Snapshots and Log.
 import { Dialog } from "@base-ui/react/dialog";
 import { listen } from "@tauri-apps/api/event";
 import { open as pick } from "@tauri-apps/plugin-dialog";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Note, NumberBox } from "./Form";
 import { Icon } from "./Icon";
 import { ask, problem } from "./Ask";
-import { listSnapshots, snapshotAction, type DiskReport, type Progress, type Snapshot } from "./tauri";
+import { listSnapshots, openLog, snapshotAction, systemLog, type DiskReport, type Progress, type Snapshot } from "./tauri";
 
 const GiB = 2 ** 30;
 const size = (b: number) => b >= GiB ? (b / GiB).toFixed(1) + " GB" : (b / 2 ** 20).toFixed(b < 10 * 2 ** 20 ? 1 : 0) + " MB";
 
-function Box({ open, title, onClose, children, closable = true }:
-  { open: boolean; title: string; onClose: () => void; children: ReactNode; closable?: boolean }) {
+function Box({ open, title, onClose, children, closable = true, wide = false }:
+  { open: boolean; title: string; onClose: () => void; children: ReactNode; closable?: boolean; wide?: boolean }) {
   return (
     <Dialog.Root open={open} onOpenChange={o => { if (!o && closable) onClose(); }}>
       <Dialog.Portal>
         <Dialog.Backdrop className="modal-back" />
         <Dialog.Viewport className="modal-viewport">
-          <Dialog.Popup className="modal app-window">
+          <Dialog.Popup className={"modal app-window" + (wide ? " wide" : "")}>
             <div className="app-window-head">
               <Dialog.Title className="modal-title">{title}</Dialog.Title>
               {closable && <Dialog.Close className="btn icon small" aria-label="Close"><Icon name="x" /></Dialog.Close>}
@@ -145,6 +145,29 @@ export function SnapshotsDialog({ open, id, name, onClose }: { open: boolean; id
         <button className="btn primary" disabled={busy} onClick={() => act("take")}>Take Snapshot</button>
         <button className="btn" disabled={busy || !chosen} onClick={() => act("revert")}>Revert</button>
         <button className="btn danger" disabled={busy || !chosen} onClick={() => act("delete")}>Delete</button>
+        <button className="btn" onClick={onClose}>Close</button>
+      </div>
+    </Box>
+  );
+}
+
+// A system's log (log.rs): its starts and stops and why, the Power menu's commands, and what QEMU reported while
+// it ran. The newest is at the bottom, where it opens.
+export function LogDialog({ open, id, name, onClose }: { open: boolean; id: string; name: string; onClose: () => void }) {
+  const [text, setText] = useState<string | null>(null);
+  const view = useRef<HTMLPreElement>(null);
+  const read = () => systemLog(id).then(setText).catch(e => setText("Couldn't read the log.\n\n" + e));
+  useEffect(() => { if (open) { setText(null); read(); } }, [open]);
+  useEffect(() => { if (view.current) view.current.scrollTop = view.current.scrollHeight; }, [text]);
+  return (
+    <Box open={open} title={"Log  ·  " + name} onClose={onClose} wide>
+      <Note>When {name} started and stopped and why, the Power menu's commands, and any warnings while it ran.</Note>
+      <pre ref={view} className="box log-text">
+        {text === null ? "Reading…" : text || `Nothing yet. The log starts the next time ${name} runs.`}
+      </pre>
+      <div className="modal-buttons spread">
+        <button className="btn" onClick={read}>Refresh</button>
+        <button className="btn" disabled={!text} onClick={() => openLog(id).catch(problem)}>Open Log File</button>
         <button className="btn" onClick={onClose}>Close</button>
       </div>
     </Box>

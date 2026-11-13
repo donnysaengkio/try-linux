@@ -7,7 +7,7 @@ import { checkForUpdatesNow, openPreferences, openShortcuts } from "./MainMenu";
 import { act, call, powerItems, startSystem } from "./power";
 import { showConsole, type Vm } from "./tauri";
 
-export function Commands({ vms, onCreate }: { vms: Vm[]; onCreate: () => void }) {
+export function Commands({ vms, onCreate, onNewGroup }: { vms: Vm[]; onCreate: () => void; onNewGroup: () => void }) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -32,6 +32,7 @@ export function Commands({ vms, onCreate }: { vms: Vm[]; onCreate: () => void })
                 <Command.Empty className="commands-empty">Nothing matches.</Command.Empty>
                 <Command.Group heading="Try Linux">
                   <Command.Item className="commands-item" onSelect={() => run(onCreate)}>Create a system</Command.Item>
+                  <Command.Item className="commands-item" onSelect={() => run(onNewGroup)}>New Group</Command.Item>
                   <Command.Item className="commands-item" onSelect={() => run(openPreferences)}>Preferences</Command.Item>
                   <Command.Item className="commands-item" onSelect={() => run(openShortcuts)}>Keyboard Shortcuts</Command.Item>
                   <Command.Item className="commands-item" onSelect={() => run(checkForUpdatesNow)}>Check For Updates</Command.Item>

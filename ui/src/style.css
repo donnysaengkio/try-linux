@@ -104,8 +104,35 @@ h1 { font: 600 20px "Prompt", "Segoe UI", sans-serif; margin: 0; }
 /* Virtual Machines: one rounded card of rows, with the stat columns' headers on the title's line */
 /* The headers get the rows' padding (and border) so each sits over its column; the title stays at the edge. */
 .vm-head { display: flex; align-items: flex-end; margin: 18px 0 10px; padding: 0 15px 0 19px; }
-.vm-head h1 { flex: 1; margin-left: -19px; }
 .col-label { color: var(--muted); font-size: 11.3px; }
+/* Column titles sort the list: the sorted one is brighter, with an arrow (up: A to Z, lowest first). */
+.col-label.sort { background: none; border: 0; padding: 2px 0; font: inherit; font-size: 11.3px; color: var(--muted);
+  cursor: pointer; display: flex; align-items: center; gap: 2px; text-align: left; border-radius: 4px; }
+.col-label.sort:hover, .col-label.sort.on { color: var(--text); }
+.col-label.sort.name { flex: 1; margin-left: -1px; }
+.sort-arrow .icon-box { width: 12px; height: 12px; }
+.sort-arrow.up .icon-box { transform: rotate(180deg); }
+/* Groups: a title that folds its box away, and a box to drag systems into. */
+.vm-group { display: flex; align-items: center; gap: 7px; margin: 16px 0 8px; padding: 3px 6px 3px 4px; background: none; border: 0;
+  border-radius: 6px; color: var(--text); font: 600 13.3px "Noto Sans", "Segoe UI", sans-serif; cursor: pointer; }
+.vm-group:first-of-type { margin-top: 0; }
+.vm-group:hover { background: var(--card-hover); }
+.vm-group .icon-box { width: 15px; height: 15px; color: var(--muted); }
+.vm-group .fold .icon-box { transition: transform 160ms var(--ease-out); }
+.vm-group .fold.folded .icon-box { transform: rotate(-90deg); }
+.vm-group .count { color: var(--muted); font-weight: 400; font-size: 11.3px; }
+.vm-group.drop-into, .vm-group.drop-into .icon-box { color: var(--accent); }
+.card + .vm-group, .empty-group + .vm-group { margin-top: 16px; }
+.card.drop-into { border-color: var(--accent); }
+.card.empty-group { min-height: 46px; border-style: dashed; display: flex; align-items: center; justify-content: center;
+  color: var(--muted); font-size: 11.3px; background: none; }
+/* Dragging a row: where it will go, and the row being moved. */
+.vm-row.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+.vm-row.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+.vm-row.dragging { opacity: .45; }
+body.dragging-rows, body.dragging-rows * { cursor: grabbing !important; }
+.menu-heading { color: var(--muted); font-size: 11.3px; padding: 6px 12px 4px; max-width: 260px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
 .vm-row { display: flex; align-items: center; height: 62px; padding: 0 14px 0 18px; border-top: 1px solid var(--border); }
 .vm-row:first-child { border-top: 0; }

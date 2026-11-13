@@ -9,7 +9,7 @@ for (const [path, svg] of Object.entries(files)) {
 }
 
 export type IconName =
-  | "arrow-left" | "chevron-down" | "chevron-right" | "menu" | "monitor" | "pencil"
+  | "arrow-left" | "chevron-down" | "chevron-right" | "folder" | "menu" | "monitor" | "pencil"
   | "settings" | "terminal" | "undo-2" | "usb" | "wrench" | "x";
 
 export function Icon({ name, size }: { name: IconName; size?: number }) {

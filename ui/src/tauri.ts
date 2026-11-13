@@ -142,3 +142,11 @@ export const readiness = () => invoke<Readiness>("readiness");
 // Rejects with "declined" when the Windows permission prompt is turned down.
 export const enableHypervisor = () => invoke("enable_hypervisor");
 export const updateWinq = () => invoke<string>("update_winq");
+
+// How Virtual Machines is arranged (Home.tsx), kept with the preferences.
+export const layout = () => invoke<string>("layout");
+export const setLayout = (layout: string) => invoke("set_layout", { layout });
+
+// A system's log (log.rs): its text, and opening it in a text editor.
+export const systemLog = (id: string) => invoke<string>("system_log", { id });
+export const openLog = (id: string) => invoke("open_log", { id });

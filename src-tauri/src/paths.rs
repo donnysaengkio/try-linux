@@ -116,8 +116,7 @@ mod store {
             "theme" => m.get("theme").and_then(Value::as_str).map(String::from),
             "followsystem" => b("follow_system"),
             "checkupdates" => b("check_updates"),
-            "storage" => m.get("storage").and_then(Value::as_str).map(String::from),
-            _ => None,
+            k => m.get(k).and_then(Value::as_str).map(String::from),
         }
     }
     pub fn set(key: &str, value: &str) -> std::io::Result<()> {
@@ -197,8 +196,7 @@ mod store {
             "theme" => read("theme"),
             "followsystem" => read("followSystem"),
             "checkupdates" => read("checkUpdates"),
-            "storage" => read("storage"),
-            _ => None,
+            k => read(k),
         }
     }
     pub fn set(key: &str, value: &str) -> std::io::Result<()> {
