@@ -483,8 +483,10 @@ fn main() {
                 }
                 None => show_main(&handle),
             }
-            // What the Windows edition before 2.0 left (not for screenshot copies, TRYLINUX_PAGE).
-            if std::env::var("TRYLINUX_PAGE").unwrap_or_default().is_empty() {
+            // What the Windows edition before 2.0 left (not for screenshot copies, TRYLINUX_PAGE, or test and
+            // development copies with a folder of their own, TRYLINUX_HOME).
+            let unset = |v: &str| std::env::var(v).unwrap_or_default().is_empty();
+            if unset("TRYLINUX_PAGE") && unset("TRYLINUX_HOME") {
                 legacy::take_over();
             }
             Ok(())

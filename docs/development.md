@@ -89,6 +89,12 @@ cargo run --release
 `npm run build` puts the interface in `ui/dist`, which the app includes when Cargo builds it, so run it again after
 changing anything in `ui/`.
 
+**Development mode (Windows):** `scripts\dev.ps1` opens "Try Linux Dev", which updates as you work: changes in
+`ui/` show at once, and changes in `src-tauri/` rebuild and restart it. It runs beside the installed Try Linux with
+its own test folder (`%LOCALAPPDATA%\TryLinux Dev`, or `-Folder <folder>`), which gets a few sample systems the first
+time; they're for looking at, as their disks are empty. Stop it with Ctrl+C. (It's `tauri dev` with
+`src-tauri/tauri.dev.conf.json` and `TRYLINUX_HOME`; the same works on Linux and the Mac.)
+
 **Testing without touching your own systems:** `TRYLINUX_HOME=<folder>` makes Try Linux keep its systems and
 preferences in that folder instead, and `TRYLINUX_PAGE=<page>` opens it on a given page (for screenshots). The
 tests that change files (`disk_utilities`, `recovery_actions`, `takes_over_linux_edition`, `takes_over_old_edition`)
