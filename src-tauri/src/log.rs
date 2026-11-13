@@ -74,6 +74,9 @@ pub fn action(a: &str) -> &str {
         "reset" => "Reset",
         "close-console" => "Close console",
         "force" => "Force stop",
+        "suspend" => "Suspend",
+        "keys:ctrl-alt-delete" => "Send Ctrl+Alt+Del",
+        k if k.starts_with("keys:ctrl-alt-f") => "Send Ctrl+Alt+F key",
         other => other,
     }
 }

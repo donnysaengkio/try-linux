@@ -1,41 +1,35 @@
-// Virtual Machines: rows of systems with live CPU, memory and disk activity for running ones. Click a column title
-// to sort by it; drag a row to arrange them yourself. Systems can go into named groups (New Group in the main
-// menu, Ctrl+G or Ctrl+K); once there's a group, systems in none are under Unassigned. How it's arranged is kept
-// with the preferences (app.rs, layout), and the tray menu follows it.
+// Virtual Machines: a row for each system, with the columns chosen in Columns (columns.tsx): live CPU, memory,
+// disk and network activity for running ones, and more from QEMU and the guest agent. Click a column title to sort
+// by it, drag one to move it; drag a row to arrange the systems yourself. The filter narrows the list by name or
+// state. Systems can go into named groups (New Group in the main menu, Ctrl+G or Ctrl+K); once there's a group,
+// systems in none are under Unassigned. How it's arranged is kept with the preferences (app.rs, layout), and the
+// tray menu follows it.
 import { ContextMenu } from "@base-ui/react/context-menu";
 import { Menu } from "@base-ui/react/menu";
 import { Fragment, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { ask, askText, problem } from "./Ask";
+import { AVAILABLE, COLUMNS, DEFAULT_COLUMNS, on, type Cell } from "./columns";
 import { Commands } from "./Commands";
+import { SnapshotsDialog, WorkingDialog } from "./DiskTools";
 import { Header } from "./Header";
 import { Icon } from "./Icon";
 import { Logo } from "./Logo";
 import { MainMenu, setNewGroup } from "./MainMenu";
 import { act, call, powerItems, startSystem } from "./power";
-import { layout as loadLayout, onSystemsChanged, setLayout as saveLayout, showConsole, systems, type Vm } from "./tauri";
-
-const MiB = 2 ** 20, GiB = 2 ** 30;
-
-// Live figures as plain text, with the unit that suits their size.
-const memory = (bytes: number) => bytes >= GiB ? (bytes / GiB).toFixed(1) + " GB" : Math.round(bytes / MiB) + " MB";
-function rate(perSecond: number) {
-  if (perSecond < MiB) return (perSecond < 1024 ? 0 : Math.round(perSecond / 1024)) + " KB/s";
-  const mb = perSecond / MiB;
-  return (mb < 10 ? mb.toFixed(1) : Math.round(mb)) + " MB/s";
-}
+import { cloneSystem, deleteSystem, layout as loadLayout, onSystemsChanged, power, renameSystem, reveal, screenshot, setLayout as saveLayout, showConsole, systems, type PowerAction, type Vm } from "./tauri";
 
 // ---- how the page is arranged
 
-type Col = "name" | "status" | "cpu" | "mem" | "disk";
 interface Layout {
   order: string[];                 // system ids, as arranged by dragging; others come after, A to Z
   groups: string[];                // group names
   member: Record<string, string>;  // system id -> its group
   folded: string[];                // groups folded away ("" for Unassigned)
-  sort: { col: Col; dir: 1 | -1 } | null;  // a column to sort by, or null for the arranged order
+  sort: { col: string; dir: 1 | -1 } | null;  // "name" or a column to sort by, or null for the arranged order
+  cols: string[] | null;           // the columns shown, in order (null: the usual ones)
 }
-const EMPTY: Layout = { order: [], groups: [], member: {}, folded: [], sort: null };
-const COLS: Col[] = ["name", "status", "cpu", "mem", "disk"];
+const EMPTY: Layout = { order: [], groups: [], member: {}, folded: [], sort: null, cols: null };
 
 function parseLayout(text: string): Layout {
   try {
@@ -43,31 +37,17 @@ function parseLayout(text: string): Layout {
     const strings = (v: unknown) => Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
     const member: Record<string, string> = {};
     if (j.member && typeof j.member === "object") for (const [k, v] of Object.entries(j.member)) if (typeof v === "string") member[k] = v;
-    const sort = j.sort && COLS.includes(j.sort.col) ? { col: j.sort.col as Col, dir: (j.sort.dir === -1 ? -1 : 1) as 1 | -1 } : null;
-    return { order: strings(j.order), groups: strings(j.groups), member, folded: strings(j.folded), sort };
+    const sort = j.sort && (j.sort.col === "name" || AVAILABLE.includes(j.sort.col)) ? { col: j.sort.col as string, dir: (j.sort.dir === -1 ? -1 : 1) as 1 | -1 } : null;
+    const cols = Array.isArray(j.cols) ? strings(j.cols).filter(c => AVAILABLE.includes(c)) : null;
+    return { order: strings(j.order), groups: strings(j.groups), member, folded: strings(j.folded), sort, cols };
   } catch { return EMPTY; }
 }
-
-const on = (vm: Vm) => vm.state === "running" || vm.state === "paused" || vm.state === "elsewhere";
-const live = (vm: Vm) => on(vm) && vm.cpu !== null;
-const STATE_RANK: Record<string, number> = { running: 0, paused: 1, held: 2, elsewhere: 3, off: 4 };
-function diskBytes(s: string) {
-  const m = /([\d.]+)\s*([KMGT]?)B/i.exec(s);
-  return m ? parseFloat(m[1]) * 1024 ** " KMGT".indexOf(m[2].toUpperCase() || " ") : 0;
-}
-// What each column sorts by: the figure it shows (live ones above the others for CPU and MEM).
-const KEY: Record<Col, (vm: Vm) => number | string> = {
-  name: vm => vm.name.toLowerCase(),
-  status: vm => STATE_RANK[vm.state] ?? 5,
-  cpu: vm => live(vm) ? 1000 + vm.cpu! : vm.cores,
-  mem: vm => live(vm) ? 1e13 + (vm.guest_mem ?? vm.mem ?? 0) : vm.ram_gb * GiB,
-  disk: vm => diskBytes(vm.disk),
-};
 
 function arrange(vms: Vm[], l: Layout) {
   const byName = (a: Vm, b: Vm) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
   if (l.sort) {
-    const { col, dir } = l.sort, f = KEY[col];
+    const { col, dir } = l.sort;
+    const f = col === "name" ? (vm: Vm) => vm.name.toLowerCase() : COLUMNS[col].key;
     return [...vms].sort((a, b) => {
       const x = f(a), y = f(b);
       return (x < y ? -1 : x > y ? 1 : 0) * dir || byName(a, b);
@@ -79,14 +59,43 @@ function arrange(vms: Vm[], l: Layout) {
 
 const groupOf = (l: Layout, id: string) => l.groups.includes(l.member[id]) ? l.member[id] : "";
 
+// The filter's states.
+type Show = "all" | "running" | "suspended" | "off";
+const SHOWS: [Show, string][] = [["all", "All"], ["running", "Running"], ["suspended", "Suspended"], ["off", "Off"]];
+const shows = (vm: Vm, s: Show) => s === "all" || (s === "running" ? on(vm) || vm.state === "held" : vm.state === s);
+
+// The grid both the titles and the rows use: the name, the chosen columns, then the buttons.
+const ACTIONS = 146, NAME = 130, GAP = 8;
+const grid = (cols: string[]) => `minmax(${NAME}px, 1fr) ${cols.map(c => COLUMNS[c].width + "px").join(" ")} ${ACTIONS}px`;
+const tableWidth = (cols: string[]) => NAME + cols.reduce((n, c) => n + COLUMNS[c].width, 0) + ACTIONS + GAP * (cols.length + 1) + 34;
+
 // ---- a row
 
-function Stat({ children, sub }: { children: React.ReactNode; sub?: string }) {
-  return <div className="stat"><div className="value">{children}</div>{sub && <div className="sub">{sub}</div>}</div>;
+function CellView({ cell }: { cell: Cell }) {
+  return (
+    <div className="cell" title={cell.tip}>
+      <div className={"value" + (cell.none ? " none" : "") + (cell.color ? " " + cell.color : "")}>{cell.value}</div>
+      <div className="sub">{cell.sub || " "}</div>
+    </div>
+  );
+}
+
+const MAC = navigator.userAgent.includes("Macintosh");
+// Send Keys: what the computer would otherwise keep for itself.
+const KEYS: [string, string, string?][] = [["ctrl-alt-delete", "Ctrl+Alt+Del"], ["ctrl-alt-f1", "Ctrl+Alt+F1", "desktop"],
+  ["ctrl-alt-f2", "Ctrl+Alt+F2", "text screen"], ["ctrl-alt-f3", "Ctrl+Alt+F3"], ["ctrl-alt-f4", "Ctrl+Alt+F4"], ["ctrl-alt-f5", "Ctrl+Alt+F5"],
+  ["ctrl-alt-f6", "Ctrl+Alt+F6"]];
+async function takeScreenshot(vm: Vm) {
+  try {
+    const path = await screenshot(vm.id);
+    toast(`Saved a screenshot of ${vm.name} in Pictures.`, { action: { label: "Show", onClick: () => { reveal(path).catch(problem); } }, duration: 7000 });
+  } catch (e) { problem({ title: "Couldn't take a screenshot", text: String(e) }); }
 }
 
 function PowerMenu({ vm }: { vm: Vm }) {
   const elsewhere = vm.state === "elsewhere";
+  // Keys and screenshots go through QEMU, so they're for a system that's on (not on the Mac, whose framework has neither).
+  const extras = !MAC && (vm.state === "running" || vm.state === "paused");
   return (
     <Menu.Root>
       <Menu.Trigger className="btn small go" disabled={elsewhere}
@@ -102,6 +111,28 @@ function PowerMenu({ vm }: { vm: Vm }) {
                   onClick={() => item.action === "console" ? call(showConsole(vm.id)) : act(vm, item.action)}>
                   {item.label}
                 </Menu.Item>)}
+            {extras && <>
+              <Menu.Separator className="menu-line" />
+              <Menu.SubmenuRoot>
+                <Menu.SubmenuTrigger className="menu-item with-keys">
+                  <span>Send Keys</span><span className="chev side"><Icon name="chevron-right" /></span>
+                </Menu.SubmenuTrigger>
+                <Menu.Portal>
+                  <Menu.Positioner className="menu-positioner" sideOffset={6} alignOffset={-4}>
+                    <Menu.Popup className="menu">
+                      {KEYS.map(([k, label, note], i) => (
+                        <Fragment key={k}>
+                          <Menu.Item className="menu-item with-keys" onClick={() => call(power(vm.id, ("keys:" + k) as PowerAction))}>
+                            <span>{label}</span>{note && <span className="menu-keys">{note}</span>}
+                          </Menu.Item>
+                          {i === 0 && <Menu.Separator className="menu-line" />}
+                        </Fragment>))}
+                    </Menu.Popup>
+                  </Menu.Positioner>
+                </Menu.Portal>
+              </Menu.SubmenuRoot>
+              <Menu.Item className="menu-item" onClick={() => takeScreenshot(vm)}>Take Screenshot</Menu.Item>
+            </>}
           </Menu.Popup>
         </Menu.Positioner>
       </Menu.Portal>
@@ -109,49 +140,76 @@ function PowerMenu({ vm }: { vm: Vm }) {
   );
 }
 
+// The gear: what's done to a system as a whole, then its Settings.
+function SystemMenu({ vm, tools, onSettings }: { vm: Vm; tools: Tools; onSettings: (id: string) => void }) {
+  return (
+    <Menu.Root>
+      <Menu.Trigger className="btn small icon" title="Snapshots, clone, delete and settings" aria-label="System menu">
+        <Icon name="settings" />
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Positioner className="menu-positioner" sideOffset={4} align="end">
+          <Menu.Popup className="menu">
+            <Menu.Item className="menu-item" onClick={() => tools.snapshots(vm)}>Snapshots…</Menu.Item>
+            <Menu.Item className="menu-item" onClick={() => tools.clone(vm)}>Clone…</Menu.Item>
+            <Menu.Item className="menu-item danger" onClick={() => tools.remove(vm)}>Delete…</Menu.Item>
+            <Menu.Separator className="menu-line" />
+            <Menu.Item className="menu-item" onClick={() => onSettings(vm.id)}>Settings</Menu.Item>
+          </Menu.Popup>
+        </Menu.Positioner>
+      </Menu.Portal>
+    </Menu.Root>
+  );
+}
+
+interface Tools { snapshots: (vm: Vm) => void; clone: (vm: Vm) => void; remove: (vm: Vm) => void; rename: (vm: Vm) => void }
+
 interface RowProps {
-  vm: Vm; layout: Layout; drop: string; dragging: boolean;
+  vm: Vm; layout: Layout; cols: string[]; drop: string; dragging: boolean; tools: Tools; match: string;
   onSettings: (id: string) => void; onGrab: (e: React.PointerEvent, id: string) => void;
   onMove: (id: string, group: string) => void; onNewGroup: (id: string) => void;
 }
 
-function VmRow({ vm, layout, drop, dragging, onSettings, onGrab, onMove, onNewGroup }: RowProps) {
-  const cores = vm.cores + (vm.cores === 1 ? " core" : " cores"), ram = vm.ram_gb + " GB";
-  const running = on(vm), showLive = live(vm);
+// The name, with what the filter matched marked.
+function Marked({ text, match }: { text: string; match: string }) {
+  const i = match ? text.toLowerCase().indexOf(match.toLowerCase()) : -1;
+  if (i < 0) return <>{text}</>;
+  return <>{text.slice(0, i)}<mark>{text.slice(i, i + match.length)}</mark>{text.slice(i + match.length)}</>;
+}
+
+function VmRow({ vm, layout, cols, drop, dragging, tools, match, onSettings, onGrab, onMove, onNewGroup }: RowProps) {
   const startIt = () => startSystem(vm);
   const mine = groupOf(layout, vm.id);
   const groups = [...layout.groups].sort((a, b) => a.localeCompare(b));
   return (
     <ContextMenu.Root>
       <ContextMenu.Trigger className={"vm-row" + (drop ? " drop-" + drop : "") + (dragging ? " dragging" : "")} data-row={vm.id}
+        style={{ gridTemplateColumns: grid(cols) }}
         onPointerDown={e => onGrab(e, vm.id)}
         onDoubleClick={e => { if (vm.state === "off" && !(e.target as HTMLElement).closest("button")) startIt(); }}>
         <div className="vm-name">
-          <div className="title" title={vm.name}>{vm.name}</div>
-          <div className="os">{vm.os}</div>
+          <div className="title" title={vm.name}><Marked text={vm.name} match={match} /></div>
+          <div className="os"><Marked text={vm.os} match={match} /></div>
         </div>
-        <div className={"status" + (running ? " on" : "")}>{vm.status}</div>
-        <div className="divider" />
-        {showLive ? <Stat sub={"of " + cores}>{Math.round(vm.cpu!) + "%"}</Stat> : <Stat>{cores}</Stat>}
-        {/* What Linux is using once it reports it; until then, what QEMU holds on this PC. */}
-        {showLive ? <Stat sub={"of " + ram}>{memory(vm.guest_mem ?? vm.mem ?? 0)}</Stat> : <Stat>{ram}</Stat>}
-        {showLive && vm.disk_rate !== null ? <Stat sub={vm.disk}>{rate(vm.disk_rate)}</Stat> : <Stat>{vm.disk}</Stat>}
+        {cols.map(c => <CellView key={c} cell={COLUMNS[c].cell(vm)} />)}
         <div className="actions">
-          <button className="btn small icon" title={running ? "Show console" : "Open console"} aria-label="Console"
+          <button className="btn small icon" title={on(vm) ? "Show console" : "Open console"} aria-label="Console"
             disabled={vm.state === "elsewhere"} onClick={() => call(showConsole(vm.id))}>
             <Icon name="terminal" />
           </button>
-          {vm.state === "off"
-            ? <button className="btn small primary go" onClick={startIt}>{vm.status === "Ready to install" ? "Install" : "Start"}</button>
+          {vm.state === "off" || vm.state === "suspended"
+            ? <button className="btn small primary go" onClick={startIt}>
+                {vm.state === "suspended" ? "Resume" : vm.status === "Ready to install" ? "Install" : "Start"}
+              </button>
             : <PowerMenu vm={vm} />}
-          <button className="btn small icon" title="Settings" aria-label="Settings" onClick={() => onSettings(vm.id)}>
-            <Icon name="settings" />
-          </button>
+          <SystemMenu vm={vm} tools={tools} onSettings={onSettings} />
         </div>
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
         <ContextMenu.Positioner className="menu-positioner">
           <ContextMenu.Popup className="menu">
+            <ContextMenu.Item className="menu-item" onClick={() => tools.rename(vm)}>Rename…</ContextMenu.Item>
+            <ContextMenu.Separator className="menu-line" />
             {groups.length > 0 && <>
               <div className="menu-heading">Move {vm.name} to</div>
               {[...groups, ""].map(g => (
@@ -170,6 +228,39 @@ function VmRow({ vm, layout, drop, dragging, onSettings, onGrab, onMove, onNewGr
   );
 }
 
+// Columns: show or hide each one, by kind; the menu stays open while ticking.
+function ColumnsMenu({ cols, onChange }: { cols: string[]; onChange: (cols: string[] | null) => void }) {
+  const kinds = ["Activity", "Linux", "Settings"] as const;
+  return (
+    <Menu.Root>
+      <Menu.Trigger className="btn small columns-btn">Columns <span className="chev"><Icon name="chevron-down" /></span></Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Positioner className="menu-positioner" sideOffset={4} align="end">
+          <Menu.Popup className="menu columns-menu">
+            {kinds.map(k => (
+              <Fragment key={k}>
+                <div className="menu-heading">{k.toUpperCase()}</div>
+                {AVAILABLE.filter(c => COLUMNS[c].group === k).map(c => {
+                  const shown = cols.includes(c);
+                  return (
+                    <Menu.Item key={c} className="menu-item with-keys" closeOnClick={false}
+                      onClick={() => onChange(shown ? cols.filter(x => x !== c) : [...cols, c])}>
+                      <span className="tick-row"><span className={"tick" + (shown ? " on" : "")}>{shown ? "✓" : ""}</span>{COLUMNS[c].name}</span>
+                      {COLUMNS[c].agent && <span className="menu-keys" title="From QEMU's guest agent in Linux">agent</span>}
+                    </Menu.Item>
+                  );
+                })}
+              </Fragment>
+            ))}
+            <Menu.Separator className="menu-line" />
+            <Menu.Item className="menu-item" onClick={() => onChange(null)}>Reset to the Usual Columns</Menu.Item>
+          </Menu.Popup>
+        </Menu.Positioner>
+      </Menu.Portal>
+    </Menu.Root>
+  );
+}
+
 // ---- the page
 
 type Drop = { id: string; where: "before" | "after" } | { group: string } | null;
@@ -179,6 +270,12 @@ export function Home({ first, onCreate, onSettings }: { first: Vm[]; onCreate: (
   const [lay, setLay] = useState<Layout>(EMPTY);
   const layRef = useRef(lay);
   const [drag, setDrag] = useState<{ id: string; drop: Drop } | null>(null);
+  const [colDrag, setColDrag] = useState<{ col: string; to: string | null; after: boolean } | null>(null);
+  const [snaps, setSnaps] = useState<Vm | null>(null);
+  const [working, setWorking] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
+  const [show, setShow] = useState<Show>("all");
+  const filterBox = useRef<HTMLInputElement>(null);
 
   // Running systems' activity, every two seconds while this page is open; at once when one starts or stops.
   useEffect(() => {
@@ -187,7 +284,12 @@ export function Home({ first, onCreate, onSettings }: { first: Vm[]; onCreate: (
     const timer = setInterval(refresh, 2000);
     const unlisten = onSystemsChanged(refresh);
     loadLayout().then(t => { if (alive) { layRef.current = parseLayout(t); setLay(layRef.current); } }).catch(() => {});
-    return () => { alive = false; clearInterval(timer); unlisten.then(f => f()); };
+    // Ctrl+F: the filter.
+    const key = (e: KeyboardEvent) => {
+      if (e.ctrlKey && !e.altKey && e.key.toLowerCase() === "f") { e.preventDefault(); filterBox.current?.focus(); filterBox.current?.select(); }
+    };
+    addEventListener("keydown", key);
+    return () => { alive = false; clearInterval(timer); unlisten.then(f => f()); removeEventListener("keydown", key); };
   }, []);
 
   // A change to the arrangement: shown, and kept.
@@ -197,7 +299,10 @@ export function Home({ first, onCreate, onSettings }: { first: Vm[]; onCreate: (
     setLay(next);
     saveLayout(JSON.stringify(next)).catch(problem);
   };
-  const shown = arrange(vms, lay);
+  const cols = lay.cols ?? DEFAULT_COLUMNS;
+  const filtering = filter.trim() !== "" || show !== "all";
+  const matches = (vm: Vm) => shows(vm, show) && (vm.name + " " + vm.os).toLowerCase().includes(filter.trim().toLowerCase());
+  const shown = arrange(vms, lay).filter(matches);
   const allIds = () => arrange(vms, layRef.current).map(v => v.id);
 
   // Group names: not empty, not "Unassigned", and not one already used (ignoring case).
@@ -232,11 +337,32 @@ export function Home({ first, onCreate, onSettings }: { first: Vm[]; onCreate: (
     if (g) member[id] = g; else delete member[id];
     return { ...l, member };
   });
+  // The gear menu's tools, and Rename from the right-click menu.
+  const tools: Tools = {
+    snapshots: vm => setSnaps(vm),
+    clone: async vm => {
+      if (on(vm)) return ask(`Shut ${vm.name} down first`, "A system is cloned while it's shut down.", null);
+      if (!(await ask(`Clone ${vm.name}?`, `This copies ${vm.name}, its disks and its settings, as a new system. Snapshots aren't copied.`, "Clone"))) return;
+      setWorking(`Cloning ${vm.name}`);
+      try { const msg = await cloneSystem(vm.id); setWorking(null); ask(`Cloned ${vm.name}`, msg, null); }
+      catch (e) { setWorking(null); problem({ title: "Couldn't clone it", text: String(e) }); }
+    },
+    remove: async vm => {
+      if (on(vm)) return ask(`Shut ${vm.name} down first`, "A system is deleted while it's shut down.", null);
+      if (!(await ask(`Delete ${vm.name}?`, "This permanently removes its virtual disks and everything installed in it.\n\nDownloaded ISOs, and disks added from other folders, are kept.", "Delete", true))) return;
+      try { toast(await deleteSystem(vm.id)); } catch (e) { problem({ title: "Couldn't delete it", text: String(e) }); }
+    },
+    rename: async vm => {
+      const name = await askText("Rename", `A new name for ${vm.name}.`, "Rename", vm.name);
+      if (name && name !== vm.name) renameSystem(vm.id, name).catch(e => problem({ title: "Couldn't rename it", text: String(e) }));
+    },
+  };
   const fold = (g: string) => update(l => ({ ...l, folded: l.folded.includes(g) ? l.folded.filter(x => x !== g) : [...l.folded, g] }));
   // Column titles: sort by it, then the other way, then back to the arranged order.
-  const sortBy = (col: Col) => update(l => ({
+  const sortBy = (col: string) => update(l => ({
     ...l, sort: l.sort?.col !== col ? { col, dir: 1 } : l.sort.dir === 1 ? { col, dir: -1 } : null,
   }));
+  const setCols = (next: string[] | null) => update(l => ({ ...l, cols: next }));
 
   // Dragging a row (after moving a few pixels, so clicks and double-clicks stay clicks): over another row it goes
   // before or after it, in that row's group; over a group's title or empty box, to the end of that group.
@@ -289,26 +415,60 @@ export function Home({ first, onCreate, onSettings }: { first: Vm[]; onCreate: (
     addEventListener("pointercancel", end);
   };
 
+  // Dragging a column title sideways moves the column; a click without moving sorts by it.
+  const grabColumn = (e: React.PointerEvent, col: string) => {
+    if (e.button !== 0) return;
+    const x0 = e.clientX;
+    let started = false, to: string | null = null, after = false;
+    const move = (ev: PointerEvent) => {
+      if (!started && Math.abs(ev.clientX - x0) < 6) return;
+      if (!started) { started = true; document.body.classList.add("dragging-cols"); }
+      const el = (document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null)?.closest<HTMLElement>("[data-col]");
+      if (el) {
+        const r = el.getBoundingClientRect();
+        to = el.dataset.col!;
+        after = ev.clientX > r.left + r.width / 2;
+      }
+      setColDrag({ col, to, after });
+    };
+    const end = () => {
+      removeEventListener("pointermove", move);
+      removeEventListener("pointerup", end);
+      removeEventListener("pointercancel", end);
+      document.body.classList.remove("dragging-cols");
+      setColDrag(null);
+      if (!started) return sortBy(col);
+      if (!to || to === col) return;
+      const rest = cols.filter(c => c !== col);
+      rest.splice(rest.indexOf(to) + (after ? 1 : 0), 0, col);
+      setCols(rest);
+    };
+    addEventListener("pointermove", move);
+    addEventListener("pointerup", end);
+    addEventListener("pointercancel", end);
+  };
+
   const rowsOf = (list: Vm[]) => list.map(vm => {
     const d = drag?.drop;
     const where = d && "id" in d && d.id === vm.id ? d.where : "";
-    return <VmRow key={vm.id} vm={vm} layout={lay} drop={where} dragging={drag?.id === vm.id} onSettings={onSettings}
-      onGrab={grab} onMove={moveTo} onNewGroup={id => newGroup(id)} />;
+    return <VmRow key={vm.id} vm={vm} layout={lay} cols={cols} drop={where} dragging={drag?.id === vm.id} tools={tools}
+      match={filter.trim()} onSettings={onSettings} onGrab={grab} onMove={moveTo} onNewGroup={id => newGroup(id)} />;
   });
   const into = (g: string) => drag?.drop && "group" in drag.drop && drag.drop.group === g ? " drop-into" : "";
 
-  const title = (col: Col, label: string, cls: string) => {
+  const arrow = (col: string) => {
     const s = lay.sort?.col === col ? lay.sort.dir : 0;
-    return (
-      <button className={"col-label sort " + cls + (s ? " on" : "")} onClick={() => sortBy(col)}
-        aria-sort={s === 1 ? "ascending" : s === -1 ? "descending" : "none"}
-        title={s === -1 ? "Back to your own order" : "Sort by " + label.toLowerCase()}>
-        {label}{s !== 0 && <span className={"sort-arrow" + (s === 1 ? " up" : "")}><Icon name="chevron-down" /></span>}
-      </button>
-    );
+    return s !== 0 && <span className={"sort-arrow" + (s === 1 ? " up" : "")}><Icon name="chevron-down" /></span>;
   };
+  const sortTitle = (col: string, label: string) =>
+    lay.sort?.col === col && lay.sort.dir === -1 ? "Back to your own order" : "Sort by " + label.toLowerCase();
 
   const groups = [...lay.groups].sort((a, b) => a.localeCompare(b));
+  const empty = (
+    <div className="card empty-group">
+      No systems match.&nbsp;<button className="link-button" onClick={() => { setFilter(""); setShow("all"); }}>Clear the filter</button>
+    </div>
+  );
   return (
     <Fragment>
       <Header
@@ -317,51 +477,79 @@ export function Home({ first, onCreate, onSettings }: { first: Vm[]; onCreate: (
       <main className="page">
         <div className="column wide home">
           <Logo />
-          <div className="vm-head">
-            {title("name", "NAME", "name")}
-            {title("status", "STATUS", "status")}
-            <span className="divider" style={{ visibility: "hidden" }} />
-            {title("cpu", "CPU", "stat")}
-            {title("mem", "MEM", "stat")}
-            {title("disk", "DISK", "stat")}
-            <span className="actions" />
+          <div className="vm-tools">
+            <div className="filter">
+              <span className="filter-icon"><Icon name="search" /></span>
+              <input ref={filterBox} className="text-box filter-box" placeholder="Filter by name  (Ctrl+F)" value={filter} spellCheck={false}
+                onChange={e => setFilter(e.target.value)} onKeyDown={e => { if (e.key === "Escape") setFilter(""); }} aria-label="Filter by name" />
+            </div>
+            <div className="segmented small" role="radiogroup" aria-label="Show">
+              {SHOWS.map(([k, label]) => (
+                <button key={k} role="radio" aria-checked={show === k} className={show === k ? "on" : ""} onClick={() => setShow(k)}>{label}</button>
+              ))}
+            </div>
+            <ColumnsMenu cols={cols} onChange={setCols} />
           </div>
-          {groups.length === 0
-            ? <div className="card">{rowsOf(shown)}</div>
-            : [...groups, ""].map(g => {
-                const members = shown.filter(v => groupOf(lay, v.id) === g);
-                const folded = lay.folded.includes(g);
-                return (
-                  <Fragment key={g || "-"}>
-                    <ContextMenu.Root disabled={!g}>
-                      <ContextMenu.Trigger render={<button />} className={"vm-group" + into(g)} data-group={g}
-                        aria-expanded={!folded} onClick={() => fold(g)}>
-                        <span className={"fold" + (folded ? " folded" : "")}><Icon name="chevron-down" /></span>
-                        <Icon name="folder" />
-                        <span className="name">{g || "Unassigned"}</span>
-                        <span className="count">{members.length}</span>
-                      </ContextMenu.Trigger>
-                      <ContextMenu.Portal>
-                        <ContextMenu.Positioner className="menu-positioner">
-                          <ContextMenu.Popup className="menu">
-                            <ContextMenu.Item className="menu-item" onClick={() => renameGroup(g)}>Rename Group…</ContextMenu.Item>
-                            <ContextMenu.Item className="menu-item danger" onClick={() => removeGroup(g)}>Remove Group</ContextMenu.Item>
-                          </ContextMenu.Popup>
-                        </ContextMenu.Positioner>
-                      </ContextMenu.Portal>
-                    </ContextMenu.Root>
-                    {!folded && (members.length
-                      ? <div className={"card" + into(g)} data-group={g}>{rowsOf(members)}</div>
-                      : <div className={"card empty-group" + into(g)} data-group={g}>
-                          {g ? "Drag systems here, or right-click one to move it." : "Every system is in a group."}
-                        </div>)}
-                  </Fragment>
-                );
-              })}
+          <div className="vm-table" style={{ minWidth: tableWidth(cols) }}>
+            <div className="vm-head" style={{ gridTemplateColumns: grid(cols) }}>
+              <button className={"col-label sort" + (lay.sort?.col === "name" ? " on" : "")} onClick={() => sortBy("name")} title={sortTitle("name", "name")}>
+                NAME{arrow("name")}
+              </button>
+              {cols.map(c => (
+                <button key={c} data-col={c} title={sortTitle(c, COLUMNS[c].name) + ". Drag to move it."}
+                  className={"col-label sort" + (lay.sort?.col === c ? " on" : "") + (colDrag?.col === c ? " moving" : "")
+                    + (colDrag?.to === c && colDrag.col !== c ? (colDrag.after ? " drop-after" : " drop-before") : "")}
+                  onPointerDown={e => grabColumn(e, c)}
+                  onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); sortBy(c); } }}>
+                  {COLUMNS[c].title}{arrow(c)}
+                </button>
+              ))}
+              <span />
+            </div>
+            {groups.length === 0
+              ? shown.length ? <div className="card">{rowsOf(shown)}</div> : vms.length ? empty : null
+              : <>
+                  {[...groups, ""].map(g => {
+                    const all = vms.filter(v => groupOf(lay, v.id) === g);
+                    const members = shown.filter(v => groupOf(lay, v.id) === g);
+                    if (filtering && members.length === 0) return null;
+                    // While filtering, folded groups open, so no match is hidden.
+                    const folded = lay.folded.includes(g) && !filtering;
+                    return (
+                      <Fragment key={g || "-"}>
+                        <ContextMenu.Root disabled={!g}>
+                          <ContextMenu.Trigger render={<button />} className={"vm-group" + into(g)} data-group={g}
+                            aria-expanded={!folded} onClick={() => fold(g)}>
+                            <span className={"fold" + (folded ? " folded" : "")}><Icon name="chevron-down" /></span>
+                            <Icon name="folder" />
+                            <span className="name">{g || "Unassigned"}</span>
+                            <span className="count">{filtering ? `${members.length} of ${all.length}` : all.length}</span>
+                          </ContextMenu.Trigger>
+                          <ContextMenu.Portal>
+                            <ContextMenu.Positioner className="menu-positioner">
+                              <ContextMenu.Popup className="menu">
+                                <ContextMenu.Item className="menu-item" onClick={() => renameGroup(g)}>Rename Group…</ContextMenu.Item>
+                                <ContextMenu.Item className="menu-item danger" onClick={() => removeGroup(g)}>Remove Group</ContextMenu.Item>
+                              </ContextMenu.Popup>
+                            </ContextMenu.Positioner>
+                          </ContextMenu.Portal>
+                        </ContextMenu.Root>
+                        {!folded && (members.length
+                          ? <div className={"card" + into(g)} data-group={g}>{rowsOf(members)}</div>
+                          : <div className={"card empty-group" + into(g)} data-group={g}>
+                              {g ? "Drag systems here, or right-click one to move it." : "Every system is in a group."}
+                            </div>)}
+                      </Fragment>
+                    );
+                  })}
+                  {filtering && shown.length === 0 && empty}
+                </>}
+          </div>
         </div>
       </main>
       <Commands vms={shown} onCreate={onCreate} onNewGroup={() => newGroup()} />
+      <SnapshotsDialog open={snaps !== null} id={snaps?.id ?? ""} name={snaps?.name ?? ""} onClose={() => setSnaps(null)} />
+      <WorkingDialog open={working !== null} title={working ?? ""} />
     </Fragment>
   );
 }
-

@@ -30,6 +30,9 @@ pub struct Running {
     // Its QEMU window once found (kept, as a hidden window can't be found again), and whether it's hidden.
     pub window: isize,
     pub hidden: bool,
+    // Saving its state to close (Suspend), or loading a saved state (started from Suspended).
+    pub suspending: bool,
+    pub resuming: bool,
 }
 
 impl Running {
@@ -38,13 +41,18 @@ impl Running {
         self.qmp
     }
 
+    // How long it has been running, in seconds.
+    pub fn uptime(&self) -> u64 {
+        self.started.elapsed().as_secs()
+    }
+
     // A system run by Apple's framework (mac.rs): no QEMU process or QMP port, so no live readings.
     #[cfg(target_os = "macos")]
     pub fn mac(held: bool, installer: bool) -> Running {
         Running {
             pid: 0, qmp: 0, paused: false, held, cpu: false, installer, started: Instant::now(), restart_asked: None,
             reset_asked: false, force_stopped: false, reason: Arc::new(Mutex::new(None)), err: Arc::new(Mutex::new(String::new())),
-            window: 0, hidden: false,
+            window: 0, hidden: false, suspending: false, resuming: false,
         }
     }
 }
@@ -134,14 +142,82 @@ fn arm_firmware() -> Option<(PathBuf, Option<PathBuf>)> {
         .map(|(c, v)| (PathBuf::from(c), v.map(PathBuf::from).filter(|p| p.exists())))
 }
 
+// UEFI firmware for x86_64 systems (Settings > Hardware > Firmware): the code, and the template for each system's
+// own copy of its settings (efivars.fd). The distributions' OVMF packages on Linux; WINQ-EMU's own on Windows.
+pub fn uefi_firmware() -> Option<(PathBuf, PathBuf)> {
+    let mut pairs: Vec<(PathBuf, PathBuf)> = [
+        ("/usr/share/OVMF/OVMF_CODE_4M.fd", "/usr/share/OVMF/OVMF_VARS_4M.fd"),
+        ("/usr/share/OVMF/OVMF_CODE.fd", "/usr/share/OVMF/OVMF_VARS.fd"),
+        ("/usr/share/edk2/ovmf/OVMF_CODE.fd", "/usr/share/edk2/ovmf/OVMF_VARS.fd"),
+        ("/usr/share/edk2/x64/OVMF_CODE.4m.fd", "/usr/share/edk2/x64/OVMF_VARS.4m.fd"),
+        ("/usr/share/edk2/x64/OVMF_CODE.fd", "/usr/share/edk2/x64/OVMF_VARS.fd"),
+        ("/usr/share/qemu/ovmf-x86_64-code.bin", "/usr/share/qemu/ovmf-x86_64-vars.bin"),
+        ("/usr/share/qemu/edk2-x86_64-code.fd", "/usr/share/qemu/edk2-i386-vars.fd"),
+    ].iter().map(|(c, v)| (PathBuf::from(c), PathBuf::from(v))).collect();
+    if let Some(bin) = winq_bin() {
+        for share in [bin.join("share"), bin.join("..").join("share")] {
+            pairs.insert(0, (share.join("edk2-x86_64-code.fd"), share.join("edk2-i386-vars.fd")));
+        }
+    }
+    pairs.into_iter().find(|(c, v)| c.is_file() && v.is_file())
+}
+
+// Whether this QEMU can share the clipboard (its qemu-vdagent channel, which spice-vdagent in Linux talks to).
+// WINQ-EMU is built without it. Asked once.
+pub fn clipboard_available() -> bool {
+    static ANSWER: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ANSWER.get_or_init(|| {
+        if cfg!(target_os = "macos") {
+            return true; // Apple's framework shares it (mac.rs)
+        }
+        // On Windows the console build answers (the w build has no output).
+        let bin = match winq_bin() {
+            Some(dir) => dir.join("qemu-system-x86_64.exe"),
+            None => match qemu_system() { Some(b) => b, None => return false },
+        };
+        let mut cmd = Command::new(bin);
+        cmd.args(["-chardev", "help"]).stdin(Stdio::null());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x0800_0000);
+        }
+        cmd.output().map(|o| String::from_utf8_lossy(&o.stdout).contains("qemu-vdagent")).unwrap_or(false)
+    })
+}
+
+// The options for UEFI (a system's own copy of the firmware's settings, made the first time) and for sharing the
+// clipboard, for either computer's QEMU.
+#[cfg(not(target_os = "macos"))]
+fn uefi_and_clipboard(a: &mut Vec<String>, cfg: &VmConfig, quote: fn(&str) -> String) {
+    if crate::firmware(cfg) == "UEFI" && ARCH == "x86_64" {
+        if let Some((code, vars)) = uefi_firmware() {
+            let own = cfg.dir.join("efivars.fd");
+            if !own.exists() {
+                let _ = std::fs::copy(&vars, &own);
+            }
+            add(a, "-drive", format!("if=pflash,format=raw,readonly=on,file={}", quote(&code.to_string_lossy())));
+            add(a, "-drive", format!("if=pflash,format=raw,file={}", quote(&own.to_string_lossy())));
+        }
+    }
+    if cfg.get("clipboard") != "0" && clipboard_available() {
+        add(a, "-chardev", "qemu-vdagent,id=vdagent,clipboard=on".into());
+        add(a, "-device", "virtserialport,chardev=vdagent,name=com.redhat.spice.0,id=vdagentport".into());
+    }
+}
+
 // A path inside a -drive or -fsdev option, where a comma is written twice.
 #[cfg(all(unix, not(target_os = "macos")))]
 fn esc(p: &str) -> String {
     p.replace(',', ",,")
 }
 
-fn free_port() -> u16 {
-    TcpListener::bind("127.0.0.1:0").and_then(|l| l.local_addr()).map(|a| a.port()).unwrap_or(0)
+// Three different free ports for QEMU's channels: each is held until all three are chosen, so the computer can't
+// hand out the same one twice.
+fn free_ports() -> (u16, u16, u16) {
+    let held: Vec<TcpListener> = (0..3).filter_map(|_| TcpListener::bind("127.0.0.1:0").ok()).collect();
+    let port = |i: usize| held.get(i).and_then(|l| l.local_addr().ok()).map(|a| a.port()).unwrap_or(0);
+    (port(0), port(1), port(2))
 }
 
 // A query's reply (its JSON), with optional arguments, on a fresh connection with short timeouts.
@@ -285,6 +361,7 @@ fn arguments(cfg: &VmConfig, host: &Host, cpu: bool, installer: bool, held: bool
     add(&mut a, "-device", "virtio-balloon-pci,id=balloon0".into());
     // Restarting Linux ends QEMU, and Try Linux starts it again (without the installer once it's installed).
     add(&mut a, "-action", "reboot=shutdown".into());
+    uefi_and_clipboard(&mut a, cfg, esc);
     a
 }
 
@@ -331,6 +408,7 @@ fn arguments(cfg: &VmConfig, host: &Host, cpu: bool, installer: bool, held: bool
     add(&mut a, "-device", "virtserialport,chardev=qga0,name=org.qemu.guest_agent.0".into());
     add(&mut a, "-device", "virtio-balloon-pci,id=balloon0".into());
     add(&mut a, "-action", "reboot=shutdown".into());
+    uefi_and_clipboard(&mut a, cfg, |p| p.to_string());
     if cfg.net_type() != 2 {
         let restrict = if cfg.net_type() == 1 { ",restrict=on" } else { "" };
         let fwd: String = cfg.host_forwards().iter().map(|f| format!(",{f}")).collect();
@@ -379,6 +457,8 @@ pub fn start(app: &AppHandle, vms: &Vms, host: &Host, id: &str, cpu: Option<bool
     if vms.0.lock().unwrap().contains_key(id) {
         return Ok(());
     }
+    // When it last ran, for Virtual Machines' Last Run column.
+    cfg.set("lastrun", &chrono::Local::now().format("%Y-%m-%d %H:%M").to_string());
     if crate::running_elsewhere(&cfg) {
         return Err(problem(&format!("{} is already running", cfg.name()), "It was started by another copy of Try Linux. Use that one to control it.".into()));
     }
@@ -407,10 +487,34 @@ fn start_qemu(app: &AppHandle, vms: &Vms, host: &Host, cfg: &VmConfig, cpu: Opti
     } else {
         problem("QEMU isn't installed", format!("Install it, then try again:\n\n{}", crate::setup::install_hint()))
     })?;
-    let cpu = cpu.unwrap_or(cfg.render() == 2);
-    let installer = cfg.pending() && cfg.iso().exists();
-    let (qmp_port, events, agent) = (free_port(), free_port(), free_port());
-    let args = arguments(cfg, host, cpu, installer, held, qmp_port, events, agent);
+    if crate::firmware(cfg) == "UEFI" && ARCH == "x86_64" && uefi_firmware().is_none() {
+        return Err(problem("UEFI firmware isn't installed", if cfg!(windows) {
+            "WINQ-EMU's UEFI firmware (share\\edk2-x86_64-code.fd) wasn't found. Reinstall WINQ-EMU, or choose BIOS in Settings > Hardware > Firmware.".into()
+        } else {
+            "Install your distribution's OVMF package (ovmf, or edk2-ovmf), or choose BIOS in Settings > Hardware > Firmware.".into()
+        }));
+    }
+    let mut cpu = cpu.unwrap_or(cfg.render() == 2);
+    let mut installer = cfg.pending() && cfg.iso().exists();
+    // Suspended: started exactly as it was (the same rendering and drives), loading its saved state.
+    let saved = if held { None } else { suspended(cfg) };
+    if let Some(s) = &saved {
+        cpu = s["cpu"].as_bool().unwrap_or(cpu);
+        installer = s["installer"].as_bool().unwrap_or(installer);
+    }
+    let (qmp_port, events, agent) = free_ports();
+    let mut args = arguments(cfg, host, cpu, installer, held, qmp_port, events, agent);
+    if saved.is_some() {
+        // QEMU can't save the clipboard channel, so it was unplugged to suspend; it's plugged in again once resumed.
+        if let Some(i) = args.iter().position(|a| a.starts_with("qemu-vdagent")) {
+            args.drain(i - 1..=i);
+        }
+        if let Some(i) = args.iter().position(|a| a.contains("chardev=vdagent")) {
+            args.drain(i - 1..=i);
+        }
+        args.push("-incoming".into());
+        args.push(format!("file:{}", state_file(&cfg.dir).to_string_lossy().replace('\\', "/")));
+    }
 
     let mut cmd = Command::new(&bin);
     cmd.args(&args).current_dir(&cfg.dir).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped());
@@ -419,8 +523,8 @@ fn start_qemu(app: &AppHandle, vms: &Vms, host: &Host, cfg: &VmConfig, cpu: Opti
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     }
-    crate::log::started(&cfg.dir, &format!("Started {}: {}, {} rendering{}", cfg.name(),
-        if installer { "from its installer" } else { "from its disk" }, if cpu { "CPU" } else { "GPU" },
+    crate::log::started(&cfg.dir, &format!("{} {}: {}, {} rendering{}", if saved.is_some() { "Resumed" } else { "Started" }, cfg.name(),
+        if saved.is_some() { "where it was suspended" } else if installer { "from its installer" } else { "from its disk" }, if cpu { "CPU" } else { "GPU" },
         if held { ", console only (machine off)" } else { "" }));
     crate::log::line(&cfg.dir, &format!("Command: {} {}", bin.display(), args.join(" ")));
     let mut child: Child = cmd.spawn().map_err(|e| {
@@ -449,9 +553,14 @@ fn start_qemu(app: &AppHandle, vms: &Vms, host: &Host, cfg: &VmConfig, cpu: Opti
         Running {
             pid, qmp: qmp_port, paused: false, held, cpu, installer, started: Instant::now(),
             restart_asked: None, reset_asked: false, force_stopped: false, reason, err, window: 0, hidden: false,
+            suspending: false, resuming: saved.is_some(),
         },
     );
     crate::changed(app);
+    if saved.is_some() {
+        let (app, id, dir) = (app.clone(), id.to_string(), cfg.dir.clone());
+        thread::spawn(move || finish_resume(&app, &id, &dir, qmp_port));
+    }
     crate::window::watch_clicks({
         let app = app.clone();
         move |x, y| close_clicked(&app, x, y)
@@ -557,6 +666,7 @@ pub fn adopt(app: &AppHandle, vms: &Vms, id: &str, pid: u32, args: &[String], ru
             started: Instant::now().checked_sub(running_for).unwrap_or_else(Instant::now),
             restart_asked: None, reset_asked: false, force_stopped: false, reason, err: Arc::new(Mutex::new(String::new())),
             window: window.unwrap_or(0), hidden: window.is_some_and(|h| !crate::window::visible(h)),
+            suspending: false, resuming: false,
         });
     }
     crate::window::watch_clicks({
@@ -628,6 +738,31 @@ fn exited(app: &AppHandle, id: &str, ok: bool) {
     app.state::<crate::live::Live>().forget(id);
     let secs = vm.started.elapsed().as_secs();
     let cfg = crate::config::find(id);
+    // Suspended: its state is saved, so it waits as it is.
+    if vm.suspending && cfg.as_ref().is_some_and(|c| suspended(c).is_some()) {
+        if let Some(c) = &cfg {
+            crate::log::line(&c.dir, &format!("Suspended after {}", crate::log::duration(secs)));
+        }
+        crate::changed(app);
+        if vms.0.lock().unwrap().is_empty() {
+            crate::show_main(app);
+        }
+        return;
+    }
+    // Its saved state couldn't be loaded (its settings changed since, or QEMU changed): ask what to do.
+    if vm.resuming {
+        let msg = vm.err.lock().unwrap().trim().to_string();
+        if let Some(c) = &cfg {
+            crate::log::line(&c.dir, &format!("Couldn't resume: {}", if msg.is_empty() { "QEMU stopped" } else { &msg }));
+        }
+        crate::show_main(app);
+        let _ = app.emit("resume-failed", Problem {
+            title: cfg.as_ref().map(|c| c.name()).unwrap_or_else(|| id.to_string()),
+            text: if msg.is_empty() { "QEMU stopped while loading where it was suspended.".into() } else { msg },
+        });
+        crate::changed(app);
+        return;
+    }
     // An installer session that ran a while has most likely installed the system.
     if vm.installer && secs > 60 && !vm.held {
         if let Some(c) = &cfg {
@@ -748,6 +883,37 @@ fn qemu_power(app: &AppHandle, vms: &Vms, id: &str, action: &str) -> Result<(), 
         }
         // Ending QEMU and starting it again is a cleaner reset than resetting in place.
         "reset" | "close-console" => qmp(port, "quit")?,
+        // Suspend: its state is saved to a file in its folder (off to the side, as a large memory takes a while),
+        // then QEMU closes; Start resumes it.
+        "suspend" => {
+            set(&|vm| vm.suspending = true);
+            crate::changed(app);
+            let (app, id) = (app.clone(), id.to_string());
+            thread::spawn(move || {
+                if let Err(e) = suspend(&app, port, &id) {
+                    use tauri::Manager;
+                    if let Some(vm) = app.state::<Vms>().0.lock().unwrap().get_mut(&id) {
+                        vm.suspending = false;
+                    }
+                    if let Some(c) = crate::config::find(&id) {
+                        crate::log::line(&c.dir, &format!("Couldn't suspend it: {e}"));
+                    }
+                    let name = crate::config::find(&id).map(|c| c.name()).unwrap_or(id.clone());
+                    let _ = app.emit("problem", Problem { title: format!("Couldn't suspend {name}"), text: e });
+                    crate::changed(&app);
+                }
+            });
+            return Ok(());
+        }
+        // Send Keys: keys the computer would keep for itself (Ctrl+Alt+Del, Ctrl+Alt+F1 to F6), pressed in Linux.
+        a if a.starts_with("keys:") => {
+            let keys: Vec<String> = a[5..].split('-').map(|k| format!("{{\"type\":\"qcode\",\"data\":\"{k}\"}}")).collect();
+            let r = qmp_query(port, "send-key", Some(&format!("{{\"keys\":[{}]}}", keys.join(","))))?;
+            if let Some(e) = r.get("error") {
+                return Err(e["desc"].as_str().unwrap_or("QEMU didn't take the keys.").to_string());
+            }
+            return Ok(());
+        }
         "force" => {
             #[cfg(windows)]
             let _ = Command::new("taskkill").args(["/PID", &pid.to_string(), "/F"]).creation_flags_none().status();
@@ -759,6 +925,191 @@ fn qemu_power(app: &AppHandle, vms: &Vms, id: &str, action: &str) -> Result<(), 
     let _ = pid;
     crate::changed(app);
     Ok(())
+}
+
+// Quitting Try Linux: each running system as its Settings say (General > Display and startup): suspended,
+// shut down (Linux is asked, and powers off by itself), or left running.
+#[cfg(not(target_os = "macos"))]
+pub fn before_quit(app: &AppHandle) {
+    use tauri::Manager;
+    let running: Vec<(String, u16)> = app.state::<Vms>().0.lock().unwrap().iter()
+        .filter(|(_, r)| !r.held && !r.suspending && !r.resuming)
+        .map(|(id, r)| (id.clone(), r.qmp)).collect();
+    let mut waits = vec![];
+    for (id, port) in running {
+        let Some(cfg) = crate::config::find(&id) else { continue };
+        match cfg.get("onquit") {
+            "suspend" => {
+                crate::log::line(&cfg.dir, "Try Linux is quitting: suspending it");
+                let app = app.clone();
+                waits.push(thread::spawn(move || {
+                    if let Err(e) = suspend(&app, port, &id) {
+                        if let Some(c) = crate::config::find(&id) {
+                            crate::log::line(&c.dir, &format!("Couldn't suspend it, so it keeps running: {e}"));
+                        }
+                    }
+                }));
+            }
+            "shutdown" => {
+                crate::log::line(&cfg.dir, "Try Linux is quitting: shutting Linux down");
+                let _ = qmp(port, "system_powerdown");
+            }
+            _ => {}
+        }
+    }
+    for w in waits {
+        let _ = w.join();
+    }
+}
+
+// ---------------------------------------------------------------- Suspend and Resume
+
+const STATE: &str = "suspend.state";
+const STATE_INFO: &str = "suspend.json";
+
+pub fn state_file(dir: &std::path::Path) -> PathBuf {
+    dir.join(STATE)
+}
+
+// A suspended system's saved state, with how it was started (its rendering, whether from its installer).
+pub fn suspended(cfg: &VmConfig) -> Option<serde_json::Value> {
+    if !state_file(&cfg.dir).is_file() {
+        return None;
+    }
+    std::fs::read_to_string(cfg.dir.join(STATE_INFO)).ok().and_then(|t| serde_json::from_str(&t).ok())
+}
+
+// Forgets a suspended state (Start fresh, Reset, or a snapshot reverted), so it starts from its disk.
+pub fn discard_suspended(dir: &std::path::Path) {
+    let _ = std::fs::remove_file(dir.join(STATE));
+    let _ = std::fs::remove_file(dir.join(STATE_INFO));
+    let _ = std::fs::remove_file(dir.join(format!("{STATE}.part")));
+}
+
+// Saves a running system's state: paused, written out with QEMU's migration to a file, then QEMU closes. On a
+// problem (a device that can't be saved, such as a mounted shared folder or the GPU's Vulkan), it carries on.
+#[cfg(not(target_os = "macos"))]
+fn suspend(app: &AppHandle, port: u16, id: &str) -> Result<(), String> {
+    use tauri::Manager;
+    let cfg = crate::config::find(id).ok_or("Its folder wasn't found.")?;
+    // How it was started, to resume it the same way.
+    let (cpu, installer) = app.state::<Vms>().0.lock().unwrap().get(id).map(|r| (r.cpu, r.installer))
+        .unwrap_or((cfg.render() == 2, cfg.pending() && cfg.iso().exists()));
+    let part = cfg.dir.join(format!("{STATE}.part"));
+    let _ = std::fs::remove_file(&part);
+    let failed = |e: String| {
+        let _ = qmp(port, "cont");
+        let _ = std::fs::remove_file(&part);
+        Err(e)
+    };
+    let desc = |v: &serde_json::Value| v["error"]["desc"].as_str().map(String::from);
+    let r = qmp_query(port, "stop", None)?;
+    if let Some(e) = desc(&r) {
+        return failed(e);
+    }
+    // The clipboard channel can't be saved: unplugged now (it's plugged in again when it resumes).
+    let clipboard = qmp_query(port, "device_del", Some(r#"{"id":"vdagentport"}"#)).is_ok_and(|r| r.get("return").is_some());
+    if clipboard {
+        thread::sleep(Duration::from_millis(300));
+        let _ = qmp_query(port, "chardev-remove", Some(r#"{"id":"vdagent"}"#));
+    }
+    let failed = |e: String| {
+        if clipboard {
+            plug_clipboard(port);
+        }
+        failed(e)
+    };
+    let uri = serde_json::json!({ "uri": format!("file:{}", part.to_string_lossy().replace('\\', "/")) }).to_string();
+    let r = qmp_query(port, "migrate", Some(&uri))?;
+    if let Some(e) = desc(&r) {
+        return failed(e);
+    }
+    // Saving takes about as long as writing its memory to disk.
+    let since = Instant::now();
+    loop {
+        thread::sleep(Duration::from_millis(400));
+        let r = qmp_query(port, "query-migrate", None).unwrap_or_default();
+        match r["return"]["status"].as_str() {
+            Some("completed") => break,
+            Some("failed") | Some("cancelled") => {
+                return failed(r["return"]["error-desc"].as_str().unwrap_or("Saving its state failed.").to_string());
+            }
+            _ if since.elapsed() > Duration::from_secs(1800) => return failed("Saving its state took too long.".into()),
+            _ => {}
+        }
+    }
+    let info = serde_json::json!({ "cpu": cpu, "installer": installer, "saved": chrono::Local::now().format("%Y-%m-%d %H:%M").to_string() });
+    std::fs::write(cfg.dir.join(STATE_INFO), info.to_string()).map_err(|e| e.to_string())?;
+    std::fs::rename(&part, state_file(&cfg.dir)).map_err(|e| e.to_string())?;
+    let mb = std::fs::metadata(state_file(&cfg.dir)).map(|m| m.len() >> 20).unwrap_or(0);
+    crate::log::line(&cfg.dir, &format!("Saved its state for Suspend ({mb} MB)"));
+    // QEMU closes as it answers, so its answer may not arrive.
+    let _ = qmp(port, "quit");
+    Ok(())
+}
+
+// The clipboard channel, plugged in while it runs (after Resume, or when Suspend didn't go ahead).
+#[cfg(not(target_os = "macos"))]
+fn plug_clipboard(port: u16) {
+    let _ = qmp_query(port, "chardev-add",
+        Some(r#"{"id":"vdagent","backend":{"type":"qemu-vdagent","data":{"clipboard":true}}}"#));
+    let _ = qmp_query(port, "device_add",
+        Some(r#"{"driver":"virtserialport","chardev":"vdagent","name":"com.redhat.spice.0","id":"vdagentport"}"#));
+}
+
+// Resuming: once QEMU has loaded the saved state (it waits, paused), Linux carries on and the file goes.
+#[cfg(not(target_os = "macos"))]
+fn finish_resume(app: &AppHandle, id: &str, dir: &std::path::Path, port: u16) {
+    use tauri::Manager;
+    let since = Instant::now();
+    while since.elapsed() < Duration::from_secs(1800) {
+        thread::sleep(Duration::from_millis(400));
+        if !app.state::<Vms>().0.lock().unwrap().contains_key(id) {
+            return; // QEMU stopped; exited() says why
+        }
+        let r = qmp_query(port, "query-status", None).unwrap_or_default();
+        match r["return"]["status"].as_str() {
+            Some("inmigrate") | None => continue,
+            Some("paused") | Some("postmigrate") | Some("prelaunch") => {
+                let _ = qmp(port, "cont");
+            }
+            _ => {}
+        }
+        discard_suspended(dir);
+        if let Some(vm) = app.state::<Vms>().0.lock().unwrap().get_mut(id) {
+            vm.resuming = false;
+        }
+        if crate::config::find(id).is_some_and(|c| c.get("clipboard") != "0") && clipboard_available() {
+            plug_clipboard(port);
+        }
+        crate::log::line(dir, "Resumed where it was suspended");
+        crate::changed(app);
+        return;
+    }
+}
+
+// Take Screenshot: the system's screen as a PNG in Pictures\Try Linux (QEMU's screendump), named after it and
+// the time. Returns the file's path.
+#[cfg(not(target_os = "macos"))]
+pub fn screenshot(vms: &Vms, id: &str, folder: PathBuf) -> Result<PathBuf, String> {
+    let port = vms.0.lock().unwrap().get(id).map(|r| r.qmp).ok_or("It isn't running.")?;
+    let name = crate::config::find(id).map(|c| c.name()).unwrap_or_else(|| id.to_string());
+    let safe: String = name.chars().map(|c| if "\\/:*?\"<>|".contains(c) { '-' } else { c }).collect();
+    std::fs::create_dir_all(&folder).map_err(|e| format!("Couldn't make {}: {e}", folder.display()))?;
+    let file = folder.join(format!("{safe} {}.png", chrono::Local::now().format("%Y-%m-%d %H.%M.%S")));
+    let args = serde_json::json!({ "filename": file.to_string_lossy(), "format": "png" }).to_string();
+    let r = qmp_query(port, "screendump", Some(&args))?;
+    if let Some(e) = r.get("error") {
+        return Err(e["desc"].as_str().unwrap_or("QEMU couldn't take a screenshot.").to_string());
+    }
+    // QEMU writes it as it answers; wait a moment for the whole file.
+    for _ in 0..30 {
+        if std::fs::metadata(&file).is_ok_and(|m| m.len() > 0) {
+            return Ok(file);
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    Err("QEMU didn't save the screenshot.".into())
 }
 
 // Keeps taskkill from flashing a console window.

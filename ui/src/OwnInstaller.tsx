@@ -1,4 +1,5 @@
-// Use Your Own Installer: an existing virtual disk to import, an ISO file on this PC, or a URL link to one.
+// Use Your Own Installer: an existing virtual machine (.ova) or disk to import, an ISO file on this PC, or a URL
+// link to one.
 // Choosing one clears the others; `last` is what was chosen before, when coming Back from General.
 import { open as pick } from "@tauri-apps/plugin-dialog";
 import { Fragment, useState } from "react";
@@ -9,7 +10,7 @@ import { readDisk } from "./tauri";
 import "./settings.css";
 
 const fileName = (p: string) => p.slice(Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/")) + 1);
-const DISKS = ["qcow2", "vmdk", "vhd", "vhdx", "vdi", "img", "raw"];
+const DISKS = ["ova", "qcow2", "vmdk", "vhd", "vhdx", "vdi", "img", "raw"];
 
 function OrLine() {
   return <div className="or-line"><span>OR</span></div>;
@@ -23,8 +24,8 @@ export function OwnInstaller({ last, onBack, onNext }: { last?: Source; onBack: 
   const [reading, setReading] = useState(false);
 
   const chooseDisk = async () => {
-    const path = await pick({ title: "Choose a virtual disk to import",
-      filters: [{ name: "Virtual disks", extensions: DISKS }, { name: "All files", extensions: ["*"] }] });
+    const path = await pick({ title: "Choose a virtual machine or disk to import",
+      filters: [{ name: "Virtual machines and disks", extensions: DISKS }, { name: "All files", extensions: ["*"] }] });
     if (typeof path !== "string") return;
     setIso(null); setUrl(""); setReading(true);
     // Its format and size, and any settings saved beside it, fill in the next steps.
@@ -46,7 +47,7 @@ export function OwnInstaller({ last, onBack, onNext }: { last?: Source; onBack: 
   };
 
   const info = disk?.info;
-  const diskNote = !disk ? "qcow2, vmdk, vhd, vhdx, vdi or raw. It's copied; the original isn't changed."
+  const diskNote = !disk ? "A whole machine exported from VirtualBox or VMware (.ova), or a disk: qcow2, vmdk, vhd, vhdx, vdi or raw. It's copied; the original isn't changed."
     : [info!.format, info!.size ? (info!.size / 2 ** 30).toFixed(1).replace(/\.0$/, "") + " GiB" : "",
        info!.from ? `settings from ${info!.from}${info!.ram_gb ? `: ${info!.ram_gb} GiB, ${info!.cores} ${info!.cores === 1 ? "core" : "cores"}` : ""}`
          : "no saved settings found beside it"].filter(Boolean).join("  ·  ");
@@ -61,10 +62,10 @@ export function OwnInstaller({ last, onBack, onNext }: { last?: Source; onBack: 
           <div className="subtitle">A system that's already installed, or an installer Try Linux doesn't list.</div>
 
           <div className="own-option">
-            <div className="own-heading">An Existing Virtual Disk</div>
+            <div className="own-heading">An Existing Virtual Machine Or Disk</div>
             <div className="own-pick">
-              <button className="btn small" disabled={reading} onClick={chooseDisk}>Choose A Disk File</button>
-              <span className={disk ? "chosen" : "none"}>{reading ? "Reading…" : disk ? fileName(disk.path) : "No disk chosen"}</span>
+              <button className="btn small" disabled={reading} onClick={chooseDisk}>Choose A File</button>
+              <span className={disk ? "chosen" : "none"}>{reading ? "Reading…" : disk ? fileName(disk.path) : "Nothing chosen"}</span>
             </div>
             <div className="note">{diskNote}</div>
           </div>

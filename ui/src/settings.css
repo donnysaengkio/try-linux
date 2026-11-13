@@ -192,3 +192,4 @@
 .modal.app-window.wide { width: 680px; }
 .box.log-text { margin: 0; height: 320px; overflow: auto; padding: 10px 12px; font: 11.5px/1.5 Consolas, "DejaVu Sans Mono", Menlo, monospace;
   white-space: pre-wrap; word-break: break-word; user-select: text; -webkit-user-select: text; color: var(--text); }
+.radios.disabled { opacity: .55; }

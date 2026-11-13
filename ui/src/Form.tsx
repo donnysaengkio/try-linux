@@ -79,10 +79,10 @@ export function Check({ label, checked, onChange, disabled }:
   );
 }
 
-export function Radios<T extends string>({ value, options, onChange }:
-  { value: T; options: [T, string][]; onChange: (v: T) => void }) {
+export function Radios<T extends string>({ value, options, onChange, disabled }:
+  { value: T; options: [T, string][]; onChange: (v: T) => void; disabled?: boolean }) {
   return (
-    <RadioGroup className="radios" value={value} onValueChange={v => onChange(v as T)}>
+    <RadioGroup className={"radios" + (disabled ? " disabled" : "")} value={value} disabled={disabled} onValueChange={v => onChange(v as T)}>
       {options.map(([v, label]) => (
         <label key={v} className="radio-row">
           <Radio.Root className="radio" value={v}><Radio.Indicator className="radio-dot" /></Radio.Root>

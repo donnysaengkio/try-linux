@@ -40,6 +40,15 @@ pub struct Settings {
     forwards: Vec<String>,
     shared: String,
     shared_write: bool,
+    // When Try Linux quits ("keep", "shutdown" or "suspend"); its firmware ("uefi" or "bios"), which can change
+    // only before it's installed, and whether this computer has UEFI firmware; sharing the clipboard, and whether
+    // this computer's QEMU can.
+    on_quit: String,
+    firmware: String,
+    installed: bool,
+    uefi_found: bool,
+    clipboard: bool,
+    clipboard_available: bool,
     // Its desktop shortcut (whether there is one, and whether it starts the system) and starting at sign-in.
     has_shortcut: bool,
     shortcuts: bool, // this computer has shortcuts (macOS hasn't)
@@ -113,6 +122,12 @@ pub fn settings(probe: State<Probe>, vms: State<Vms>, id: String) -> Result<Sett
         forwards,
         shared: cfg.shared().into(),
         shared_write: cfg.shared_write(),
+        on_quit: match cfg.get("onquit") { "shutdown" => "shutdown", "suspend" => "suspend", _ => "keep" }.into(),
+        firmware: crate::firmware(&cfg).to_lowercase(),
+        installed: !cfg.pending(),
+        uefi_found: crate::vm::uefi_firmware().is_some() || cfg!(target_os = "macos") || crate::vm::ARCH == "aarch64",
+        clipboard: cfg.get("clipboard") != "0",
+        clipboard_available: crate::vm::clipboard_available(),
         has_shortcut: shortcuts::shortcut_exists(&cfg.id, &cfg.name()),
         shortcuts: shortcuts::HAS_SHORTCUTS,
         platform: std::env::consts::OS,
@@ -184,6 +199,9 @@ pub struct Changes {
     shared_write: bool,
     shortcut_direct: bool,
     sign_in: bool,
+    on_quit: String,
+    firmware: String,
+    clipboard: bool,
 }
 
 // Problems come back as (tab, message), so the page can show the tab the problem is on.
@@ -223,7 +241,14 @@ pub fn save_settings(app: tauri::AppHandle, id: String, c: Changes) -> Result<()
         ("shared", shared.to_string()),
         ("sharedwrite", b(c.shared_write)),
         ("shortcutdirect", b(c.shortcut_direct)),
+        ("onquit", match c.on_quit.as_str() { "shutdown" | "suspend" => c.on_quit.clone(), _ => "keep".into() }),
+        ("clipboard", b(c.clipboard)),
     ];
+    let mut values = values;
+    // The firmware only changes before Linux is installed: an installed system starts only with what it has.
+    if cfg.pending() && (c.firmware == "uefi" || c.firmware == "bios") {
+        values.push(("firmware", c.firmware.clone()));
+    }
     let old_name = cfg.name();
     cfg.set_all(&values).map_err(|e| ("".to_string(), format!("Couldn't save the settings: {e}")))?;
     crate::changed(&app);
@@ -244,6 +269,27 @@ pub fn save_settings(app: tauri::AppHandle, id: String, c: Changes) -> Result<()
     }
     if !extra.is_empty() {
         return Err(("general".into(), format!("The settings were saved, but {}.", extra.join(", and "))));
+    }
+    Ok(())
+}
+
+// Renames a system (Virtual Machines' right-click menu), moving its desktop shortcut and sign-in entry with it.
+#[tauri::command(async)]
+pub fn rename_system(app: tauri::AppHandle, id: String, name: String) -> Result<(), String> {
+    let cfg = config::find(&id).ok_or("This system's folder can't be found any more.")?;
+    let (old, new) = (cfg.name(), name.trim().to_string());
+    if new.is_empty() || new == old {
+        return Ok(());
+    }
+    cfg.set_all(&[("name", new.clone())]).map_err(|e| format!("Couldn't rename it: {e}"))?;
+    crate::changed(&app);
+    if shortcuts::runs_at_sign_in(&cfg.id) {
+        let _ = shortcuts::set_run_at_sign_in(&cfg.id, &new, true);
+    }
+    if shortcuts::shortcut_exists(&cfg.id, &old) {
+        shortcuts::remove_shortcut(&cfg.id, &old);
+        shortcuts::write_shortcut(&cfg.id, &new, cfg.get("shortcutdirect") != "0")
+            .map_err(|e| format!("It's renamed, but its desktop shortcut couldn't be updated ({e})."))?;
     }
     Ok(())
 }

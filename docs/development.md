@@ -60,6 +60,7 @@ keeps the files its 1.x edition used, so 2.x opens the systems 1.x made (see `sr
 | `src-tauri/src/app.rs` | Preferences, About's details, and checking WINQ-EMU for updates |
 | `ui/src/main.tsx` | Which page shows, and messages from the Rust side |
 | `ui/src/Home.tsx`, `ui/src/Choose.tsx` | Virtual Machines (sortable columns, groups, dragging; the arrangement is the `layout` preference, which the tray follows), and Choose a Linux OS |
+| `ui/src/columns.tsx` | Virtual Machines' columns: what each shows, its width, and what it sorts by |
 | `ui/src/Create.tsx`, `ui/src/distros.ts` | Create's steps and progress; the built-in distributions and where their installers are |
 | `ui/src/OwnInstaller.tsx` | Use Your Own Installer |
 | `ui/src/Settings.tsx`, `ui/src/Form.tsx` | Settings, and its sections and controls |

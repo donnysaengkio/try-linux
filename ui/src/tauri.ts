@@ -2,7 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
-export type VmState = "off" | "running" | "paused" | "held" | "elsewhere";
+export type VmState = "off" | "running" | "paused" | "suspended" | "held" | "elsewhere";
 export interface Vm {
   id: string;
   name: string;
@@ -17,10 +17,18 @@ export interface Vm {
   guest_mem: number | null;  // bytes Linux says it uses, once the balloon reports
   disk_rate: number | null;  // bytes a second
   maybe_installed: boolean;  // waiting to install, but its disk already holds several GB
+  uptime: number | null;     // seconds, while running
+  agent: boolean | null;     // while running: whether its guest agent answers (null on the Mac, or when off)
+  ip: string | null; host: string | null; linux: string | null; kernel: string | null;  // from the guest agent
+  net_rate: number | null; net_total: number | null;  // bytes a second, and bytes sent and received
+  snapshots: number | null;  // in Disk 1 (null when its format has none)
+  firmware: string; graphics: string; net_mode: string;
+  on_quit: "keep" | "shutdown" | "suspend";  // what happens to it when Try Linux quits
+  created: string; last_run: string;  // "2026-11-12 22:29", or ""
 }
 export interface Problem { title?: string; text?: string }
 export type PowerAction =
-  | "shutdown" | "restart" | "pause" | "resume" | "power-on" | "reset" | "close-console" | "force";
+  | "shutdown" | "restart" | "pause" | "resume" | "suspend" | "power-on" | "reset" | "close-console" | "force";
 
 export const systems = () => invoke<Vm[]>("systems");
 export const start = (id: string) => invoke("start", { id });
@@ -29,6 +37,9 @@ export const markInstalled = (id: string) => invoke("mark_installed", { id });
 export const showConsole = (id: string) => invoke("console", { id });
 export const power = (id: string, action: PowerAction) => invoke("power", { id, action });
 export const quit = () => invoke("quit");
+// Take Screenshot: the PNG's path; and showing a file in its folder.
+export const screenshot = (id: string) => invoke<string>("screenshot", { id });
+export const reveal = (path: string) => invoke("reveal", { path });
 export const catalog = () => invoke<string>("catalog");
 export const startPage = () => invoke<string>("start_page");
 // A web page, or a Windows Settings page (ms-settings:).
@@ -39,6 +50,9 @@ export const onProblem = (f: (p: Problem) => void) => listen<Problem>("problem",
 export const onAskPower = (f: (id: string, action: PowerAction) => void) =>
   listen<{ id: string; action: PowerAction }>("ask-power", e => f(e.payload.id, e.payload.action));
 export const onAskQuit = (f: () => void) => listen("ask-quit", f);
+// A suspended system that couldn't be resumed (its name, and QEMU's message); Start fresh forgets where it was.
+export const onResumeFailed = (f: (p: Problem) => void) => listen<Problem>("resume-failed", e => f(e.payload));
+export const discardSuspended = (id: string) => invoke("discard_suspended", { id });
 
 // ---- Settings (src-tauri/src/settings.rs)
 export interface Settings {
@@ -49,6 +63,8 @@ export interface Settings {
   disks: string[]; disk_full: boolean; reclaim: boolean; cd: string;
   sound: boolean; mic: boolean; net_type: number; forwards: string[]; shared: string; shared_write: boolean;
   has_shortcut: boolean; shortcut_direct: boolean; sign_in: boolean;
+  on_quit: "keep" | "shutdown" | "suspend"; firmware: "uefi" | "bios"; installed: boolean; uefi_found: boolean;
+  clipboard: boolean; clipboard_available: boolean;
   shortcuts: boolean;  // this computer has shortcuts (macOS hasn't)
   platform: Platform;
   threads: number; total_ram: number; max_cores: number; max_ram: number; max_gpu_mem: number; gpu_name: string;
@@ -57,7 +73,7 @@ export interface Settings {
 // What the Settings page saves (the rest changes at once, or comes from the system itself).
 export type Changes = Pick<Settings, "name" | "description" | "fullscreen" | "fs_display" | "displays" | "render" | "venus"
   | "gpu_mem" | "profile" | "ram" | "cores" | "reclaim" | "sound" | "mic" | "net_type" | "forwards" | "shared" | "shared_write"
-  | "shortcut_direct" | "sign_in">;
+  | "shortcut_direct" | "sign_in" | "on_quit" | "firmware" | "clipboard">;
 export interface DiskReport { actual: number | null; size: number | null; snapshots: number; free: number | null; drive: string; error: string | null }
 
 export const settings = (id: string) => invoke<Settings>("settings", { id });
@@ -132,6 +148,7 @@ export const resetSystem = (id: string, iso: string) => invoke<string>("reset", 
 export const installerOf = (id: string) => invoke<string | null>("installer_of", { id });
 export const bootIso = (id: string, iso: string) => invoke("boot_iso", { id, iso });
 export const deleteSystem = (id: string) => invoke<string>("delete", { id });
+export const renameSystem = (id: string, name: string) => invoke("rename_system", { id, name });
 
 // ---- What this PC needs before Linux can run (src-tauri/src/setup.rs)
 export type Virt = "ready" | "no-cpu" | "firmware-off" | "feature-off" | "not-running" | "kvm-missing" | "kvm-denied" | "mac-unsupported";

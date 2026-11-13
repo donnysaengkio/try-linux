@@ -1,6 +1,8 @@
 // The power commands, and the ones that ask first (from the Power menu or the tray), as on
 // the Windows edition: Shut down and Restart ask Linux; Force stop and Reset lose unsaved work.
 import { ask, choose, problem } from "./Ask";
+
+const MAC = navigator.userAgent.includes("Macintosh");
 import { markInstalled, power, start, type PowerAction, type Vm } from "./tauri";
 
 const CONFIRM: Partial<Record<PowerAction, (name: string) => [string, string, string, boolean]>> = {
@@ -23,15 +25,17 @@ export interface PowerItem { label: string; action: PowerAction | "console"; dan
 
 // What the Power menu offers for a system in this state; null marks a line between groups.
 export function powerItems(vm: Vm): (PowerItem | null)[] {
-  if (vm.state === "held") return [{ label: "Power on", action: "power-on" }, { label: "Close console", action: "close-console" }];
+  if (vm.state === "held") return [{ label: "Power On", action: "power-on" }, { label: "Close Console", action: "close-console" }];
   return [
-    { label: "Show console", action: "console" },
+    { label: "Show Console", action: "console" },
     null,
-    { label: "Shut down", action: "shutdown" },
+    { label: "Shut Down", action: "shutdown" },
     { label: "Restart", action: "restart" },
     vm.state === "paused" ? { label: "Resume", action: "resume" } : { label: "Pause", action: "pause" },
+    // Saves where it is and closes; Start brings it back (QEMU only, so not on the Mac yet).
+    ...(MAC || vm.state === "elsewhere" || vm.status === "Suspending" || vm.status === "Resuming" ? [] : [{ label: "Suspend", action: "suspend" as const }]),
     null,
-    { label: "Force stop", action: "force", danger: true },
+    { label: "Force Stop", action: "force", danger: true },
     { label: "Reset", action: "reset", danger: true },
   ];
 }

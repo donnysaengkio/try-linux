@@ -9,10 +9,10 @@ import { Create, type Source } from "./Create";
 import { OwnInstaller } from "./OwnInstaller";
 import { loadArch, RECOMMENDED } from "./distros";
 import { Home } from "./Home";
-import { applyTheme, checkQuietly, MainMenuWindows, openAbout, openPreferences, openShortcuts, useShortcuts } from "./MainMenu";
+import { applyTheme, checkQuietly, MainMenuWindows, openAbout, openPreferences, openShortcuts, quitApp, useShortcuts } from "./MainMenu";
 import { act, startSystem } from "./power";
 import { SettingsPage } from "./Settings";
-import { appInfo, onAskPower, onAskQuit, onProblem, quit, settings, startPage, systems, type Settings, type Vm } from "./tauri";
+import { appInfo, discardSuspended, onAskPower, onAskQuit, onProblem, onResumeFailed, settings, start, startPage, systems, type Settings, type Vm } from "./tauri";
 import { roundCorners } from "./window";
 import "./style.css";
 
@@ -77,8 +77,16 @@ function App() {
         const vm = (await systems()).find(v => v.id === id);
         if (vm) act(vm, action);
       }),
+      // A suspended system whose saved state couldn't be loaded: start it fresh from its disk, or leave it.
+      onResumeFailed(async p => {
+        const vm = (await systems()).find(v => v.name === p.title && v.state === "suspended");
+        if (!vm) return;
+        if (await ask(`Couldn't resume ${vm.name}`, `${p.text}\n\nIts settings or QEMU may have changed since it was suspended. Start it fresh from its disk? What was open when it was suspended is lost.`, "Start Fresh", true)) {
+          try { await discardSuspended(vm.id); await start(vm.id); } catch (e) { problem(e); }
+        }
+      }),
       onAskQuit(async () => {
-        if (await ask("Quit Try Linux?", "Running systems keep running, but without the tray menu.", "Quit")) quit();
+        quitApp();
       }),
     ];
     return () => off.forEach(p => p.then(f => f()));

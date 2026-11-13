@@ -99,10 +99,24 @@ async function updateWinqNow() {
   (await off)();
 }
 
-// Quit Try Linux (Ctrl+Q): asks first while systems run, as they lose the tray menu.
+// Quit Try Linux (Ctrl+Q, or the tray): asks first while systems run, saying what happens to each, as its
+// Settings say (General > Display and startup): suspended, shut down, or kept running without the tray menu.
 export async function quitApp() {
-  const running = (await systems()).some(v => v.state === "running" || v.state === "paused" || v.state === "held");
-  if (!running || await ask("Quit Try Linux?", "Running systems keep running, but without the tray menu.", "Quit")) quit();
+  const running = (await systems()).filter(v => v.state === "running" || v.state === "paused" || v.state === "held");
+  if (running.length === 0) return quit();
+  const names = (list: { name: string }[]) => list.length === 1 ? list[0].name
+    : list.slice(0, -1).map(v => v.name).join(", ") + " and " + list[list.length - 1].name;
+  const mac = navigator.userAgent.includes("Macintosh");
+  const by = (w: string) => running.filter(v => v.state !== "held" && (mac ? "keep" : v.on_quit) === w);
+  const lines = [
+    by("suspend").length ? `${names(by("suspend"))} ${by("suspend").length === 1 ? "is" : "are"} suspended, to open where you left off.` : "",
+    by("shutdown").length ? `${names(by("shutdown"))} ${by("shutdown").length === 1 ? "shuts" : "shut"} down.` : "",
+    by("keep").length ? (mac ? `${names(by("keep"))} ${by("keep").length === 1 ? "stops" : "stop"} with it.`
+      : `${names(by("keep"))} ${by("keep").length === 1 ? "keeps" : "keep"} running, without the tray menu.`) : "",
+  ].filter(Boolean);
+  if (!(await ask("Quit Try Linux?", lines.join("\n") + "\n\nYou can choose this for each system in its Settings, under Display and startup.", "Quit"))) return;
+  if (by("suspend").length) toast.loading(`Suspending ${names(by("suspend"))}…`, { duration: Infinity });
+  quit();
 }
 
 // Once a day is the Windows edition's rule; Try Linux 2 checks each time it opens, quietly: a newer Try

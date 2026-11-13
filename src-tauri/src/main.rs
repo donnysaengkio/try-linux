@@ -71,6 +71,43 @@ struct Vm {
     disk_rate: Option<f64>,
     // Waiting to install, but its disk already holds several GB (installed while Try Linux was closed?).
     maybe_installed: bool,
+    // While running: how long, and what its guest agent reports (agent: whether it answers; None when off).
+    uptime: Option<u64>,
+    agent: Option<bool>,
+    ip: Option<String>,
+    host: Option<String>,
+    linux: Option<String>,
+    kernel: Option<String>,
+    net_rate: Option<f64>,
+    net_total: Option<u64>,
+    // What happens to it when Try Linux quits: "keep" (running), "shutdown" or "suspend".
+    on_quit: String,
+    // From its settings and files, for the columns Virtual Machines can show.
+    snapshots: Option<u32>,
+    firmware: String,
+    graphics: String,
+    net_mode: String,
+    created: String,
+    last_run: String,
+}
+
+// How many snapshots Disk 1 holds, from its qcow2 header (nb_snapshots, at byte 60); None for other formats.
+fn snapshot_count(disk: &std::path::Path) -> Option<u32> {
+    use std::io::Read;
+    let mut head = [0u8; 64];
+    fs::File::open(disk).ok()?.read_exact(&mut head).ok()?;
+    (head[..4] == *b"QFI\xfb").then(|| u32::from_be_bytes([head[60], head[61], head[62], head[63]]))
+}
+
+// How it starts: as set in Settings > Hardware > Firmware, else as this computer's systems always have (the Mac
+// and ARM64 with UEFI, others with BIOS).
+pub fn firmware(cfg: &VmConfig) -> &'static str {
+    match cfg.get("firmware") {
+        "uefi" => "UEFI",
+        "bios" => "BIOS",
+        _ if cfg!(target_os = "macos") || vm::ARCH == "aarch64" => "UEFI",
+        _ => "BIOS",
+    }
 }
 
 // Systems left running by a Try Linux that closed (or crashed) while they ran: taken over, so they're shown and
@@ -196,6 +233,7 @@ fn systems(app: AppHandle, probe: State<Probe>, vms: State<Vms>, live: State<liv
     adopt_orphans(&app, &probe, &vms);
     let host = probe.host();
     let mut asks = vec![];   // (index, id, QMP port) of the systems to read activity from, after the locks are let go
+    let mut agents = vec![]; // (index, id, guest agent port, folder)
     let mut sys = probe.0.lock().unwrap();
     refresh_processes(&mut sys);
     let mine = vms.0.lock().unwrap();
@@ -206,11 +244,14 @@ fn systems(app: AppHandle, probe: State<Probe>, vms: State<Vms>, live: State<liv
         let used: u64 = cfg.all_disks().iter().filter_map(|d| fs::metadata(d).ok()).map(|m| m.len()).sum();
         let os = os_label(&cfg);
         let (state, status, pid) = match mine.get(&cfg.id) {
+            Some(r) if r.suspending => ("running", "Suspending", Some(r.pid)),
+            Some(r) if r.resuming => ("running", "Resuming", Some(r.pid)),
             Some(r) if r.held => ("held", "Off, console open", Some(r.pid)),
             Some(r) if r.paused => ("paused", if r.hidden { "Paused, window closed" } else { "Paused" }, Some(r.pid)),
             Some(r) => ("running", if r.hidden { "Running, window closed" } else { "Running" }, Some(r.pid)),
             None => match qemu_for(&sys, &cfg) {
                 Some(p) => ("elsewhere", "Running", Some(p.pid().as_u32())),
+                None if vm::suspended(&cfg).is_some() => ("suspended", "Suspended", None),
                 None if cfg.pending() => ("off", "Ready to install", None),
                 None => ("off", "Powered off", None),
             },
@@ -229,7 +270,21 @@ fn systems(app: AppHandle, probe: State<Probe>, vms: State<Vms>, live: State<liv
             if let Some(port) = port {
                 asks.push((out.len(), cfg.id.clone(), port));
             }
+            let args: Vec<String> = live.map(|p| p.cmd().iter().map(|a| a.to_string_lossy().to_string()).collect()).unwrap_or_default();
+            if let Some(agent) = live::agent_port_from_args(&args) {
+                agents.push((out.len(), cfg.id.clone(), agent, cfg.dir.clone()));
+            }
         }
+        let running = matches!(state, "running" | "paused" | "elsewhere");
+        let uptime = match (mine.get(&cfg.id), live) {
+            (Some(r), _) if !r.held => Some(r.uptime()),
+            (None, Some(p)) => Some(p.run_time()),
+            _ => None,
+        };
+        #[cfg(target_os = "macos")]
+        let mac_ip = if running { live::mac_ip(cfg.get("macAddress")) } else { None };
+        #[cfg(not(target_os = "macos"))]
+        let mac_ip: Option<String> = None;
         out.push(Vm {
             name: cfg.name(),
             id: cfg.id.clone(),
@@ -244,6 +299,21 @@ fn systems(app: AppHandle, probe: State<Probe>, vms: State<Vms>, live: State<liv
             guest_mem: None,
             disk_rate: None,
             maybe_installed,
+            uptime: uptime.filter(|_| running),
+            agent: (running && !cfg!(target_os = "macos")).then_some(false),
+            ip: mac_ip,
+            host: None,
+            linux: None,
+            kernel: None,
+            net_rate: None,
+            net_total: None,
+            on_quit: match cfg.get("onquit") { "shutdown" => "shutdown", "suspend" => "suspend", _ => "keep" }.into(),
+            snapshots: snapshot_count(&cfg.disk()),
+            firmware: firmware(&cfg).into(),
+            graphics: if cfg!(target_os = "macos") { "Apple".into() } else { ["Automatic", "GPU", "CPU"][cfg.render().min(2) as usize].into() },
+            net_mode: ["NAT", "Forwards only", "None"][cfg.net_type().min(2) as usize].into(),
+            created: cfg.get("created").to_string(),
+            last_run: cfg.get("lastrun").to_string(),
         });
     }
     drop(mine);
@@ -252,6 +322,16 @@ fn systems(app: AppHandle, probe: State<Probe>, vms: State<Vms>, live: State<liv
         let r = live.read(&id, port);
         out[i].guest_mem = r.guest_used;
         out[i].disk_rate = r.disk_rate;
+    }
+    for (i, id, agent, dir) in agents {
+        let g = live.guest(&id, agent, dir);
+        out[i].agent = Some(g.answered);
+        out[i].ip = g.ip;
+        out[i].host = g.host;
+        out[i].linux = g.os;
+        out[i].kernel = g.kernel;
+        out[i].net_rate = g.net_rate;
+        out[i].net_total = g.net_total;
     }
     out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     out
@@ -277,9 +357,51 @@ fn power(app: AppHandle, vms: State<Vms>, id: String, action: String) -> Result<
     vm::power(&app, &vms, &id, &action)
 }
 
-// Quits Try Linux (systems keep running, without the tray menu).
+// Take Screenshot (Power menu): the file's path, in Pictures\Try Linux.
+#[tauri::command(async)]
+fn screenshot(app: AppHandle, vms: State<Vms>, id: String) -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = (app, vms, id);
+        Err("Screenshots aren't available on the Mac yet.".into())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let pictures = app.path().picture_dir().or_else(|_| app.path().home_dir().map(|h| h.join("Pictures"))).unwrap_or_else(|_| std::env::temp_dir());
+        if let Some(c) = config::find(&id) {
+            crate::log::line(&c.dir, "Took a screenshot");
+        }
+        vm::screenshot(&vms, &id, pictures.join("Try Linux")).map(|p| p.to_string_lossy().to_string())
+    }
+}
+
+// Start fresh, after a suspended state couldn't be resumed: it's forgotten, and the system starts from its disk.
 #[tauri::command]
+fn discard_suspended(app: AppHandle, id: String) -> Result<(), String> {
+    let cfg = config::find(&id).ok_or("This system's folder wasn't found.")?;
+    vm::discard_suspended(&cfg.dir);
+    crate::log::line(&cfg.dir, "Forgot where it was suspended; it starts from its disk");
+    changed(&app);
+    Ok(())
+}
+
+// Shows a file in Explorer, Finder or the file manager, selected where it can be.
+#[tauri::command]
+fn reveal(path: String) -> Result<(), String> {
+    #[cfg(windows)]
+    let r = std::process::Command::new("explorer").arg(format!("/select,{path}")).spawn();
+    #[cfg(target_os = "macos")]
+    let r = std::process::Command::new("open").args(["-R", &path]).spawn();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let r = std::process::Command::new("xdg-open").arg(std::path::Path::new(&path).parent().unwrap_or(std::path::Path::new("/"))).spawn();
+    r.map(|_| ()).map_err(|e| e.to_string())
+}
+
+// Quits Try Linux: each running system is suspended, shut down or left running, as its Settings say.
+#[tauri::command(async)]
 fn quit(app: AppHandle) {
+    #[cfg(not(target_os = "macos"))]
+    vm::before_quit(&app);
     app.exit(0);
 }
 
@@ -323,6 +445,9 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
             sub.append(&item(id, "shutdown", "Shut down")?)?;
             sub.append(&item(id, "restart", "Restart")?)?;
             sub.append(&if *paused { item(id, "resume", "Resume")? } else { item(id, "pause", "Pause")? })?;
+            if !cfg!(target_os = "macos") {
+                sub.append(&item(id, "suspend", "Suspend")?)?;
+            }
             sub.append(&PredefinedMenuItem::separator(app)?)?;
             sub.append(&item(id, "force", "Force stop")?)?;
             sub.append(&item(id, "reset", "Reset")?)?;
@@ -459,7 +584,7 @@ fn main() {
         .manage(Probe(Mutex::new(System::new())))
         .manage(Vms::default())
         .manage(live::Live::default())
-        .invoke_handler(tauri::generate_handler![systems, start, console, power, quit, catalog, arch, mark_installed, icons, open_page, start_page, settings::settings, settings::save_settings, settings::disk_info, settings::set_disc, create::create_defaults, create::free_space, create::create, create::cancel_create, create::read_disk, app::app_info, app::set_preference, app::check_updates, app::open_storage, app::layout, app::set_layout, log::system_log, log::open_log, settings::add_shortcut, disks::disk_resize, disks::disk_compact, disks::disk_add, disks::disk_remove, recovery::backup, recovery::restore, recovery::clone_system, recovery::snapshots, recovery::snapshot, recovery::move_storage, recovery::clean_list, recovery::clean_run, recovery::reset, recovery::installer_of, recovery::boot_iso, recovery::delete, setup::readiness, setup::enable_hypervisor, setup::update_winq])
+        .invoke_handler(tauri::generate_handler![systems, start, console, power, quit, screenshot, reveal, discard_suspended, catalog, arch, mark_installed, icons, open_page, start_page, settings::settings, settings::save_settings, settings::disk_info, settings::set_disc, create::create_defaults, create::free_space, create::create, create::cancel_create, create::read_disk, app::app_info, app::set_preference, app::check_updates, app::open_storage, app::layout, app::set_layout, log::system_log, log::open_log, settings::add_shortcut, settings::rename_system, disks::disk_resize, disks::disk_compact, disks::disk_add, disks::disk_remove, recovery::backup, recovery::restore, recovery::clone_system, recovery::snapshots, recovery::snapshot, recovery::move_storage, recovery::clean_list, recovery::clean_run, recovery::reset, recovery::installer_of, recovery::boot_iso, recovery::delete, setup::readiness, setup::enable_hypervisor, setup::update_winq])
         .setup(|app| {
             let handle = app.handle().clone();
             TrayIconBuilder::with_id("main")

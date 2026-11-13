@@ -11,7 +11,7 @@ import { findDistro, type Distro } from "./distros";
 import { Action, Check, Choice, Note, NumberBox, Radios, Row, Section, SectionsContext, Segmented, SubHeading } from "./Form";
 import { Header } from "./Header";
 import { Icon, type IconName } from "./Icon";
-import { addShortcut, appInfo, backupSystem, bootIso, cleanList, cleanRun, cloneSystem, deleteSystem, installerOf, moveStorage, resetSystem, restoreBackup, diskAdd, diskCompact, diskInfo, diskRemove, diskResize, openPage, saveSettings, setDisc, settings, type Changes, type DiskReport, type Settings } from "./tauri";
+import { addShortcut, appInfo, backupSystem, bootIso, cleanList, cleanRun, installerOf, moveStorage, resetSystem, restoreBackup, diskAdd, diskCompact, diskInfo, diskRemove, diskResize, openPage, saveSettings, setDisc, settings, type Changes, type DiskReport, type Settings } from "./tauri";
 import "./settings.css";
 
 const TABS: [string, string, IconName][] = [
@@ -46,7 +46,7 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
     name: s.name, description: s.description, fullscreen: s.fullscreen, fs_display: s.fs_display, displays: s.displays,
     render: s.render, venus: s.venus, gpu_mem: Math.min(s.gpu_mem, s.max_gpu_mem), profile: s.profile, ram: s.ram, cores: s.cores,
     reclaim: s.reclaim, sound: s.sound, mic: s.mic, net_type: s.net_type, forwards: s.forwards, shared: s.shared, shared_write: s.shared_write,
-    shortcut_direct: s.shortcut_direct, sign_in: s.sign_in,
+    shortcut_direct: s.shortcut_direct, sign_in: s.sign_in, on_quit: s.on_quit, firmware: s.firmware, clipboard: s.clipboard,
   }));
   const set = <K extends keyof Changes>(k: K, v: Changes[K]) => setF(o => ({ ...o, [k]: v }));
   const [tab, setTab] = useState(startTab ?? "general");
@@ -189,7 +189,6 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
       const src = await pick({ title: "Restore a backup as a new system", filters: backupFilter });
       if (typeof src === "string") slow(`Restoring a copy of ${who}`, () => restoreBackup(s.id, src));
     },
-    clone: () => slow(`Cloning ${who}`, () => cloneSystem(s.id)),
     move: async () => {
       const parent = await pick({ title: "Move all Try Linux systems and downloads to:", directory: true });
       if (typeof parent !== "string") return;
@@ -221,12 +220,6 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
       const iso = await pick({ title: `Boot ${who} from an ISO`, filters: isoFilter });
       if (typeof iso !== "string") return;
       try { await bootIso(s.id, iso); onBack(false); } catch (e) { problem({ title: "Couldn't start it", text: String(e) }); }
-    },
-    remove: async () => {
-      const attached = s.disks.slice(1).some(d => !inside(s.dir, d));
-      if (!await ask(`Delete ${who}?`, `This permanently removes its virtual ${s.disks.length > 1 ? "disks" : "disk"} and everything installed in it.\n\n` +
-        (attached ? "Disks added from other folders and downloaded ISOs are kept." : "Downloaded ISOs are kept."), "Delete", true)) return;
-      try { toast(await deleteSystem(s.id)); onBack(false); } catch (e) { problem({ title: "Couldn't delete it", text: String(e) }); }
     },
   };
 
@@ -311,7 +304,8 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
                 <Row label="Location"><span className="value-text" title={s.dir}>{s.dir}</span></Row>
               </Section>
 
-              <Section title="Display and startup" summary={(f.fullscreen ? "Fullscreen" : "In a window") + (f.sign_in ? "  ·  Starts when you sign in" : "")}>
+              <Section title="Display and startup" summary={(f.fullscreen ? "Fullscreen" : "In a window") + (f.sign_in ? "  ·  Starts when you sign in" : "")
+                + (mac ? "" : f.on_quit === "suspend" ? "  ·  Suspends on quit" : f.on_quit === "shutdown" ? "  ·  Shuts down on quit" : "")}>
                 <Check label="Open fullscreen" checked={f.fullscreen} onChange={v => set("fullscreen", v)} />
                 <Row label="Fullscreen display" inset>
                   <Choice width={300} value={f.fs_display || "primary"} onChange={v => set("fs_display", v === "primary" ? "" : v)}
@@ -327,6 +321,17 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
                   </button>
                 </div>}
                 <Note>{s.shortcuts ? (f.shortcut_direct ? `The shortcut starts ${who} and keeps Try Linux in the tray.` : "The shortcut opens Try Linux.") + " " : ""}Starting at sign-in applies when you Save.</Note>
+                {!mac && <>
+                  <SubHeading>When Try Linux quits</SubHeading>
+                  <Radios value={f.on_quit} onChange={v => set("on_quit", v)} options={[
+                    ["keep", "Keep it running, without the tray menu"],
+                    ["shutdown", "Shut Linux down, as its power button does"],
+                    ["suspend", "Suspend it, to open where you left off"]]} />
+                </>}
+              </Section>
+
+              <Section title="Log" summary="When it started and stopped">
+                <Action text={`See when ${who} started and stopped, and any problems while it ran.`} label="Log" onClick={() => setLogOpen(true)} />
               </Section>
             </Tabs.Panel>
 
@@ -366,6 +371,15 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
                   <span className="hint-text">up to {coreTop} of {s.threads}</span>
                 </Row>
               </Section>
+
+              {!mac && <Section title="Firmware" summary={f.firmware === "uefi" ? "UEFI" : "BIOS"}>
+                <Radios value={f.firmware} disabled={s.installed} onChange={v => set("firmware", v)} options={[
+                  ["uefi", "UEFI, what new computers use"], ["bios", "BIOS, the older way (as systems made before this start)"]]} />
+                <Note>{s.installed
+                  ? `${who} is installed for ${f.firmware === "uefi" ? "UEFI" : "BIOS"}, so this can't change now: it wouldn't start the other way.`
+                  : "Linux is installed for one or the other, so choose before you install it."}
+                  {!s.uefi_found && (win ? " UEFI needs WINQ-EMU's firmware, which wasn't found." : " UEFI needs your distribution's OVMF package (ovmf, or edk2-ovmf), which isn't installed.")}</Note>
+              </Section>}
 
               <Section title="Disks" summary={`${s.disks.length} ${s.disks.length === 1 ? "disk" : "disks"}  ·  Disk ${disk + 1}: ${report?.actual != null ? size(report.actual) + (report.size != null ? " of " + size(report.size) : "") : "…"}`}>
                 <Row label="Disk">
@@ -409,6 +423,14 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
                   <button className="btn small" disabled={!cd} onClick={() => changeDisc("")}>Eject</button>
                 </Row>
                 <Note>Put an ISO in the drive, such as drivers or a rescue disk. The disc changes right away while {who} runs. It still starts from Disk 1; to start from a disc, use Recovery.</Note>
+              </Section>
+
+              <Section title="Clipboard" summary={!s.clipboard_available ? "Not available" : f.clipboard ? "Shared" : "Not shared"}>
+                <Check label={`Share the clipboard with ${who}`} checked={f.clipboard && s.clipboard_available} disabled={!s.clipboard_available}
+                  onChange={v => set("clipboard", v)} />
+                <Note>{s.clipboard_available
+                  ? `Copy on ${pc} and paste in Linux, and the other way round. Linux needs spice-vdagent, which most desktops include. Applies the next time ${who} starts.`
+                  : win ? "WINQ-EMU is built without clipboard sharing, so it can't be shared on Windows yet." : "This computer's QEMU is built without clipboard sharing (qemu-vdagent)."}</Note>
               </Section>
 
               <Section title="Microphone and sound" summary={!f.sound ? "Sound off" : f.mic ? "Sound and microphone on" : "Sound on, microphone off"}>
@@ -457,10 +479,6 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
                 <Action text="Restore a backup as a separate copy; the original stays." label="Restore" onClick={rec.restore} />
                 <Note>Shut {who} down before backing it up.</Note>
               </Section>
-              <Section title="Clone" summary="Copy it as a new system">
-                <Action text={`Copy ${who}, its disks and its settings, as a new system.`} label="Clone" onClick={rec.clone} />
-                <Note>Shut {who} down before cloning it. Snapshots aren't copied.</Note>
-              </Section>
               <Section title="Snapshots" summary="Points in time for Disk 1">
                 <Action text="Save Disk 1 as it is now, or go back to a saved point." label="Snapshots" onClick={() => setSnapsOpen(true)} />
               </Section>
@@ -468,13 +486,9 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
                 <Action text="Move all systems and downloads to another folder." label="Move" onClick={rec.move} />
                 <Action text="Delete installers that no system still needs." label="Clean" onClick={rec.clean} />
               </Section>
-              <Section title="Repair" summary="See its log, reset, or boot an ISO">
-                <Action text={`See when ${who} started and stopped, and any problems while it ran.`} label="Log" onClick={() => setLogOpen(true)} />
+              <Section title="Repair" summary="Reset, or boot an ISO">
                 <Action text={`Erase ${who} and run its installer again.`} label="Reset" onClick={rec.reset} />
                 <Action text={`Start ${who} from an ISO, such as a rescue disk.`} label="Boot ISO" onClick={rec.boot} />
-              </Section>
-              <Section title="Delete" summary={"Remove " + who}>
-                <Action text={`Remove ${who} and everything installed in it.`} label="Delete" danger onClick={rec.remove} />
               </Section>
             </Tabs.Panel>
           </SectionsContext.Provider>

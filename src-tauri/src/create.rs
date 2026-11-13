@@ -517,6 +517,15 @@ fn installer(app: &AppHandle, p: &Plan) -> Result<PathBuf, String> {
 // Copies a disk into the new system's qcow2 (any format qemu-img reads), showing how far along it is.
 // The original isn't changed. Cancel stops it.
 fn import(app: &AppHandle, from: &str, to: &Path, name: &str) -> Result<(), String> {
+    // A whole machine (.ova): its first disk comes out of the archive first, then is converted like any other.
+    if from.to_lowercase().ends_with(".ova") {
+        let inner = ova_disk(Path::new(from)).ok_or("There's no disk (.vmdk) in this .ova.")?;
+        let temp = to.with_extension("import.vmdk");
+        let r = ova_extract(app, Path::new(from), &inner, &temp, name)
+            .and_then(|_| import(app, &temp.to_string_lossy(), to, name));
+        let _ = fs::remove_file(&temp);
+        return r;
+    }
     let file = Path::new(from).file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
     let what = format!("Importing {file}");
     let detail = format!("{}, copied into a new disk for {name}", fs::metadata(from).map(|m| bytes(m.len())).unwrap_or_default());
@@ -666,9 +675,121 @@ pub struct DiskSource {
     from: String,
 }
 
+// ---- .ova: a tar archive of a machine's description (.ovf) and its disks (.vmdk), as VirtualBox and VMware export
+
+struct TarEntry {
+    name: String,
+    offset: u64,
+    size: u64,
+}
+
+// The files in a tar archive (ustar headers, 512-byte blocks), without unpacking it.
+fn tar_entries(path: &Path) -> Vec<TarEntry> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut out = vec![];
+    let Ok(mut f) = fs::File::open(path) else { return out };
+    let mut pos = 0u64;
+    let mut head = [0u8; 512];
+    while f.seek(SeekFrom::Start(pos)).is_ok() && f.read_exact(&mut head).is_ok() {
+        if head.iter().all(|b| *b == 0) {
+            break;
+        }
+        let text = |r: std::ops::Range<usize>| String::from_utf8_lossy(&head[r]).trim_end_matches('\0').trim().to_string();
+        let size = u64::from_str_radix(&text(124..136), 8).unwrap_or(0);
+        let prefix = text(345..500);
+        let name = if prefix.is_empty() { text(0..100) } else { format!("{prefix}/{}", text(0..100)) };
+        if matches!(head[156], b'0' | 0) {
+            out.push(TarEntry { name, offset: pos + 512, size });
+        }
+        pos += 512 + size.div_ceil(512) * 512;
+    }
+    out
+}
+
+fn ova_disk(path: &Path) -> Option<TarEntry> {
+    tar_entries(path).into_iter().find(|e| e.name.to_lowercase().ends_with(".vmdk"))
+}
+
+// The machine's description (.ovf) inside an .ova.
+fn ova_description(path: &Path) -> Option<String> {
+    use std::io::{Read, Seek, SeekFrom};
+    let e = tar_entries(path).into_iter().find(|e| e.name.to_lowercase().ends_with(".ovf"))?;
+    let mut f = fs::File::open(path).ok()?;
+    f.seek(SeekFrom::Start(e.offset)).ok()?;
+    let mut text = String::new();
+    f.take(e.size.min(8 << 20)).read_to_string(&mut text).ok()?;
+    Some(text)
+}
+
+// Its name, description, memory, cores and Disk 1's size, from the .ovf.
+fn ova_source(s: &mut DiskSource, path: &Path) {
+    let Some(ovf) = ova_description(path) else { return };
+    let grab = |re: &str| Regex::new(re).ok()?.captures(&ovf).map(|c| c[1].trim().to_string());
+    let unit_bytes = |units: &str| -> u64 {
+        let u = units.to_lowercase();
+        if u.contains("2^30") || u.contains("giga") { 1 << 30 } else if u.contains("2^20") || u.contains("mega") { 1 << 20 }
+        else if u.contains("2^10") || u.contains("kilo") { 1 << 10 } else { 1 }
+    };
+    s.name = grab(r#"<(?:ovf:)?VirtualSystem\b[^>]*\bovf:id="([^"]+)""#).or_else(|| grab(r"<(?:vbox:)?Name>([^<]+)</")).unwrap_or_default();
+    s.description = grab(r"(?s)<(?:ovf:)?Annotation>(.*?)</").unwrap_or_default();
+    // Hardware items: ResourceType 3 is the processors, 4 the memory.
+    let item = Regex::new(r"(?s)<(?:ovf:)?Item\b[^>]*>(.*?)</(?:ovf:)?Item>").unwrap();
+    let field = |body: &str, tag: &str| Regex::new(&format!(r"<(?:rasd:)?{tag}>([^<]*)</")).ok()?.captures(body).map(|c| c[1].trim().to_string());
+    for c in item.captures_iter(&ovf) {
+        let body = &c[1];
+        let qty: u64 = field(body, "VirtualQuantity").and_then(|v| v.parse().ok()).unwrap_or(0);
+        match field(body, "ResourceType").as_deref() {
+            Some("3") => s.cores = qty,
+            Some("4") => {
+                let bytes = qty * unit_bytes(&field(body, "AllocationUnits").unwrap_or("byte * 2^20".into()));
+                s.ram_gb = mb_to_gb(bytes >> 20);
+            }
+            _ => {}
+        }
+    }
+    let cap: Option<u64> = grab(r#"<(?:ovf:)?Disk\b[^>]*\bovf:capacity="(\d+)""#).and_then(|v| v.parse().ok());
+    let units = grab(r#"<(?:ovf:)?Disk\b[^>]*\bovf:capacityAllocationUnits="([^"]+)""#).unwrap_or_default();
+    s.size = cap.map(|c| c * unit_bytes(&units));
+    s.format = "OVA (vmdk)".into();
+    s.from = format!("{} (.ova)", if ovf.contains("vbox:") || ovf.contains("VirtualBox") { "VirtualBox" } else if ovf.contains("vmw:") || ovf.contains("VMware") { "VMware" } else { "the machine" });
+}
+
+// Copies a disk out of an .ova, showing how far along it is.
+fn ova_extract(app: &AppHandle, ova: &Path, e: &TarEntry, to: &Path, name: &str) -> Result<(), String> {
+    use std::io::{Read, Seek, SeekFrom, Write};
+    let what = format!("Unpacking {}", ova.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default());
+    let detail = format!("{}, its disk for {name}", bytes(e.size));
+    let mut f = fs::File::open(ova).map_err(|x| x.to_string())?;
+    f.seek(SeekFrom::Start(e.offset)).map_err(|x| x.to_string())?;
+    let mut out = fs::File::create(to).map_err(|x| format!("Couldn't unpack it: {x}"))?;
+    let mut left = e.size;
+    let mut buf = vec![0u8; 4 << 20];
+    while left > 0 {
+        if CANCEL.load(Ordering::Relaxed) {
+            return Err("cancelled".into());
+        }
+        let want = left.min(buf.len() as u64) as usize;
+        let n = f.read(&mut buf[..want]).map_err(|x| x.to_string())?;
+        if n == 0 {
+            return Err("The .ova ends early: it may not have finished downloading or copying.".into());
+        }
+        out.write_all(&buf[..n]).map_err(|x| format!("Couldn't unpack it: {x}"))?;
+        left -= n as u64;
+        report(app, &what, 1.0 - left as f64 / e.size.max(1) as f64, &detail);
+    }
+    Ok(())
+}
+
 #[tauri::command(async)]
 pub fn read_disk(probe: State<Probe>, path: String) -> DiskSource {
     let mut s = DiskSource::default();
+    if path.to_lowercase().ends_with(".ova") {
+        ova_source(&mut s, Path::new(&path));
+        if s.cores > 0 {
+            s.cores = s.cores.min(probe.host().max_cores() as u64);
+        }
+        return s;
+    }
     if let Some(img) = vm::qemu_img() {
         let mut cmd = std::process::Command::new(img);
         cmd.args(["info", "--force-share", "--output=json", &path]);
@@ -832,5 +953,47 @@ mod arm_tests {
                 Err(e) => println!("{}\tERROR {e}", x.id),
             }
         }
+    }
+}
+
+// An .ova's description and disk are found inside it (a small archive made here, as VirtualBox writes them).
+#[cfg(test)]
+mod ova_tests {
+    use super::*;
+
+    fn tar(files: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut out = vec![];
+        for (name, data) in files {
+            let mut h = [0u8; 512];
+            h[..name.len()].copy_from_slice(name.as_bytes());
+            h[100..108].copy_from_slice(b"0000644\0");
+            h[124..136].copy_from_slice(format!("{:011o}\0", data.len()).as_bytes());
+            h[156] = b'0';
+            h[257..263].copy_from_slice(b"ustar\0");
+            out.extend_from_slice(&h);
+            out.extend_from_slice(data);
+            out.resize(out.len().div_ceil(512) * 512, 0);
+        }
+        out.extend_from_slice(&[0u8; 1024]);
+        out
+    }
+
+    #[test]
+    fn reads_an_ova() {
+        let ovf = br#"<?xml version="1.0"?><Envelope xmlns:vbox="http://www.virtualbox.org/ovf/machine">
+<DiskSection><Disk ovf:capacity="25" ovf:capacityAllocationUnits="byte * 2^30" ovf:diskId="vmdisk1"/></DiskSection>
+<VirtualSystem ovf:id="Ubuntu 24.04"><AnnotationSection><Annotation>For testing</Annotation></AnnotationSection>
+<VirtualHardwareSection>
+<Item><rasd:AllocationUnits>hertz * 10^6</rasd:AllocationUnits><rasd:ResourceType>3</rasd:ResourceType><rasd:VirtualQuantity>4</rasd:VirtualQuantity></Item>
+<Item><rasd:AllocationUnits>MegaBytes</rasd:AllocationUnits><rasd:ResourceType>4</rasd:ResourceType><rasd:VirtualQuantity>8192</rasd:VirtualQuantity></Item>
+</VirtualHardwareSection></VirtualSystem></Envelope>"#;
+        let file = std::env::temp_dir().join(format!("trylinux-ova-test-{}.ova", std::process::id()));
+        fs::write(&file, tar(&[("Ubuntu.ovf", ovf), ("Ubuntu-disk001.vmdk", b"KDMV fake disk")])).unwrap();
+        let mut s = DiskSource::default();
+        ova_source(&mut s, &file);
+        let disk = ova_disk(&file).map(|e| (e.name, e.size));
+        let _ = fs::remove_file(&file);
+        assert_eq!((s.name.as_str(), s.description.as_str(), s.cores, s.ram_gb, s.size), ("Ubuntu 24.04", "For testing", 4, 8, Some(25 << 30)));
+        assert_eq!(disk, Some(("Ubuntu-disk001.vmdk".to_string(), 14)));
     }
 }

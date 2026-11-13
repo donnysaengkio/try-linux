@@ -236,7 +236,12 @@ pub fn snapshot_action(cfg: &VmConfig, action: &str, name: &str) -> Result<(), S
 pub fn snapshot(vms: State<Vms>, id: String, action: String, name: String) -> Result<(), String> {
     let cfg = find(&id)?;
     stopped(&vms, &cfg)?;
-    snapshot_action(&cfg, &action, &name)
+    snapshot_action(&cfg, &action, &name)?;
+    // Disk 1 is now as it was then, so a suspended state (of the disk as it was) can't be resumed.
+    if action == "revert" {
+        crate::vm::discard_suspended(&cfg.dir);
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------- storage: move and clean
@@ -370,6 +375,7 @@ pub fn reset_system(cfg: &VmConfig, iso: &str) -> Result<String, String> {
     let size = crate::settings::disk_info(disk.to_string_lossy().into()).size.unwrap_or(0) / GIB;
     let gb = size.max(cfg.get("diskgb").parse().unwrap_or(0)).max(16);
     let _ = fs::remove_file(&disk);
+    crate::vm::discard_suspended(&cfg.dir);
     qemu_img(&["create", "-f", "qcow2", &disk.to_string_lossy(), &format!("{gb}G")]).map_err(|e| format!("Couldn't make the new disk.\n\n{e}"))?;
     cfg.set_all(&[("iso", iso.into()), ("pending", "1".into())]).map_err(|e| e.to_string())?;
     Ok(format!("{} was reset. Click Install on Virtual Machines to run the installer.", cfg.name()))
