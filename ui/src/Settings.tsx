@@ -295,15 +295,6 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
           <SectionsContext.Provider value={sections}>
             {/* ---------------- General */}
             <Tabs.Panel value="general" className="tab-panel">
-              <Section title="Info" summary={f.description.trim().split("\n")[0].trim() || "No description"}>
-                <Row label="Description" top>
-                  <textarea className="text-box" rows={3} value={f.description} onChange={e => set("description", e.target.value)} />
-                </Row>
-                <Row label="Operating system"><span className="value-text">{s.os}</span></Row>
-                {distro?.home && <Row label="Home page"><span className="link" onClick={() => openPage(distro.home!)}>{distro.home}</span></Row>}
-                <Row label="Location"><span className="value-text" title={s.dir}>{s.dir}</span></Row>
-              </Section>
-
               <Section title="Display and startup" summary={(f.fullscreen ? "Fullscreen" : "In a window") + (f.sign_in ? "  ·  Starts when you sign in" : "")
                 + (mac ? "" : f.on_quit === "suspend" ? "  ·  Suspends on quit" : f.on_quit === "shutdown" ? "  ·  Shuts down on quit" : "")}>
                 <Check label="Open fullscreen" checked={f.fullscreen} onChange={v => set("fullscreen", v)} />
@@ -330,6 +321,15 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
                 </>}
               </Section>
 
+              <Section title="Info" summary={f.description.trim().split("\n")[0].trim() || "No description"}>
+                <Row label="Description" top>
+                  <textarea className="text-box" rows={3} value={f.description} onChange={e => set("description", e.target.value)} />
+                </Row>
+                <Row label="Operating system"><span className="value-text">{s.os}</span></Row>
+                {distro?.home && <Row label="Home page"><span className="link" onClick={() => openPage(distro.home!)}>{distro.home}</span></Row>}
+                <Row label="Location"><span className="value-text" title={s.dir}>{s.dir}</span></Row>
+              </Section>
+
               <Section title="Log" summary="When it started and stopped">
                 <Action text={`See when ${who} started and stopped, and any problems while it ran.`} label="Log" onClick={() => setLogOpen(true)} />
               </Section>
@@ -337,6 +337,43 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
 
             {/* ---------------- Hardware */}
             <Tabs.Panel value="hardware" className="tab-panel">
+              <Section title="Disks" summary={`${s.disks.length} ${s.disks.length === 1 ? "disk" : "disks"}  ·  Disk ${disk + 1}: ${report?.actual != null ? size(report.actual) + (report.size != null ? " of " + size(report.size) : "") : "…"}`}>
+                <Row label="Disk">
+                  <Choice width={110} value={String(disk)} onChange={v => setDisk(Number(v))}
+                    options={s.disks.map((_, i) => ({ value: String(i), label: "Disk " + (i + 1) }))} />
+                </Row>
+                <Note>Linux sees each disk as its own drive. {who} starts from Disk 1.</Note>
+
+                <SubHeading>Capacity</SubHeading>
+                <Row label="Current size"><span className="value-text">{!report ? "Checking…" : report.error ?? (report.actual != null ? size(report.actual) : "")}</span></Row>
+                <Row label="System free"><span className="value-text">{report?.free != null && !report.error ? `${size(report.free)} on ${report.drive}` : ""}</span></Row>
+                <Row label="Maximum size"><span className="value-text">{report?.size != null && !report.error ? size(report.size) : ""}</span></Row>
+
+                <SubHeading>Disk information</SubHeading>
+                <Note>{disk === 0 && s.disk_full
+                  ? "Preallocated: its full maximum size was taken on the drive when it was made."
+                  : "Dynamic: the file takes space on the drive only as Linux stores data, up to the maximum size."}</Note>
+                <Note>Stored in {fileName(s.disks[disk])}{disk === 0 ? `, the disk ${who} starts from` : ""}{report?.snapshots ? `, with ${report.snapshots} ${report.snapshots === 1 ? "snapshot" : "snapshots"}` : ""}.</Note>
+                <Row label="Location"><input className="text-box" readOnly value={s.disks[disk]} /></Row>
+
+                <SubHeading>Disk Utilities</SubHeading>
+                <Check label="Reclaim free space when Linux deletes files" checked={f.reclaim} onChange={v => set("reclaim", v)} />
+                <Note inset>Linux tells the disk which space it no longer uses (TRIM), so new files reuse it instead of growing the file. Applies to every disk, from the next start.</Note>
+                <Action text="Shrink or expand this disk's maximum size." label="Resize" disabled={!report || !!report.error} onClick={() => setTool("resize")} />
+                <Action text={`Give unused space in this disk's file back to ${pc}.`} label="Compact" disabled={!report || !!report.error} onClick={compact} />
+                <Action text={`Add another disk to ${who}.`} label="Add disk" onClick={() => setTool("add")} />
+                <Action text={`Take this disk out of ${who}.`} label="Remove" disabled={disk === 0} onClick={remove} />
+              </Section>
+
+              {!mac && <Section title="Firmware" summary={f.firmware === "uefi" ? "UEFI" : "BIOS"}>
+                <Radios value={f.firmware} disabled={s.installed} onChange={v => set("firmware", v)} options={[
+                  ["uefi", "UEFI, what new computers use"], ["bios", "BIOS, the older way (as systems made before this start)"]]} />
+                <Note>{s.installed
+                  ? `${who} is installed for ${f.firmware === "uefi" ? "UEFI" : "BIOS"}, so this can't change now: it wouldn't start the other way.`
+                  : "Linux is installed for one or the other, so choose before you install it."}
+                  {!s.uefi_found && (win ? " UEFI needs WINQ-EMU's firmware, which wasn't found." : " UEFI needs your distribution's OVMF package (ovmf, or edk2-ovmf), which isn't installed.")}</Note>
+              </Section>}
+
               <Section title="Graphics" summary={`${f.displays} ${f.displays === 1 ? "display" : "displays"}  ·  ${rendering} rendering${win && f.venus ? `  ·  Vulkan, ${f.gpu_mem} GiB` : ""}`}>
                 <Row label="Guest displays">
                   <NumberBox value={f.displays} min={1} max={4} onChange={v => set("displays", v)} />
@@ -370,43 +407,6 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
                   <NumberBox value={shown[0]} min={coreTop >= 2 ? 2 : 1} max={coreTop} step={coreTop >= 2 ? 2 : 1} disabled={!manual} onChange={v => set("cores", v)} />
                   <span className="hint-text">up to {coreTop} of {s.threads}</span>
                 </Row>
-              </Section>
-
-              {!mac && <Section title="Firmware" summary={f.firmware === "uefi" ? "UEFI" : "BIOS"}>
-                <Radios value={f.firmware} disabled={s.installed} onChange={v => set("firmware", v)} options={[
-                  ["uefi", "UEFI, what new computers use"], ["bios", "BIOS, the older way (as systems made before this start)"]]} />
-                <Note>{s.installed
-                  ? `${who} is installed for ${f.firmware === "uefi" ? "UEFI" : "BIOS"}, so this can't change now: it wouldn't start the other way.`
-                  : "Linux is installed for one or the other, so choose before you install it."}
-                  {!s.uefi_found && (win ? " UEFI needs WINQ-EMU's firmware, which wasn't found." : " UEFI needs your distribution's OVMF package (ovmf, or edk2-ovmf), which isn't installed.")}</Note>
-              </Section>}
-
-              <Section title="Disks" summary={`${s.disks.length} ${s.disks.length === 1 ? "disk" : "disks"}  ·  Disk ${disk + 1}: ${report?.actual != null ? size(report.actual) + (report.size != null ? " of " + size(report.size) : "") : "…"}`}>
-                <Row label="Disk">
-                  <Choice width={110} value={String(disk)} onChange={v => setDisk(Number(v))}
-                    options={s.disks.map((_, i) => ({ value: String(i), label: "Disk " + (i + 1) }))} />
-                </Row>
-                <Note>Linux sees each disk as its own drive. {who} starts from Disk 1.</Note>
-
-                <SubHeading>Capacity</SubHeading>
-                <Row label="Current size"><span className="value-text">{!report ? "Checking…" : report.error ?? (report.actual != null ? size(report.actual) : "")}</span></Row>
-                <Row label="System free"><span className="value-text">{report?.free != null && !report.error ? `${size(report.free)} on ${report.drive}` : ""}</span></Row>
-                <Row label="Maximum size"><span className="value-text">{report?.size != null && !report.error ? size(report.size) : ""}</span></Row>
-
-                <SubHeading>Disk information</SubHeading>
-                <Note>{disk === 0 && s.disk_full
-                  ? "Preallocated: its full maximum size was taken on the drive when it was made."
-                  : "Dynamic: the file takes space on the drive only as Linux stores data, up to the maximum size."}</Note>
-                <Note>Stored in {fileName(s.disks[disk])}{disk === 0 ? `, the disk ${who} starts from` : ""}{report?.snapshots ? `, with ${report.snapshots} ${report.snapshots === 1 ? "snapshot" : "snapshots"}` : ""}.</Note>
-                <Row label="Location"><input className="text-box" readOnly value={s.disks[disk]} /></Row>
-
-                <SubHeading>Disk Utilities</SubHeading>
-                <Check label="Reclaim free space when Linux deletes files" checked={f.reclaim} onChange={v => set("reclaim", v)} />
-                <Note inset>Linux tells the disk which space it no longer uses (TRIM), so new files reuse it instead of growing the file. Applies to every disk, from the next start.</Note>
-                <Action text="Shrink or expand this disk's maximum size." label="Resize" disabled={!report || !!report.error} onClick={() => setTool("resize")} />
-                <Action text={`Give unused space in this disk's file back to ${pc}.`} label="Compact" disabled={!report || !!report.error} onClick={compact} />
-                <Action text={`Add another disk to ${who}.`} label="Add disk" onClick={() => setTool("add")} />
-                <Action text={`Take this disk out of ${who}.`} label="Remove" disabled={disk === 0} onClick={remove} />
               </Section>
             </Tabs.Panel>
 
@@ -479,16 +479,19 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
                 <Action text="Restore a backup as a separate copy; the original stays." label="Restore" onClick={rec.restore} />
                 <Note>Shut {who} down before backing it up.</Note>
               </Section>
-              <Section title="Snapshots" summary="Points in time for Disk 1">
-                <Action text="Save Disk 1 as it is now, or go back to a saved point." label="Snapshots" onClick={() => setSnapsOpen(true)} />
-              </Section>
-              <Section title="Storage" summary="Move storage, or clean up downloads">
-                <Action text="Move all systems and downloads to another folder." label="Move" onClick={rec.move} />
-                <Action text="Delete installers that no system still needs." label="Clean" onClick={rec.clean} />
-              </Section>
+
               <Section title="Repair" summary="Reset, or boot an ISO">
                 <Action text={`Erase ${who} and run its installer again.`} label="Reset" onClick={rec.reset} />
                 <Action text={`Start ${who} from an ISO, such as a rescue disk.`} label="Boot ISO" onClick={rec.boot} />
+              </Section>
+
+              <Section title="Snapshots" summary="Points in time for Disk 1">
+                <Action text="Save Disk 1 as it is now, or go back to a saved point." label="Snapshots" onClick={() => setSnapsOpen(true)} />
+              </Section>
+
+              <Section title="Storage" summary="Move storage, or clean up downloads">
+                <Action text="Move all systems and downloads to another folder." label="Move" onClick={rec.move} />
+                <Action text="Delete installers that no system still needs." label="Clean" onClick={rec.clean} />
               </Section>
             </Tabs.Panel>
           </SectionsContext.Provider>
