@@ -46,6 +46,14 @@ body {
   display: flex; flex-direction: column; overflow: hidden;
   user-select: none; -webkit-user-select: none; cursor: default;
 }
+/* Linux: the desktop doesn't round a window without its own title bar, so the window is transparent
+   (tauri.linux.conf.json) and the page rounds itself, with a hairline edge. The clip also covers the dialogs'
+   dimmed backdrop. Square when the window fills the screen or is snapped to a side (window.ts). */
+:root.round { background: transparent; }
+:root.round body { border-radius: 12px; clip-path: inset(0 round 12px); }
+:root.round body::after { content: ""; position: fixed; inset: 0; border-radius: 12px; pointer-events: none; z-index: 1000;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 80%, #fff 8%); }
+:root.round.square body, :root.round.square body::after { border-radius: 0; clip-path: none; }
 #root { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 button { font: inherit; color: inherit; }
 .icon-box { width: 18px; height: 18px; display: block; flex: none; }

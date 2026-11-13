@@ -13,7 +13,10 @@ import { applyTheme, checkQuietly, MainMenuWindows, openAbout, openPreferences, 
 import { act, startSystem } from "./power";
 import { SettingsPage } from "./Settings";
 import { appInfo, onAskPower, onAskQuit, onProblem, quit, settings, startPage, systems, type Settings, type Vm } from "./tauri";
+import { roundCorners } from "./window";
 import "./style.css";
+
+roundCorners();
 
 type Page = { kind: "loading" } | { kind: "home"; vms: Vm[] } | { kind: "choose"; back: boolean }
   | { kind: "settings"; s: Settings; tab?: string; openAll?: boolean; tool?: "resize" | "add" | "snapshots" } | { kind: "create"; source: Source; back: boolean; step?: "general" | "resources" | "summary" }
