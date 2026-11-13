@@ -228,32 +228,26 @@ function VmRow({ vm, layout, cols, drop, dragging, tools, match, onSettings, onG
   );
 }
 
-// Columns: show or hide each one, by kind; the menu stays open while ticking.
+// Columns: show or hide each one, in one list; the menu stays open while ticking.
 function ColumnsMenu({ cols, onChange }: { cols: string[]; onChange: (cols: string[] | null) => void }) {
-  const kinds = ["Activity", "Linux", "Settings"] as const;
   return (
     <Menu.Root>
       <Menu.Trigger className="btn small columns-btn">Columns <span className="chev"><Icon name="chevron-down" /></span></Menu.Trigger>
       <Menu.Portal>
         <Menu.Positioner className="menu-positioner" sideOffset={4} align="end">
           <Menu.Popup className="menu columns-menu">
-            {kinds.map(k => (
-              <Fragment key={k}>
-                <div className="menu-heading">{k.toUpperCase()}</div>
-                {AVAILABLE.filter(c => COLUMNS[c].group === k).map(c => {
-                  const shown = cols.includes(c);
-                  return (
-                    <Menu.Item key={c} className="menu-item with-keys" closeOnClick={false}
-                      onClick={() => onChange(shown ? cols.filter(x => x !== c) : [...cols, c])}>
-                      <span className="tick-row"><span className={"tick" + (shown ? " on" : "")}>{shown ? "✓" : ""}</span>{COLUMNS[c].name}</span>
-                      {COLUMNS[c].agent && <span className="menu-keys" title="From QEMU's guest agent in Linux">agent</span>}
-                    </Menu.Item>
-                  );
-                })}
-              </Fragment>
-            ))}
+            {AVAILABLE.map(c => {
+              const shown = cols.includes(c);
+              return (
+                <Menu.Item key={c} className="menu-item with-keys" closeOnClick={false}
+                  onClick={() => onChange(shown ? cols.filter(x => x !== c) : [...cols, c])}>
+                  <span className="tick-row"><span className={"tick" + (shown ? " on" : "")}>{shown ? "✓" : ""}</span>{COLUMNS[c].name}</span>
+                  {COLUMNS[c].agent && <span className="menu-keys" title="From QEMU's guest agent in Linux">agent</span>}
+                </Menu.Item>
+              );
+            })}
             <Menu.Separator className="menu-line" />
-            <Menu.Item className="menu-item" onClick={() => onChange(null)}>Reset to the Usual Columns</Menu.Item>
+            <Menu.Item className="menu-item" onClick={() => onChange(null)}>Default</Menu.Item>
           </Menu.Popup>
         </Menu.Positioner>
       </Menu.Portal>
