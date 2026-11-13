@@ -215,7 +215,7 @@ body.dragging-rows, body.dragging-rows * { cursor: grabbing !important; }
 
 /* menus (the Power menu, Base UI's Menu) and drop-downs: they grow from their button, above any dialog they're in */
 .menu-positioner { z-index: 30; outline: none; }
-.menu { min-width: var(--anchor-width); background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+.menu { max-height: var(--available-height); overflow-y: auto; min-width: var(--anchor-width); background: var(--card); border: 1px solid var(--border); border-radius: 10px;
   padding: 4px; box-shadow: 0 8px 28px #0007; display: flex; flex-direction: column; outline: none;
   transform-origin: var(--transform-origin); transition: opacity 150ms var(--ease-out), transform 150ms var(--ease-out); }
 .menu[data-starting-style], .menu[data-ending-style] { opacity: 0; transform: scale(.96); }

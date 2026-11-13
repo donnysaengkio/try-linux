@@ -90,6 +90,22 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
     addEventListener("keydown", key);
     return () => removeEventListener("keydown", key);
   }, []);
+  // A search result's title: its tab, with the search cleared and that section open and in view.
+  const openResult = (e: React.MouseEvent) => {
+    if (!searching) return;
+    const bar = (e.target as HTMLElement).closest(".section-bar");
+    const panel = bar?.closest<HTMLElement>("[data-tab]");
+    const title = bar?.closest<HTMLElement>("[data-section]")?.dataset.section;
+    if (!bar || !panel || !title) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setQuery("");
+    setTab(panel.dataset.tab!);
+    setOpen(o => new Set(o).add(title));
+    setLast(title);
+    setTimeout(() => page.current?.querySelector(`[data-tab="${panel.dataset.tab}"] [data-section="${CSS.escape(title)}"]`)
+      ?.scrollIntoView({ block: "start", behavior: "smooth" }), 80);
+  };
   const sections = useMemo(() => ({
     open: open.has("*") ? { has: () => true } as unknown as Set<string> : open,
     all: searching,
@@ -302,18 +318,10 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
     <Tabs.Root value={tab} onValueChange={v => { setTab(String(v)); setQuery(""); }} className={"settings-root" + (searching ? " searching" : "")}>
       <Header
         left={<button className="btn icon" data-back title="Back (Alt+Left)" aria-label="Back" onClick={() => onBack(false)}><Icon name="arrow-left" /></button>}
-        middle={
-          <Tabs.List className="tabs">
-            {TABS.map(([value, label, icon]) => (
-              <Tabs.Tab key={value} value={value} className="tab"><Icon name={icon} size={16} />{label}</Tabs.Tab>
-            ))}
-            <Tabs.Indicator className="tab-indicator" />
-          </Tabs.List>
-        }
         right={<button className="btn primary save" disabled={saving} onClick={save}>Save</button>} />
 
       <main className="page">
-        <div className="column settings" ref={page}>
+        <div className="column settings" ref={page} onClickCapture={openResult}>
           <div className="settings-title">
             {renaming
               ? <input ref={nameBox} className="rename" defaultValue={f.name} spellCheck={false}
@@ -325,6 +333,12 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
                 </>}
           </div>
           <div className="settings-sub">{s.os.toUpperCase()}  ·  TRY LINUX v{version}{s.running ? "  ·  RUNNING" : ""}</div>
+          <Tabs.List className="tabs settings-tabs">
+            {TABS.map(([value, label, icon]) => (
+              <Tabs.Tab key={value} value={value} className="tab"><Icon name={icon} size={16} />{label}</Tabs.Tab>
+            ))}
+            <Tabs.Indicator className="tab-indicator" />
+          </Tabs.List>
           <div className="settings-tools">
             <div className="filter settings-search">
               <span className="filter-icon"><Icon name="search" /></span>
@@ -335,11 +349,11 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
           </div>
           {searching && <div className="search-note">{found === 0
             ? <>No settings match. <button className="link-button" onClick={() => setQuery("")}>Clear the search</button></>
-            : `${found} ${found === 1 ? "section" : "sections"} on every tab. Clear the search to go back to ${TABS.find(t => t[0] === tab)?.[1]}.`}</div>}
+            : `${found} ${found === 1 ? "section" : "sections"} on every tab. Click one's title to go to it.`}</div>}
 
           <SectionsContext.Provider value={sections}>
             {/* ---------------- General */}
-            <Tabs.Panel value="general" className="tab-panel" keepMounted data-label="General">
+            <Tabs.Panel value="general" className="tab-panel" keepMounted data-label="General" data-tab="general">
               <Arranged tab="general" arrangement={arrangement} onChange={setArrangement}>
               <Section title="Display and startup" summary={(f.fullscreen ? "Fullscreen" : "In a window") + (f.sign_in ? "  ·  Starts when you sign in" : "")
                 + (mac ? "" : f.on_quit === "suspend" ? "  ·  Suspends on quit" : f.on_quit === "shutdown" ? "  ·  Shuts down on quit" : "")}>
@@ -383,7 +397,7 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
             </Tabs.Panel>
 
             {/* ---------------- Hardware */}
-            <Tabs.Panel value="hardware" className="tab-panel" keepMounted data-label="Hardware">
+            <Tabs.Panel value="hardware" className="tab-panel" keepMounted data-label="Hardware" data-tab="hardware">
               <Arranged tab="hardware" arrangement={arrangement} onChange={setArrangement}>
               <Section title="Disks" summary={`${s.disks.length} ${s.disks.length === 1 ? "disk" : "disks"}  ·  Disk ${disk + 1}: ${report?.actual != null ? size(report.actual) + (report.size != null ? " of " + size(report.size) : "") : "…"}`}>
                 <Row label="Disk">
@@ -460,7 +474,7 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
             </Tabs.Panel>
 
             {/* ---------------- Devices (sections in alphabetical order) */}
-            <Tabs.Panel value="devices" className="tab-panel" keepMounted data-label="Devices">
+            <Tabs.Panel value="devices" className="tab-panel" keepMounted data-label="Devices" data-tab="devices">
               <Arranged tab="devices" arrangement={arrangement} onChange={setArrangement}>
               <Section title="Camera and USB" summary={win ? "Not available in WINQ-EMU" : "Not available yet"}>
                 <Note>{win ? "WINQ-EMU doesn't include camera or USB passthrough, so Windows cameras and USB devices can't be attached." : `Cameras and USB devices on ${pc} can't be attached yet.`} Use the shared folder to move files.</Note>
@@ -524,7 +538,7 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
             </Tabs.Panel>
 
             {/* ---------------- Recovery */}
-            <Tabs.Panel value="recovery" className="tab-panel" keepMounted data-label="Recovery">
+            <Tabs.Panel value="recovery" className="tab-panel" keepMounted data-label="Recovery" data-tab="recovery">
               <Arranged tab="recovery" arrangement={arrangement} onChange={setArrangement}>
               <Section title="Backup and restore" summary="Back up, or restore a copy">
                 <Action text={`Save a copy of ${who}, its disks and its settings.`} label="Back up" onClick={rec.backup} />
