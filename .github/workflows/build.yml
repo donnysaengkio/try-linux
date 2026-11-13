@@ -112,3 +112,27 @@ jobs:
           name: try-linux-appimage-${{ matrix.name }}
           path: src-tauri/target/release/bundle/appimage/*.AppImage
           if-no-files-found: error
+
+      # The Mac app, as released: Try Linux.app, signed ad hoc with the Virtualization entitlement
+      # (tauri.macos.conf.json). TryLinux-macOS.zip is what Mac 1.x updates to (it checks the app's signature and
+      # puts it in place of its own); Try Linux.app.tar.gz is what 2.x's updater takes, its update signature added on
+      # the developer's PC (scripts/release-macos.sh), where the signing key stays.
+      - name: Mac app (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          ./ui/node_modules/.bin/tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          cd "src-tauri/target/release/bundle/macos"
+          codesign --verify --deep --strict --verbose=2 "Try Linux.app"
+          codesign --display --entitlements - "Try Linux.app"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" -c "Print :CFBundleIdentifier" -c "Print :CFBundleShortVersionString" "Try Linux.app/Contents/Info.plist"
+          mkdir -p "$RUNNER_TEMP/mac"
+          ditto -c -k --keepParent "Try Linux.app" "$RUNNER_TEMP/mac/TryLinux-macOS.zip"
+          COPYFILE_DISABLE=1 tar -czf "$RUNNER_TEMP/mac/Try Linux.app.tar.gz" "Try Linux.app"
+          ls -la "$RUNNER_TEMP/mac"
+
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'macOS'
+        with:
+          name: try-linux-macos-app
+          path: ${{ runner.temp }}/mac/*
+          if-no-files-found: error

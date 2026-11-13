@@ -157,11 +157,36 @@ mod store {
 
     const DOMAIN: &str = "io.github.donnysaengkio.trylinux";
 
+    // With TRYLINUX_HOME, the preferences are a settings.json there instead of the Mac edition's defaults, so a
+    // test copy never touches them (keys and values as `defaults read` would give them).
+    fn test_prefs() -> Option<PathBuf> {
+        test_home().map(|h| h.join("settings.json"))
+    }
+    fn test_map(file: &Path) -> serde_json::Map<String, serde_json::Value> {
+        std::fs::read_to_string(file).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+    }
+
     fn read(key: &str) -> Option<String> {
+        if let Some(file) = test_prefs() {
+            return match test_map(&file).get(key)? {
+                serde_json::Value::Bool(b) => Some(if *b { "1" } else { "0" }.into()),
+                serde_json::Value::String(s) => Some(s.clone()),
+                serde_json::Value::Array(a) => Some(format!("({})", a.iter().filter_map(|v| v.as_str()).map(|s| format!("\"{s}\"")).collect::<Vec<_>>().join(", "))),
+                v => Some(v.to_string()),
+            };
+        }
         let out = Command::new("defaults").args(["read", DOMAIN, key]).output().ok()?;
         out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
     }
     fn write(key: &str, kind: &str, value: &str) -> std::io::Result<()> {
+        if let Some(file) = test_prefs() {
+            let mut m = test_map(&file);
+            m.insert(key.into(), if kind == "-bool" { serde_json::Value::Bool(value == "true") } else { value.into() });
+            if let Some(p) = file.parent() {
+                std::fs::create_dir_all(p)?;
+            }
+            return std::fs::write(&file, serde_json::to_string_pretty(&m).unwrap_or_default());
+        }
         let ok = Command::new("defaults").args(["write", DOMAIN, key, kind, value]).status()?.success();
         if ok { Ok(()) } else { Err(std::io::Error::other(format!("couldn't save {key}"))) }
     }
@@ -186,6 +211,7 @@ mod store {
 
     pub fn root() -> PathBuf {
         get("storage").filter(|s| !s.is_empty()).map(PathBuf::from)
+            .or_else(test_home)
             .unwrap_or_else(|| home().join("Library").join("Application Support").join("TryLinux"))
     }
     pub fn vms() -> PathBuf {
@@ -198,6 +224,11 @@ mod store {
             .unwrap_or_default()
     }
     pub fn set_others(dirs: &[String]) -> std::io::Result<()> {
+        if let Some(file) = test_prefs() {
+            let mut m = test_map(&file);
+            m.insert("vmDirs".into(), dirs.iter().map(|d| serde_json::Value::String(d.clone())).collect());
+            return std::fs::write(&file, serde_json::to_string_pretty(&m).unwrap_or_default());
+        }
         let mut cmd = Command::new("defaults");
         cmd.args(["write", DOMAIN, "vmDirs", "-array"]).args(dirs);
         if cmd.status()?.success() { Ok(()) } else { Err(std::io::Error::other("couldn't save vmDirs")) }

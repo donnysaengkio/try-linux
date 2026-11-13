@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": ["app"],
+    "category": "Utility",
+    "macOS": {
+      "signingIdentity": "-",
+      "entitlements": "macos/entitlements.plist",
+      "minimumSystemVersion": "13.0"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": ["https://github.com/donnysaengkio/try-linux/releases/download/tauri-updates/latest-macos.json"]
+    }
+  }
+}
