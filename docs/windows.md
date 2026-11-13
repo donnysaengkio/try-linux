@@ -20,8 +20,8 @@ On a Linux PC? See [Try Linux for Linux](linux.md), the same app as an AppImage.
 |---|---|
 | ![Choose a Linux OS: the recommended distributions and a search box](images/choose-os.png) | ![Create, Resources: Balanced, Maximum or Manual, memory, CPU cores and disk size](images/create-resources.png) |
 | **Choose a Linux OS:** five recommended distributions, and a search of hundreds more | **Create:** name and location, then memory, cores and disk size, then a summary |
-| ![Use Your Own Installer: an existing virtual disk, an ISO file on this PC, or a URL](images/own-installer.png) | ![Settings, Hardware: Graphics, Resources and Disks](images/settings-hardware.png) |
-| **Use Your Own Installer:** an existing virtual disk, an ISO file or a link | **Settings, Hardware:** displays, rendering, GPU memory, resources, disks |
+| ![Bring Your Own: a virtual machine or disk, an ISO file, or a web address](images/own-installer.png) | ![Settings, Hardware: Graphics, Resources and Disks](images/settings-hardware.png) |
+| **Bring Your Own:** a virtual machine or disk, an ISO file, or a web address | **Settings, Hardware:** displays, rendering, GPU memory, resources, disks |
 | ![Settings, Devices: Camera and USB, CD/DVD drive, microphone and sound, network](images/settings-devices.png) | ![Settings, Recovery: backup and restore, clone, snapshots, storage, repair, delete](images/settings-recovery.png) |
 | **Settings, Devices:** CD/DVD drive, sound and microphone, network and port forwards, shared folder | **Settings, Recovery:** back up, clone, snapshots, move storage, repair, delete |
 | ![Virtual Machines in the Light theme](images/theme-light.png) | |
@@ -90,7 +90,7 @@ A system that 1.x started keeps running; 2.0 shows it as running and can control
 
 ## Using it
 
-Click **Create** and choose a Linux OS (or **Use Your Own Installer**), then:
+Click **Create** and choose a Linux OS (or **Bring Your Own**), then:
 
 1. **General:** the system's name, an optional description, and where it's kept.
 2. **Resources:** Balanced, Maximum or Manual memory and CPU cores, and the disk size, with the free space on that

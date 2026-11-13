@@ -1,4 +1,4 @@
-// Create, after Choose a Linux OS (or Use Your Own Installer): General (name, description, location),
+// Create, after Choose a Linux OS (or Bring Your Own): General (name, description, location),
 // Resources (memory, cores, disk), Summary, then the download, check and install, or the import, with its
 // progress, as on the Windows edition.
 import { open as pick } from "@tauri-apps/plugin-dialog";

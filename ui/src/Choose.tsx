@@ -46,14 +46,14 @@ export function Choose({ onBack, onNext, onOwn }: { onBack: (() => void) | null;
   }, [shown]);
 
   const picked = shown.find(d => d.id === chosen);
-  // A distribution Try Linux can't download itself: offer its website, then Use Your Own Installer for the
+  // A distribution Try Linux can't download itself: offer its website, then Bring Your Own for the
   // ISO once it's downloaded.
   const next = async () => {
     if (chosen === OWN) return onOwn();
     if (!picked) return toast("Choose a distribution first.");
     if (!picked.base) {
       if (picked.home && await ask(`Download ${picked.name} from its website?`,
-        `Try Linux can't fetch the ${picked.name} ISO file itself. Open its website to download the ISO, then choose it in Use Your Own Installer to install it.`,
+        `Try Linux can't fetch the ${picked.name} ISO file itself. Open its website to download the ISO, then choose it in Bring Your Own to install it.`,
         "Open Website")) { openPage(picked.home); onOwn(); }
       return;
     }
@@ -94,8 +94,8 @@ export function Choose({ onBack, onNext, onOwn }: { onBack: (() => void) | null;
             <div role="option" aria-selected={chosen === OWN} className={"option" + (chosen === OWN ? " selected" : "")}
               onClick={() => setChosen(OWN)}>
               <div className="text">
-                <div className="title">Use Your Own Installer</div>
-                <div className="about">An existing virtual disk to import, an .iso file on this PC, or a URL link to one</div>
+                <div className="title">Bring Your Own</div>
+                <div className="about">A virtual machine or disk to import, an .iso file on this PC, or the address of one</div>
               </div>
             </div>
           </div>

@@ -101,7 +101,7 @@ You can also download the AppImage yourself (see [Install](#install)); it takes 
 
 ## Using it
 
-Click **Create** and choose a Linux OS (or **Use Your Own Installer**), then:
+Click **Create** and choose a Linux OS (or **Bring Your Own**), then:
 
 1. **General:** the system's name, an optional description, and where it's kept.
 2. **Resources:** Balanced, Maximum or Manual memory and CPU cores, and the disk size, with the free space on that

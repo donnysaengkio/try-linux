@@ -1,4 +1,4 @@
-// Use Your Own Installer: three cards, like Choose a Linux OS's rows: an existing virtual machine (.ova) or disk to
+// Bring Your Own: three cards, like Choose a Linux OS's rows: an existing virtual machine (.ova) or disk to
 // import, an ISO file on this PC, or a URL link to one. Choosing a card opens its button or address box; choosing
 // one thing clears the others.
 // Choosing one clears the others; `last` is what was chosen before, when coming Back from General.
@@ -83,21 +83,21 @@ export function OwnInstaller({ last, onBack, onNext }: { last?: Source; onBack: 
       <main className="page">
         <div className="column create own">
           <Logo />
-          <h1 className="center">Use Your Own Installer</h1>
-          <div className="subtitle">A system that's already installed, or an installer Try Linux doesn't list.</div>
+          <h1 className="center">Bring Your Own</h1>
+          <div className="subtitle">A system you already have, or an installer Try Linux doesn't list.</div>
 
-          <div className="own-cards" role="radiogroup" aria-label="Use your own installer">
-            <Card kind="disk" chosen={card} icon="file-input" title="An Existing Virtual Machine Or Disk" onPick={setCard}
+          <div className="own-cards" role="radiogroup" aria-label="Bring your own">
+            <Card kind="disk" chosen={card} icon="file-input" title="Virtual Machine Or Disk" onPick={setCard}
               about={disk ? diskNote : "From VirtualBox, VMware or Hyper-V: .ova, .vmdk, .vhdx, .vdi, .qcow2 or raw. It's copied; the original isn't changed."}>
               <button className="btn small" disabled={reading} onClick={chooseDisk}>Choose A File</button>
               <span className={disk ? "chosen" : "none"} title={disk?.path}>{reading ? "Reading…" : disk ? fileName(disk.path) : "Nothing chosen"}</span>
             </Card>
-            <Card kind="iso" chosen={card} icon="disc" title="An ISO File On This PC" onPick={setCard} about="An installer you've downloaded.">
+            <Card kind="iso" chosen={card} icon="disc" title="ISO File" onPick={setCard} about="An installer you've already downloaded.">
               <button className="btn small" onClick={chooseIso}>Choose An ISO File</button>
               <span className={iso ? "chosen" : "none"} title={iso ?? undefined}>{iso ? fileName(iso) : "No file chosen"}</span>
             </Card>
-            <Card kind="url" chosen={card} icon="globe" title="URL Link" onPick={setCard}
-              about={urlProblem ? <span className="bad">That isn't a web address. It should start with https://</span> : "The web address of an .iso file. Try Linux downloads it."}>
+            <Card kind="url" chosen={card} icon="globe" title="Web Address" onPick={setCard}
+              about={urlProblem ? <span className="bad">That isn't a web address. It should start with https://</span> : "The address of an .iso file. Try Linux downloads it."}>
               <input ref={urlBox} className="text-box" value={url} spellCheck={false} placeholder="https://... (address of an .iso file)"
                 onChange={e => { setUrl(e.target.value); setUrlProblem(false); if (e.target.value) { setDisk(null); setIso(null); } }}
                 onKeyDown={e => { if (e.key === "Enter") next(); }} />
