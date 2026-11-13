@@ -242,7 +242,6 @@ function ColumnsMenu({ cols, onChange }: { cols: string[]; onChange: (cols: stri
                 <Menu.Item key={c} className="menu-item with-keys" closeOnClick={false}
                   onClick={() => onChange(shown ? cols.filter(x => x !== c) : [...cols, c])}>
                   <span className="tick-row"><span className={"tick" + (shown ? " on" : "")}>{shown ? "✓" : ""}</span>{COLUMNS[c].name}</span>
-                  {COLUMNS[c].agent && <span className="menu-keys" title="From QEMU's guest agent in Linux">agent</span>}
                 </Menu.Item>
               );
             })}

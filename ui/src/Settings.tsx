@@ -70,6 +70,8 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
     const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     let n = 0;
     page.current?.querySelectorAll<HTMLElement>(".tab-panel").forEach(panel => {
+      // Other tabs' panels are inert (they ignore clicks) while hidden; search shows them, so they take clicks.
+      panel.inert = words.length ? false : panel.hasAttribute("hidden");
       let inPanel = 0;
       panel.querySelectorAll<HTMLElement>("[data-section]").forEach(sec => {
         const text = (sec.textContent ?? "").toLowerCase();
