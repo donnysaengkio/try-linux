@@ -40,8 +40,6 @@ export function Section({ title, summary, children }: { title: string; summary: 
             <ContextMenu.Popup className="menu">
               <ContextMenu.Item className="menu-item" disabled={!arrange.up} onClick={arrange.up}>Move Up</ContextMenu.Item>
               <ContextMenu.Item className="menu-item" disabled={!arrange.down} onClick={arrange.down}>Move Down</ContextMenu.Item>
-              <ContextMenu.Separator className="menu-line" />
-              <ContextMenu.Item className="menu-item" disabled={!arrange.sort} onClick={arrange.sort}>Sort A to Z</ContextMenu.Item>
             </ContextMenu.Popup>
           </ContextMenu.Positioner>
         </ContextMenu.Portal>

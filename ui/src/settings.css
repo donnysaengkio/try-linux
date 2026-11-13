@@ -198,7 +198,14 @@
 .arranged.drop-before { box-shadow: 0 -2px 0 var(--accent); border-radius: 2px; }
 .arranged.drop-after { box-shadow: 0 2px 0 var(--accent); border-radius: 2px; }
 /* Search: every tab's matching sections, under the tab's name; tabs with none are left out. */
-.settings-search { margin: 14px 0 14px; }
+.settings-tools { display: flex; gap: 8px; align-items: center; margin: 14px 0 14px; }
+.settings-search { flex: 1; }
+.sort-btn .icon-box { width: 15px; height: 15px; }
+.sort-btn .chev .icon-box { width: 14px; height: 14px; }
+.sort-label { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sort-menu { min-width: 200px; }
+.sort-icon { width: 15px; display: inline-flex; color: var(--muted); }
+.sort-icon .icon-box { width: 15px; height: 15px; }
 .search-note { color: var(--muted); font-size: 11.3px; margin: 6px 2px 2px; }
 .settings-root.searching .tab-panel[hidden], .settings-root.searching .tab-panel { display: block !important; }
 .settings-root.searching .tab-panel.no-match { display: none !important; }
@@ -207,4 +214,4 @@
 .settings-root.searching .tab { opacity: .5; }
 .menu-item[data-disabled] { opacity: .4; cursor: default; }
 .menu-item[data-disabled]:hover, .menu-item[data-disabled][data-highlighted] { background: none; }
-.settings-root.searching .settings-search { margin-bottom: 4px; }
+.settings-root.searching .settings-tools { margin-bottom: 4px; }
