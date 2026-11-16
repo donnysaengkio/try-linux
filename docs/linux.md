@@ -9,11 +9,11 @@ It runs on **x86_64** and **ARM64** (aarch64) PCs, as one AppImage for each that
 updates itself. It's the same app as [Try Linux for Windows](windows.md), and version 2 replaces Try Linux 1.0.x
 for Linux. 1.0.x moves to it on its own: see [Updating from 1.0.x](#updating-from-10x).
 
-![Virtual Machines: Fedora Workstation, Linux Mint and Ubuntu Desktop, each with its status, CPU cores, memory and disk use, and Console, Start and Settings buttons](images/linux-virtual-machines.png)
+![Virtual Machines: Fedora Workstation and Ubuntu Desktop in a Daily drivers group, Linux Mint (Cinnamon) under Unassigned, with a filter, Groups and Columns, and each system's status, CPU, memory and disk](images/linux-virtual-machines.png)
 
 | | |
 |---|---|
-| ![Choose a Linux OS: the recommended distributions and a search box](images/linux-choose-os.png) | ![Settings, Hardware: Graphics, Resources and Disks](images/linux-settings-hardware.png) |
+| ![Choose a Linux OS: the recommended distributions and a search box](images/linux-choose-os.png) | ![Settings, Hardware: Disks open, with Firmware, Graphics and Resources](images/linux-settings-hardware.png) |
 | **Choose a Linux OS:** five recommended distributions (four on ARM64), and a search of hundreds more | **Settings:** General, Hardware, Devices and Recovery, as on Windows |
 | ![Virtual Machines in the Light theme](images/linux-theme-light.png) | |
 | **Light theme**, or Dark, or following your desktop | |
@@ -118,22 +118,39 @@ install**), and while it runs, its CPU use, the memory Linux is using and its di
 - **Closing a system's window** doesn't turn it off: use **Power > Shut down**.
 - **Closing Try Linux** while systems run keeps it in the tray (on GNOME, the tray needs the AppIndicator
   extension; without it, open Try Linux from your apps menu to get its window back).
-- **Power** replaces Start while a system runs: **Shut down** and **Restart** ask Linux to shut down cleanly,
-  **Pause** freezes it, and **Force stop** and **Reset** act at once, losing unsaved work, so they ask first.
+- **Power** replaces Start while a system runs: **Shut Down** and **Restart** ask Linux to shut down cleanly,
+  **Pause** freezes it, **Suspend** saves where it is and closes it (Resume brings it back), **Send Keys** sends
+  Ctrl+Alt+Del or Ctrl+Alt+F1 to F6, **Take Screenshot** saves a picture in Pictures, and **Force Stop** and
+  **Reset** act at once, losing unsaved work, so they ask first.
+- **The gear** has **Snapshots**, **Clone** and **Delete**, then **Settings**.
 - If Try Linux is closed while a system installs, the system keeps going; Try Linux picks it up again the next time
   it opens.
+- **Arranging the list:** click a column title to sort by it (again to reverse, a third time for your own order),
+  drag a column title to move it, and drag a system to put it where you like. **Columns** chooses what's shown:
+  status, CPU, memory, disk and network activity, IP address, uptime, hostname, Linux version, snapshots, firmware,
+  graphics, network mode, and when it was created and last run. The filter (Ctrl+F) narrows the list by name, group
+  or state.
+- **Groups:** **Groups > New Group** (Ctrl+G), then drag systems in, or right-click a system to move it. Drag a
+  group's title to reorder the groups, or sort them in the Groups menu; **Collapse** and **Expand** fold them all.
+  Right-click a system to rename it.
+- IP address, network traffic, hostname and Linux version come from QEMU's guest agent; install
+  `qemu-guest-agent` in Linux to see them.
 
-**Settings** (the gear button) has four tabs of sections; click one to open it. Save applies the changes.
+**Settings** (the gear button, then Settings) has four tabs of sections; click one to open it. Save applies the
+changes. The search icon at the end of the tabs (Ctrl+F) finds a setting on any tab, and the sort icon orders the
+sections; you can also drag them, or right-click one to move it.
 
-- **General:** the name and description, fullscreen, starting the system when you sign in, and adding it to your
-  apps menu.
-- **Hardware:** guest displays, and GPU (VirGL) or CPU rendering; memory and CPU cores; and the disks, with **Disk
-  Utilities** to resize, compact, add and remove disks.
+- **General:** fullscreen, starting the system when you sign in, adding it to your apps menu, and what happens when
+  Try Linux quits (keep it running, shut Linux down, or suspend it); the name and description; and the **Log** of
+  its starts and stops.
+- **Hardware:** the disks, with **Disk Utilities** to resize, compact, add and remove disks; UEFI (your
+  distribution's OVMF package) or BIOS firmware, chosen before installing; guest displays, and GPU (VirGL) or CPU
+  rendering; memory and CPU cores.
 - **Devices:** a CD/DVD drive for ISOs such as drivers or rescue disks (changeable while the system runs), sound and
-  microphone (PipeWire or PulseAudio), network type and port forwards (`tcp:2222:22` for this PC,
+  microphone (PipeWire or PulseAudio), the clipboard (spice-vdagent in Linux), network type and port forwards (`tcp:2222:22` for this PC,
   `lan tcp:8080:80` for your network), and a shared folder.
-- **Recovery:** back up and restore, clone, snapshots, move the storage folder, clean up downloads, reset or boot an
-  ISO, and delete.
+- **Recovery:** back up and restore, reset or boot an ISO, snapshots, move the storage folder, and clean up
+  downloads.
 
 To use the shared folder in Linux:
 
@@ -142,7 +159,7 @@ sudo mkdir -p /mnt/host
 sudo mount -t 9p -o trans=virtio,version=9p2000.L host /mnt/host
 ```
 
-**Keyboard shortcuts:** Ctrl+N Create, Ctrl+F search distributions, Ctrl+U Check For Updates, Ctrl+comma
+**Keyboard shortcuts:** Ctrl+N Create, Ctrl+G New Group, Ctrl+K command menu, Ctrl+F filter or search, Ctrl+U Check For Updates, Ctrl+comma
 Preferences, Ctrl+? all shortcuts, Ctrl+Q quit, Alt+← back, Esc close a dialog or menu. In a system's window,
 **Ctrl+Alt+G** releases the mouse and keyboard and **Ctrl+Alt+F** toggles fullscreen.
 

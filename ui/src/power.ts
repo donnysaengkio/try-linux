@@ -3,6 +3,9 @@
 import { ask, choose, problem } from "./Ask";
 
 const MAC = navigator.userAgent.includes("Macintosh");
+// Suspend saves a running system with QEMU's migration, which only Linux's QEMU allows: WINQ-EMU refuses on the
+// Windows Hypervisor Platform, and the Mac's framework isn't wired up for it yet.
+export const CAN_SUSPEND = !MAC && !navigator.userAgent.includes("Windows");
 import { markInstalled, power, start, type PowerAction, type Vm } from "./tauri";
 
 const CONFIRM: Partial<Record<PowerAction, (name: string) => [string, string, string, boolean]>> = {
@@ -33,7 +36,7 @@ export function powerItems(vm: Vm): (PowerItem | null)[] {
     { label: "Restart", action: "restart" },
     vm.state === "paused" ? { label: "Resume", action: "resume" } : { label: "Pause", action: "pause" },
     // Saves where it is and closes; Start brings it back (QEMU only, so not on the Mac yet).
-    ...(MAC || vm.state === "elsewhere" || vm.status === "Suspending" || vm.status === "Resuming" ? [] : [{ label: "Suspend", action: "suspend" as const }]),
+    ...(!CAN_SUSPEND || vm.state === "elsewhere" || vm.status === "Suspending" || vm.status === "Resuming" ? [] : [{ label: "Suspend", action: "suspend" as const }]),
     null,
     { label: "Force Stop", action: "force", danger: true },
     { label: "Reset", action: "reset", danger: true },

@@ -4601,7 +4601,7 @@ dependencies = [
 
 [[package]]
 name = "try-linux"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "base64 0.22.1",
  "block2",
@@ -4611,6 +4611,7 @@ dependencies = [
  "objc2-app-kit",
  "objc2-foundation",
  "objc2-virtualization",
+ "png",
  "regex",
  "serde",
  "serde_json",

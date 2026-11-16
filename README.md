@@ -4,7 +4,16 @@ Try a Linux desktop without repartitioning your drive. Pick a distribution, and 
 installer, checks it against the distribution's published SHA-256 or SHA-512 checksum, creates a virtual disk and
 starts the installer in a window. Your systems keep running in the background, and Try Linux updates itself.
 
-![Try Linux: Virtual Machines, with Fedora Workstation, Linux Mint and Ubuntu Desktop](docs/images/virtual-machines.png)
+![Try Linux: Virtual Machines, with Fedora Workstation and Ubuntu Desktop in a group, and Linux Mint](docs/images/virtual-machines.png)
+
+- **Your systems at a glance:** live CPU, memory, disk and network activity, IP addresses, and more columns to
+  choose from; sort, filter, drag to rearrange, and put systems in groups.
+- **Send keys** like Ctrl+Alt+Del, take screenshots, and on Linux, **suspend** a system and resume it where you left
+  it.
+- **Settings for each system:** displays and graphics, memory and cores, disks and snapshots, UEFI or BIOS, the
+  network, a shared folder and the clipboard, with a search across them all.
+- **Bring your own:** import a machine from VirtualBox, VMware or Hyper-V (.ova or its disk), or use any ISO.
+- **Recovery:** backups, clones, snapshots, reset, and a log of each system's starts and stops.
 
 ## Download
 
@@ -12,14 +21,14 @@ starts the installer in a window. Your systems keep running in the background, a
 | --- | --- | --- | --- |
 | **Windows** | Windows 10 and 11 (x64) | [`TryLinux-<version>-Setup.exe`](https://github.com/donnysaengkio/try-linux/releases/latest) | [Try Linux for Windows](docs/windows.md) |
 | **Linux** | x86_64 and ARM64, any distribution | [`TryLinux-<version>-<arch>.AppImage`](https://github.com/donnysaengkio/try-linux/releases?q=linux-v&expanded=true) | [Try Linux for Linux](docs/linux.md) |
-| **Mac** | Apple silicon | [Try Linux for Mac 1.x](https://github.com/donnysaengkio/try-linux/releases?q=macos-v&expanded=true) (preview) | Version 2 is on its way |
+| **Mac** | Apple silicon, macOS 13 or later | [`TryLinux-<version>-macOS.zip`](https://github.com/donnysaengkio/try-linux/releases?q=macos-v&expanded=true) | [Try Linux for Mac](docs/macos.md) |
 
 On Windows, systems run with [WINQ-EMU](https://github.com/cmspam/winq-emu) (QEMU on the Windows Hypervisor
 Platform, with OpenGL and Vulkan graphics); on Linux, with your distribution's QEMU and KVM; on the Mac, with Apple's
 Virtualization framework.
 
-Try Linux 2 is one app for all three, built with [Tauri](https://tauri.app). It replaces the separate Windows 1.x and
-Linux 1.0.x apps, which update to it on their own and keep your systems.
+Try Linux 2 is one app for all three, built with [Tauri](https://tauri.app). It replaces the separate Windows 1.x,
+Linux 1.0.x and Mac 1.x apps, which update to it on their own and keep your systems.
 
 ## The distribution catalog
 

@@ -142,7 +142,15 @@ update.
 
 ### macOS
 
-Not released yet. Mac 1.x (`macos-v…` releases) will need a move to 2.x like the other two, written from how its
-`Install.swift` updates (in the repository's history).
+1. Take the Build workflow's `try-linux-macos-app` artifact (built and signed ad hoc on GitHub's Mac) and run
+   `scripts/release-macos.sh <artifact folder> "What's new"` on any computer with Python (WSL works). It checks the
+   app inside, signs the `.app.tar.gz` for updates, and writes `SHA256SUMS.txt` and `latest-macos.json` into
+   `dist-macos/`.
+2. Publish a release tagged `macos-v<version>` (not Latest) with `TryLinux-<version>-macOS.zip`, the `.app.tar.gz`
+   and `SHA256SUMS.txt`, and upload `latest-macos.json` to the `tauri-updates` release.
+
+Mac 1.x updates to the newest `macos-v…` release's `*-macOS.zip` (checked against `SHA256SUMS.txt`): it unzips it,
+checks the app's signature (`codesign --verify`) and puts `Try Linux.app` in place of its own, keeping its systems
+and preferences, which 2.x reads where 1.x kept them.
 
 The fonts in `ui/public/fonts` are under the SIL Open Font License (see the `OFL-*.txt` files).

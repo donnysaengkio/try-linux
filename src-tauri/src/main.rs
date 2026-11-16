@@ -445,7 +445,8 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
             sub.append(&item(id, "shutdown", "Shut down")?)?;
             sub.append(&item(id, "restart", "Restart")?)?;
             sub.append(&if *paused { item(id, "resume", "Resume")? } else { item(id, "pause", "Pause")? })?;
-            if !cfg!(target_os = "macos") {
+            // Only Linux's QEMU can save a running system (WINQ-EMU's Windows Hypervisor Platform can't).
+            if cfg!(all(unix, not(target_os = "macos"))) {
                 sub.append(&item(id, "suspend", "Suspend")?)?;
             }
             sub.append(&PredefinedMenuItem::separator(app)?)?;

@@ -391,7 +391,7 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
                   <Radios value={f.on_quit} onChange={v => set("on_quit", v)} options={[
                     ["keep", "Keep it running, without the tray menu"],
                     ["shutdown", "Shut Linux down, as its power button does"],
-                    ["suspend", "Suspend it, to open where you left off"]]} />
+                    ...(win ? [] : [["suspend", "Suspend it, to open where you left off"] as ["suspend", string]])]} />
                 </>}
               </Section>
 

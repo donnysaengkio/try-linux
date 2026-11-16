@@ -1100,7 +1100,24 @@ pub fn screenshot(vms: &Vms, id: &str, folder: PathBuf) -> Result<PathBuf, Strin
     let args = serde_json::json!({ "filename": file.to_string_lossy(), "format": "png" }).to_string();
     let r = qmp_query(port, "screendump", Some(&args))?;
     if let Some(e) = r.get("error") {
-        return Err(e["desc"].as_str().unwrap_or("QEMU couldn't take a screenshot.").to_string());
+        let desc = e["desc"].as_str().unwrap_or("QEMU couldn't take a screenshot.").to_string();
+        if !desc.to_lowercase().contains("png") {
+            return Err(desc);
+        }
+        // A QEMU built without PNG (WINQ-EMU): its own format (PPM), made into a PNG here.
+        let ppm = file.with_extension("ppm");
+        let args = serde_json::json!({ "filename": ppm.to_string_lossy() }).to_string();
+        let r = qmp_query(port, "screendump", Some(&args))?;
+        if let Some(e) = r.get("error") {
+            return Err(e["desc"].as_str().unwrap_or("QEMU couldn't take a screenshot.").to_string());
+        }
+        let done = (0..30).any(|_| {
+            thread::sleep(Duration::from_millis(100));
+            std::fs::metadata(&ppm).is_ok_and(|m| m.len() > 0)
+        });
+        let made = if done { ppm_to_png(&ppm, &file) } else { Err("QEMU didn't save the screenshot.".into()) };
+        let _ = std::fs::remove_file(&ppm);
+        return made.map(|_| file);
     }
     // QEMU writes it as it answers; wait a moment for the whole file.
     for _ in 0..30 {
@@ -1110,6 +1127,37 @@ pub fn screenshot(vms: &Vms, id: &str, folder: PathBuf) -> Result<PathBuf, Strin
         thread::sleep(Duration::from_millis(100));
     }
     Err("QEMU didn't save the screenshot.".into())
+}
+
+// A PPM picture (P6: "P6 width height 255", then RGB) as a PNG.
+#[cfg(not(target_os = "macos"))]
+fn ppm_to_png(ppm: &std::path::Path, png_file: &std::path::Path) -> Result<(), String> {
+    let data = std::fs::read(ppm).map_err(|e| e.to_string())?;
+    // The header: four fields separated by whitespace (comments aren't written by QEMU).
+    let mut fields = vec![];
+    let mut i = 0;
+    while fields.len() < 4 && i < data.len() {
+        while i < data.len() && data[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        let start = i;
+        while i < data.len() && !data[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        fields.push(String::from_utf8_lossy(&data[start..i]).to_string());
+    }
+    i += 1; // the one whitespace byte before the pixels
+    let bad = || "The screenshot QEMU saved couldn't be read.".to_string();
+    if fields.len() < 4 || fields[0] != "P6" || fields[3] != "255" {
+        return Err(bad());
+    }
+    let (w, h): (u32, u32) = (fields[1].parse().map_err(|_| bad())?, fields[2].parse().map_err(|_| bad())?);
+    let pixels = data.get(i..i + (w * h * 3) as usize).ok_or_else(bad)?;
+    let out = std::io::BufWriter::new(std::fs::File::create(png_file).map_err(|e| e.to_string())?);
+    let mut enc = png::Encoder::new(out, w, h);
+    enc.set_color(png::ColorType::Rgb);
+    enc.set_depth(png::BitDepth::Eight);
+    enc.write_header().and_then(|mut wr| wr.write_image_data(pixels)).map_err(|e| e.to_string())
 }
 
 // Keeps taskkill from flashing a console window.
@@ -1124,5 +1172,32 @@ impl NoWindow for Command {
             self.creation_flags(0x0800_0000);
         }
         self
+    }
+}
+
+// A screenshot QEMU saved as PPM becomes a PNG.
+// TRYLINUX_TEST_PPM=file.ppm cargo test converts_ppm -- --ignored --nocapture (a real one from WINQ-EMU)
+#[cfg(all(test, not(target_os = "macos")))]
+mod ppm_tests {
+    #[test]
+    fn converts_a_small_ppm() {
+        let dir = std::env::temp_dir();
+        let (ppm, png) = (dir.join("trylinux-test.ppm"), dir.join("trylinux-test.png"));
+        let mut data = b"P6\n2 1\n255\n".to_vec();
+        data.extend_from_slice(&[255, 0, 0, 0, 0, 255]);
+        std::fs::write(&ppm, data).unwrap();
+        super::ppm_to_png(&ppm, &png).unwrap();
+        let bytes = std::fs::read(&png).unwrap();
+        assert_eq!(&bytes[1..4], b"PNG");
+        let _ = (std::fs::remove_file(ppm), std::fs::remove_file(png));
+    }
+
+    #[test]
+    #[ignore]
+    fn converts_ppm() {
+        let ppm = std::path::PathBuf::from(std::env::var("TRYLINUX_TEST_PPM").expect("TRYLINUX_TEST_PPM"));
+        let png = ppm.with_extension("png");
+        super::ppm_to_png(&ppm, &png).unwrap();
+        println!("{} bytes", std::fs::metadata(&png).unwrap().len());
     }
 }

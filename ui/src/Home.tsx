@@ -17,7 +17,7 @@ import { Header } from "./Header";
 import { Icon } from "./Icon";
 import { Logo } from "./Logo";
 import { MainMenu, setNewGroup } from "./MainMenu";
-import { act, call, powerItems, startSystem } from "./power";
+import { act, call, CAN_SUSPEND, powerItems, startSystem } from "./power";
 import { cloneSystem, deleteSystem, layout as loadLayout, onSystemsChanged, power, renameSystem, reveal, screenshot, setLayout as saveLayout, showConsole, systems, type PowerAction, type Vm } from "./tauri";
 
 // ---- how the page is arranged
@@ -76,7 +76,8 @@ const groupOf = (l: Layout, id: string) => l.groups.includes(l.member[id]) ? l.m
 
 // The filter's states.
 type Show = "all" | "running" | "suspended" | "off";
-const SHOWS: [Show, string][] = [["all", "All"], ["running", "Running"], ["suspended", "Suspended"], ["off", "Off"]];
+const SHOWS: [Show, string][] = ([["all", "All"], ["running", "Running"], ["suspended", "Suspended"], ["off", "Off"]] as [Show, string][])
+  .filter(([k]) => k !== "suspended" || CAN_SUSPEND);
 const shows = (vm: Vm, s: Show) => s === "all" || (s === "running" ? on(vm) || vm.state === "held" : vm.state === s);
 
 // The grid both the titles and the rows use: the name, the chosen columns, then the buttons.
