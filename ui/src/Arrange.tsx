@@ -117,7 +117,7 @@ export const useArranging = (title: string) => useContext(ArrangeContext)(title)
 
 // The sort button beside Search: Ascending, Descending, or Default (the usual order). Sections arranged by hand
 // (dragging, or Move Up and Move Down) stay that way, and the button says "Sort" until one of these is chosen.
-export function SortMenu({ arrangement, onChange }: { arrangement: Arrangement; onChange: (a: Arrangement) => void }) {
+export function SortMenu({ arrangement, onChange, compact }: { arrangement: Arrangement; onChange: (a: Arrangement) => void; compact?: boolean }) {
   const mode = arrangement.mode;
   const isDefault = mode === "custom" && Object.values(arrangement.order).every(o => !o?.length);
   const label = mode === "asc" ? "Ascending" : mode === "desc" ? "Descending" : isDefault ? "Default" : "Sort";
@@ -129,11 +129,15 @@ export function SortMenu({ arrangement, onChange }: { arrangement: Arrangement; 
   );
   return (
     <Menu.Root>
-      <Menu.Trigger className="btn small columns-btn sort-btn" title="Sort the sections">
-        <Icon name={mode === "asc" ? "arrow-up" : mode === "desc" ? "arrow-down" : "arrow-down-up"} />
-        <span className="sort-label">{label}</span>
-        <span className="chev"><Icon name="chevron-down" /></span>
-      </Menu.Trigger>
+      {compact
+        ? <Menu.Trigger className="tab-tool" title={`Sort: ${label}`} aria-label={`Sort the sections: ${label}`}>
+            <Icon name={mode === "asc" ? "arrow-up" : mode === "desc" ? "arrow-down" : "arrow-down-up"} />
+          </Menu.Trigger>
+        : <Menu.Trigger className="btn small columns-btn sort-btn" title="Sort the sections">
+            <Icon name={mode === "asc" ? "arrow-up" : mode === "desc" ? "arrow-down" : "arrow-down-up"} />
+            <span className="sort-label">{label}</span>
+            <span className="chev"><Icon name="chevron-down" /></span>
+          </Menu.Trigger>}
       <Menu.Portal>
         <Menu.Positioner className="menu-positioner" sideOffset={4} align="end">
           <Menu.Popup className="menu sort-menu">

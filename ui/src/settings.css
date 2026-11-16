@@ -237,3 +237,16 @@
 .own-card .own-pick .text-box { flex: 1; }
 .own-chev { color: var(--muted); align-self: center; }
 .own-chev .icon-box { width: 16px; height: 16px; }
+/* Search and Sort as icons at the end of the tab row; Search turns the row into a search box. */
+.tab-tool { position: relative; z-index: 1; flex: none; width: 34px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 7px; background: none; color: var(--muted); cursor: pointer; }
+.tab-tool:hover, .tab-tool[data-popup-open] { color: var(--text); background: var(--card-hover); }
+.tab-tool .icon-box { width: 16px; height: 16px; }
+.settings-tabs .tab-tool:first-of-type { margin-left: 4px; }
+.search-row { align-items: center; gap: 6px; padding-left: 10px; border-color: var(--accent); }
+.search-row-icon { color: var(--muted); display: flex; }
+.search-row-icon .icon-box { width: 16px; height: 16px; }
+.search-row-input { flex: 1; min-width: 0; height: 30px; border: 0; outline: none; background: none; color: var(--text); font: inherit; user-select: text; }
+.search-row-input::placeholder { color: var(--muted); opacity: .8; }
+.settings-tabs { margin-bottom: 12px; }
+.search-row + .search-note { margin-top: -4px; margin-bottom: 4px; }

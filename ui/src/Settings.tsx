@@ -63,6 +63,7 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
   const [arrangement, setArrangement] = useArrangement();
   const [query, setQuery] = useState("");
   const searchBox = useRef<HTMLInputElement>(null);
+  const [boxOpen, setBoxOpen] = useState(false);
   const searching = query.trim() !== "";
   const [found, setFound] = useState(-1);
   const page = useRef<HTMLDivElement>(null);
@@ -87,7 +88,11 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
   useEffect(() => {
     // Ctrl+F: Search.
     const key = (e: KeyboardEvent) => {
-      if (e.ctrlKey && !e.altKey && e.key.toLowerCase() === "f") { e.preventDefault(); searchBox.current?.focus(); searchBox.current?.select(); }
+      if (e.ctrlKey && !e.altKey && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        setBoxOpen(true);
+        setTimeout(() => { searchBox.current?.focus(); searchBox.current?.select(); }, 0);
+      }
     };
     addEventListener("keydown", key);
     return () => removeEventListener("keydown", key);
@@ -335,20 +340,27 @@ export function SettingsPage({ first, onBack, tab: startTab, openAll, startTool 
                 </>}
           </div>
           <div className="settings-sub">{s.os.toUpperCase()}  ·  TRY LINUX v{version}{s.running ? "  ·  RUNNING" : ""}</div>
-          <Tabs.List className="tabs settings-tabs">
-            {TABS.map(([value, label, icon]) => (
-              <Tabs.Tab key={value} value={value} className="tab"><Icon name={icon} size={16} />{label}</Tabs.Tab>
-            ))}
-            <Tabs.Indicator className="tab-indicator" />
-          </Tabs.List>
-          <div className="settings-tools">
-            <div className="filter settings-search">
-              <span className="filter-icon"><Icon name="search" /></span>
-              <input ref={searchBox} className="text-box filter-box" placeholder="Search settings  (Ctrl+F)" value={query} spellCheck={false}
-                aria-label="Search settings" onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === "Escape") setQuery(""); }} />
-            </div>
-            <SortMenu arrangement={arrangement} onChange={setArrangement} />
-          </div>
+          {/* The tabs, with Search and Sort as icons at the end; Search turns the row into a search box. */}
+          {boxOpen || searching
+            ? <div className="tabs settings-tabs search-row">
+                <span className="search-row-icon"><Icon name="search" /></span>
+                <input ref={searchBox} className="search-row-input" placeholder="Search settings on every tab" value={query} spellCheck={false}
+                  aria-label="Search settings" autoFocus onChange={e => setQuery(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Escape") { setQuery(""); setBoxOpen(false); } }} />
+                <button className="tab-tool" title="Close search (Esc)" aria-label="Close search" onClick={() => { setQuery(""); setBoxOpen(false); }}>
+                  <Icon name="x" />
+                </button>
+              </div>
+            : <Tabs.List className="tabs settings-tabs">
+                {TABS.map(([value, label, icon]) => (
+                  <Tabs.Tab key={value} value={value} className="tab"><Icon name={icon} size={16} />{label}</Tabs.Tab>
+                ))}
+                <Tabs.Indicator className="tab-indicator" />
+                <button className="tab-tool" title="Search settings (Ctrl+F)" aria-label="Search settings" onClick={() => setBoxOpen(true)}>
+                  <Icon name="search" />
+                </button>
+                <SortMenu arrangement={arrangement} onChange={setArrangement} compact />
+              </Tabs.List>}
           {searching && <div className="search-note">{found === 0
             ? <>No settings match. <button className="link-button" onClick={() => setQuery("")}>Clear the search</button></>
             : `${found} ${found === 1 ? "section" : "sections"} on every tab. Click one's title to go to it.`}</div>}
