@@ -92,13 +92,22 @@ pub fn set_section_order(order: String) -> Result<(), String> {
     set_pref("sections", &v.to_string()).map_err(|e| format!("Couldn't save the order of Settings' sections: {e}"))
 }
 
-// Where a system comes in the tray menu: its group (A to Z, systems in no group last), then its place in the
-// arranged order.
+// Where a system comes in the tray menu: its group (in Virtual Machines' order, systems in no group last), then its
+// place in the arranged order.
 pub fn layout_rank() -> impl Fn(&str) -> (usize, usize) {
     let v: serde_json::Value = serde_json::from_str(&layout()).unwrap_or_default();
     let strings = |k: &str| v[k].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect::<Vec<_>>()).unwrap_or_default();
+    // The groups in Virtual Machines' order: A to Z, Z to A, or as arranged by hand (others after, A to Z).
     let mut groups = strings("groups");
     groups.sort_by_key(|g| g.to_lowercase());
+    match v["gsort"].as_str() {
+        Some("desc") => groups.reverse(),
+        Some("asc") => {}
+        _ => {
+            let by_hand = strings("gorder");
+            groups.sort_by_key(|g| by_hand.iter().position(|x| x == g).unwrap_or(usize::MAX));
+        }
+    }
     let order = strings("order");
     let member = v["member"].clone();
     move |id: &str| {

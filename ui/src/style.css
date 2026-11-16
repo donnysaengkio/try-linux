@@ -259,3 +259,8 @@ body.dragging-rows, body.dragging-rows * { cursor: grabbing !important; }
 [data-sonner-toast] { font-size: 12.7px !important; box-shadow: 0 6px 24px #0006 !important; }
 .chev.side .icon-box { width: 14px; height: 14px; color: var(--muted); }
 .columns-btn > .icon-box { width: 15px; height: 15px; }
+/* Dragging a group's title: where the group will go. */
+.vm-group.moving { opacity: .45; }
+.vm-group.drop-before { box-shadow: 0 -2px 0 var(--accent); }
+.vm-group.drop-after { box-shadow: 0 2px 0 var(--accent); }
+.columns-btn .menu-keys { margin-left: 2px; }

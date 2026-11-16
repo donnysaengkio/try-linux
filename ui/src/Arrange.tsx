@@ -34,6 +34,14 @@ export function useArrangement(): [Arrangement, (a: Arrangement) => void] {
   return [a, change];
 }
 
+// After a drag, the click that ends it (if the computer sends one, straight away) shouldn't also open or close what
+// was dragged; a later click is left alone.
+export function swallowClick() {
+  const stop = (ev: MouseEvent) => { ev.stopPropagation(); ev.preventDefault(); };
+  addEventListener("click", stop, { capture: true, once: true });
+  setTimeout(() => removeEventListener("click", stop, { capture: true }), 0);
+}
+
 const titleOf = (e: ReactElement) => (e.props as { title?: string }).title ?? "";
 const byName = (x: string, y: string) => x.localeCompare(y, undefined, { sensitivity: "base" });
 
@@ -84,7 +92,7 @@ export function Arranged({ tab, arrangement, onChange, children }:
       setDrag(null);
       if (!started) return;
       // The click that ends a drag doesn't open or close the section.
-      addEventListener("click", ev => { ev.stopPropagation(); ev.preventDefault(); }, { capture: true, once: true });
+      swallowClick();
       if (!to || to === from) return;
       const next = titles.filter(t => t !== from);
       next.splice(next.indexOf(to) + (after ? 1 : 0), 0, from);

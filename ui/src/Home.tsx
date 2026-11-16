@@ -9,6 +9,7 @@ import { Menu } from "@base-ui/react/menu";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ask, askText, problem } from "./Ask";
+import { swallowClick } from "./Arrange";
 import { AVAILABLE, COLUMNS, DEFAULT_COLUMNS, on, type Cell } from "./columns";
 import { Commands } from "./Commands";
 import { SnapshotsDialog, WorkingDialog } from "./DiskTools";
@@ -28,8 +29,10 @@ interface Layout {
   folded: string[];                // groups folded away ("" for Unassigned)
   sort: { col: string; dir: 1 | -1 } | null;  // "name" or a column to sort by, or null for the arranged order
   cols: string[] | null;           // the columns shown, in order (null: the usual ones)
+  gorder: string[];                // groups as arranged by hand (empty: the default, A to Z)
+  gsort: "custom" | "asc" | "desc";  // the groups' order: as arranged, or A to Z, or Z to A
 }
-const EMPTY: Layout = { order: [], groups: [], member: {}, folded: [], sort: null, cols: null };
+const EMPTY: Layout = { order: [], groups: [], member: {}, folded: [], sort: null, cols: null, gorder: [], gsort: "custom" };
 
 function parseLayout(text: string): Layout {
   try {
@@ -39,7 +42,8 @@ function parseLayout(text: string): Layout {
     if (j.member && typeof j.member === "object") for (const [k, v] of Object.entries(j.member)) if (typeof v === "string") member[k] = v;
     const sort = j.sort && (j.sort.col === "name" || AVAILABLE.includes(j.sort.col)) ? { col: j.sort.col as string, dir: (j.sort.dir === -1 ? -1 : 1) as 1 | -1 } : null;
     const cols = Array.isArray(j.cols) ? strings(j.cols).filter(c => AVAILABLE.includes(c)) : null;
-    return { order: strings(j.order), groups: strings(j.groups), member, folded: strings(j.folded), sort, cols };
+    const gsort = j.gsort === "asc" || j.gsort === "desc" ? j.gsort : "custom";
+    return { order: strings(j.order), groups: strings(j.groups), member, folded: strings(j.folded), sort, cols, gorder: strings(j.gorder), gsort };
   } catch { return EMPTY; }
 }
 
@@ -56,6 +60,17 @@ function arrange(vms: Vm[], l: Layout) {
   const at = (vm: Vm) => { const i = l.order.indexOf(vm.id); return i < 0 ? Infinity : i; };
   return [...vms].sort((a, b) => at(a) - at(b) || byName(a, b));
 }
+
+// The groups in the order shown (Unassigned comes after them all): A to Z, Z to A, or as arranged by hand (any not
+// placed yet come after, A to Z).
+function groupOrder(l: Layout) {
+  const az = [...l.groups].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  if (l.gsort === "asc") return az;
+  if (l.gsort === "desc") return az.reverse();
+  const at = (g: string) => { const i = l.gorder.indexOf(g); return i < 0 ? Infinity : i; };
+  return az.sort((a, b) => at(a) - at(b));
+}
+const groupsByHand = (l: Layout) => l.gsort === "custom" && l.gorder.length > 0;
 
 const groupOf = (l: Layout, id: string) => l.groups.includes(l.member[id]) ? l.member[id] : "";
 
@@ -228,11 +243,22 @@ function VmRow({ vm, layout, cols, drop, dragging, tools, match, onSettings, onG
   );
 }
 
-// Groups: New Group, and collapsing every group or expanding them all.
-function GroupsMenu({ any, onNew, onFold }: { any: boolean; onNew: () => void; onFold: (fold: boolean) => void }) {
+// Groups: New Group, collapsing every group or expanding them all, and the groups' order: Ascending, Descending,
+// or Default (A to Z). Arranged by hand (dragging their titles), none of these is ticked.
+function GroupsMenu({ any, layout, onNew, onFold, onSort }:
+  { any: boolean; layout: Layout; onNew: () => void; onFold: (fold: boolean) => void; onSort: (s: "asc" | "desc" | "default") => void }) {
+  const isDefault = layout.gsort === "custom" && !groupsByHand(layout);
+  const label = layout.gsort === "asc" ? "Ascending" : layout.gsort === "desc" ? "Descending" : "";
+  const sortItem = (k: "asc" | "desc" | "default", text: string, on: boolean, icon?: "arrow-up" | "arrow-down") => (
+    <Menu.Item className="menu-item with-keys" disabled={!any} onClick={() => onSort(k)}>
+      <span className="tick-row"><span className="sort-icon">{icon && <Icon name={icon} />}</span>{text}</span>
+      {on && any && <span className="menu-keys">✓</span>}
+    </Menu.Item>
+  );
   return (
     <Menu.Root>
-      <Menu.Trigger className="btn small columns-btn"><Icon name="folders" />Groups <span className="chev"><Icon name="chevron-down" /></span></Menu.Trigger>
+      <Menu.Trigger className="btn small columns-btn"><Icon name="folders" />Groups{label && <span className="menu-keys">· {label}</span>}
+        <span className="chev"><Icon name="chevron-down" /></span></Menu.Trigger>
       <Menu.Portal>
         <Menu.Positioner className="menu-positioner" sideOffset={4} align="end">
           <Menu.Popup className="menu">
@@ -240,6 +266,10 @@ function GroupsMenu({ any, onNew, onFold }: { any: boolean; onNew: () => void; o
             <Menu.Separator className="menu-line" />
             <Menu.Item className="menu-item" disabled={!any} onClick={() => onFold(true)}>Collapse</Menu.Item>
             <Menu.Item className="menu-item" disabled={!any} onClick={() => onFold(false)}>Expand</Menu.Item>
+            <Menu.Separator className="menu-line" />
+            {sortItem("asc", "Ascending", layout.gsort === "asc", "arrow-up")}
+            {sortItem("desc", "Descending", layout.gsort === "desc", "arrow-down")}
+            {sortItem("default", "Default", isDefault)}
           </Menu.Popup>
         </Menu.Positioner>
       </Menu.Portal>
@@ -336,15 +366,57 @@ export function Home({ first, onCreate, onSettings }: { first: Vm[]; onCreate: (
     if (!name || name === g) return;
     update(l => ({
       ...l, groups: l.groups.map(x => x === g ? name : x), folded: l.folded.map(x => x === g ? name : x),
+      gorder: l.gorder.map(x => x === g ? name : x),
       member: Object.fromEntries(Object.entries(l.member).map(([k, v]) => [k, v === g ? name : v])),
     }));
   };
   const removeGroup = async (g: string) => {
     if (!(await ask(`Remove ${g}?`, "Its systems move to Unassigned. No system is deleted.", "Remove"))) return;
     update(l => ({
-      ...l, groups: l.groups.filter(x => x !== g), folded: l.folded.filter(x => x !== g),
+      ...l, groups: l.groups.filter(x => x !== g), folded: l.folded.filter(x => x !== g), gorder: l.gorder.filter(x => x !== g),
       member: Object.fromEntries(Object.entries(l.member).filter(([, v]) => v !== g)),
     }));
+  };
+  const placeGroups = (next: string[]) => update(l => ({ ...l, gsort: "custom", gorder: next }));
+  const moveGroup = (g: string, by: number) => {
+    const o = groupOrder(layRef.current), i = o.indexOf(g), j = i + by;
+    if (i < 0 || j < 0 || j >= o.length) return;
+    [o[i], o[j]] = [o[j], o[i]];
+    placeGroups(o);
+  };
+  // Dragging a group's title (after a few pixels, so a click still collapses or expands it) moves the group.
+  const [groupDrag, setGroupDrag] = useState<{ from: string; to: string | null; after: boolean } | null>(null);
+  const grabGroup = (e: React.PointerEvent, g: string) => {
+    if (e.button !== 0 || !g) return;
+    const y0 = e.clientY;
+    let started = false, to: string | null = null, after = false;
+    const over = (ev: PointerEvent) => {
+      if (!started && Math.abs(ev.clientY - y0) < 6) return;
+      if (!started) { started = true; document.body.classList.add("dragging-rows"); }
+      const el = (document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null)?.closest<HTMLElement>("[data-group-title]");
+      if (el && el.dataset.groupTitle) {
+        const r = el.getBoundingClientRect();
+        to = el.dataset.groupTitle;
+        after = ev.clientY > r.top + r.height / 2;
+      }
+      setGroupDrag({ from: g, to, after });
+    };
+    const end = () => {
+      removeEventListener("pointermove", over);
+      removeEventListener("pointerup", end);
+      removeEventListener("pointercancel", end);
+      document.body.classList.remove("dragging-rows");
+      setGroupDrag(null);
+      if (!started) return;
+      swallowClick();
+      if (!to || to === g) return;
+      const o = groupOrder(layRef.current).filter(x => x !== g);
+      o.splice(o.indexOf(to) + (after ? 1 : 0), 0, g);
+      placeGroups(o);
+    };
+    addEventListener("pointermove", over);
+    addEventListener("pointerup", end);
+    addEventListener("pointercancel", end);
   };
   const moveTo = (id: string, g: string) => update(l => {
     const member = { ...l.member };
@@ -477,7 +549,7 @@ export function Home({ first, onCreate, onSettings }: { first: Vm[]; onCreate: (
   const sortTitle = (col: string, label: string) =>
     lay.sort?.col === col && lay.sort.dir === -1 ? "Back to your own order" : "Sort by " + label.toLowerCase();
 
-  const groups = [...lay.groups].sort((a, b) => a.localeCompare(b));
+  const groups = groupOrder(lay);
   const empty = (
     <div className="card empty-group">
       No systems match.&nbsp;<button className="link-button" onClick={() => { setFilter(""); setShow("all"); }}>Clear the filter</button>
@@ -502,8 +574,9 @@ export function Home({ first, onCreate, onSettings }: { first: Vm[]; onCreate: (
                 <button key={k} role="radio" aria-checked={show === k} className={show === k ? "on" : ""} onClick={() => setShow(k)}>{label}</button>
               ))}
             </div>
-            <GroupsMenu any={lay.groups.length > 0} onNew={() => newGroup()}
-              onFold={fold => update(l => ({ ...l, folded: fold ? [...l.groups, ""] : [] }))} />
+            <GroupsMenu any={lay.groups.length > 0} layout={lay} onNew={() => newGroup()}
+              onFold={fold => update(l => ({ ...l, folded: fold ? [...l.groups, ""] : [] }))}
+              onSort={k => update(l => k === "default" ? { ...l, gsort: "custom", gorder: [] } : { ...l, gsort: k })} />
             <ColumnsMenu cols={cols} onChange={setCols} />
           </div>
           <div className="vm-table" style={{ minWidth: tableWidth(cols) }}>
@@ -534,8 +607,10 @@ export function Home({ first, onCreate, onSettings }: { first: Vm[]; onCreate: (
                     return (
                       <Fragment key={g || "-"}>
                         <ContextMenu.Root disabled={!g}>
-                          <ContextMenu.Trigger render={<button />} className={"vm-group" + into(g)} data-group={g}
-                            aria-expanded={!folded} onClick={() => fold(g)}>
+                          <ContextMenu.Trigger render={<button />} data-group={g} data-group-title={g || undefined}
+                            className={"vm-group" + into(g) + (groupDrag?.from === g ? " moving" : "")
+                              + (groupDrag?.to === g && groupDrag.from !== g ? (groupDrag.after ? " drop-after" : " drop-before") : "")}
+                            aria-expanded={!folded} onClick={() => fold(g)} onPointerDown={e => grabGroup(e, g)}>
                             <span className={"fold" + (folded ? " folded" : "")}><Icon name="chevron-down" /></span>
                             <Icon name="folder" />
                             <span className="name"><Marked text={g || "Unassigned"} match={filter.trim()} /></span>
@@ -544,6 +619,9 @@ export function Home({ first, onCreate, onSettings }: { first: Vm[]; onCreate: (
                           <ContextMenu.Portal>
                             <ContextMenu.Positioner className="menu-positioner">
                               <ContextMenu.Popup className="menu">
+                                <ContextMenu.Item className="menu-item" disabled={groups.indexOf(g) <= 0} onClick={() => moveGroup(g, -1)}>Move Up</ContextMenu.Item>
+                                <ContextMenu.Item className="menu-item" disabled={groups.indexOf(g) >= groups.length - 1} onClick={() => moveGroup(g, 1)}>Move Down</ContextMenu.Item>
+                                <ContextMenu.Separator className="menu-line" />
                                 <ContextMenu.Item className="menu-item" onClick={() => renameGroup(g)}>Rename Group…</ContextMenu.Item>
                                 <ContextMenu.Item className="menu-item danger" onClick={() => removeGroup(g)}>Remove Group</ContextMenu.Item>
                               </ContextMenu.Popup>
