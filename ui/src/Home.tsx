@@ -228,7 +228,7 @@ function VmRow({ vm, layout, cols, drop, dragging, tools, match, onSettings, onG
   );
 }
 
-// Groups: New Group, and folding every group away or opening them all.
+// Groups: New Group, and collapsing every group or expanding them all.
 function GroupsMenu({ any, onNew, onFold }: { any: boolean; onNew: () => void; onFold: (fold: boolean) => void }) {
   return (
     <Menu.Root>
@@ -238,8 +238,8 @@ function GroupsMenu({ any, onNew, onFold }: { any: boolean; onNew: () => void; o
           <Menu.Popup className="menu">
             <Menu.Item className="menu-item with-keys" onClick={onNew}><span>New Group…</span><kbd className="menu-keys">Ctrl+G</kbd></Menu.Item>
             <Menu.Separator className="menu-line" />
-            <Menu.Item className="menu-item" disabled={!any} onClick={() => onFold(true)}>Fold All</Menu.Item>
-            <Menu.Item className="menu-item" disabled={!any} onClick={() => onFold(false)}>Open All</Menu.Item>
+            <Menu.Item className="menu-item" disabled={!any} onClick={() => onFold(true)}>Collapse</Menu.Item>
+            <Menu.Item className="menu-item" disabled={!any} onClick={() => onFold(false)}>Expand</Menu.Item>
           </Menu.Popup>
         </Menu.Positioner>
       </Menu.Portal>
