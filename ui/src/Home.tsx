@@ -228,6 +228,25 @@ function VmRow({ vm, layout, cols, drop, dragging, tools, match, onSettings, onG
   );
 }
 
+// Groups: New Group, and folding every group away or opening them all.
+function GroupsMenu({ any, onNew, onFold }: { any: boolean; onNew: () => void; onFold: (fold: boolean) => void }) {
+  return (
+    <Menu.Root>
+      <Menu.Trigger className="btn small columns-btn"><Icon name="folders" />Groups <span className="chev"><Icon name="chevron-down" /></span></Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Positioner className="menu-positioner" sideOffset={4} align="end">
+          <Menu.Popup className="menu">
+            <Menu.Item className="menu-item with-keys" onClick={onNew}><span>New Group…</span><kbd className="menu-keys">Ctrl+G</kbd></Menu.Item>
+            <Menu.Separator className="menu-line" />
+            <Menu.Item className="menu-item" disabled={!any} onClick={() => onFold(true)}>Fold All</Menu.Item>
+            <Menu.Item className="menu-item" disabled={!any} onClick={() => onFold(false)}>Open All</Menu.Item>
+          </Menu.Popup>
+        </Menu.Positioner>
+      </Menu.Portal>
+    </Menu.Root>
+  );
+}
+
 // Columns: show or hide each one, in one list; the menu stays open while ticking.
 function ColumnsMenu({ cols, onChange }: { cols: string[]; onChange: (cols: string[] | null) => void }) {
   return (
@@ -481,6 +500,8 @@ export function Home({ first, onCreate, onSettings }: { first: Vm[]; onCreate: (
                 <button key={k} role="radio" aria-checked={show === k} className={show === k ? "on" : ""} onClick={() => setShow(k)}>{label}</button>
               ))}
             </div>
+            <GroupsMenu any={lay.groups.length > 0} onNew={() => newGroup()}
+              onFold={fold => update(l => ({ ...l, folded: fold ? [...l.groups, ""] : [] }))} />
             <ColumnsMenu cols={cols} onChange={setCols} />
           </div>
           <div className="vm-table" style={{ minWidth: tableWidth(cols) }}>

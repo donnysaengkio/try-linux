@@ -258,3 +258,4 @@ body.dragging-rows, body.dragging-rows * { cursor: grabbing !important; }
   --border-radius: 10px; font-family: "Noto Sans", "Segoe UI", sans-serif; }
 [data-sonner-toast] { font-size: 12.7px !important; box-shadow: 0 6px 24px #0006 !important; }
 .chev.side .icon-box { width: 14px; height: 14px; color: var(--muted); }
+.columns-btn > .icon-box { width: 15px; height: 15px; }
