@@ -313,7 +313,9 @@ export function Home({ first, onCreate, onSettings }: { first: Vm[]; onCreate: (
   };
   const cols = lay.cols ?? DEFAULT_COLUMNS;
   const filtering = filter.trim() !== "" || show !== "all";
-  const matches = (vm: Vm) => shows(vm, show) && (vm.name + " " + vm.os).toLowerCase().includes(filter.trim().toLowerCase());
+  // A system matches by its name, what it runs, or its group's name (so typing a group's name shows its systems).
+  const matches = (vm: Vm) => shows(vm, show)
+    && [vm.name, vm.os, groupOf(lay, vm.id) || (lay.groups.length ? "Unassigned" : "")].some(t => t.toLowerCase().includes(filter.trim().toLowerCase()));
   const shown = arrange(vms, lay).filter(matches);
   const allIds = () => arrange(vms, layRef.current).map(v => v.id);
 
@@ -492,8 +494,8 @@ export function Home({ first, onCreate, onSettings }: { first: Vm[]; onCreate: (
           <div className="vm-tools">
             <div className="filter">
               <span className="filter-icon"><Icon name="search" /></span>
-              <input ref={filterBox} className="text-box filter-box" placeholder="Filter by name  (Ctrl+F)" value={filter} spellCheck={false}
-                onChange={e => setFilter(e.target.value)} onKeyDown={e => { if (e.key === "Escape") setFilter(""); }} aria-label="Filter by name" />
+              <input ref={filterBox} className="text-box filter-box" placeholder="Filter by name or group  (Ctrl+F)" value={filter} spellCheck={false}
+                onChange={e => setFilter(e.target.value)} onKeyDown={e => { if (e.key === "Escape") setFilter(""); }} aria-label="Filter by name or group" />
             </div>
             <div className="segmented small" role="radiogroup" aria-label="Show">
               {SHOWS.map(([k, label]) => (
@@ -536,7 +538,7 @@ export function Home({ first, onCreate, onSettings }: { first: Vm[]; onCreate: (
                             aria-expanded={!folded} onClick={() => fold(g)}>
                             <span className={"fold" + (folded ? " folded" : "")}><Icon name="chevron-down" /></span>
                             <Icon name="folder" />
-                            <span className="name">{g || "Unassigned"}</span>
+                            <span className="name"><Marked text={g || "Unassigned"} match={filter.trim()} /></span>
                             <span className="count">{filtering ? `${members.length} of ${all.length}` : all.length}</span>
                           </ContextMenu.Trigger>
                           <ContextMenu.Portal>
