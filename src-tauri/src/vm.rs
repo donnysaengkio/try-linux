@@ -188,7 +188,7 @@ pub fn clipboard_available() -> bool {
 
 // The options for UEFI (a system's own copy of the firmware's settings, made the first time) and for sharing the
 // clipboard, for either computer's QEMU.
-#[cfg(not(target_os = "macos"))]
+#[allow(dead_code)] // the Mac compiles the Windows options too, but runs its systems with mac.rs
 fn uefi_and_clipboard(a: &mut Vec<String>, cfg: &VmConfig, quote: fn(&str) -> String) {
     if crate::firmware(cfg) == "UEFI" && ARCH == "x86_64" {
         if let Some((code, vars)) = uefi_firmware() {
